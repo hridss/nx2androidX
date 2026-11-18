@@ -1603,6 +1603,55 @@ class UnrealShaders(unittest.TestCase):
         self.assertEqual(len(p.programs), 1)   # the programs the game hands the driver are captured too (the chain's form of this generation's shaders)
 
 
+class AppRunCaptures(unittest.TestCase):
+    """What the app's own run leaves in the data pack (the host writes there the programs it is given and the shaders the bundle lacks): the next port takes them as its own inputs"""
+
+    class FakePort:
+        """the parts of Port.pack_files and its callers it uses"""
+        def __init__(self, root, pack):
+            self.o = pipeline.Options(folder=root, app=True)
+            self.versions, self.dirs = ['v1'], {'v1': root / 'extract' / 'v1'}
+            self.aw = root / 'android'
+            self.pack = pack
+            self.tools, self.cfg = {}, {}
+            self.pack_files = lambda folder, dst, pattern: pipeline.Port.pack_files(self, folder, dst, pattern)
+        def data_dir(self): return self.pack
+
+    def test_the_app_run_files_join_the_shader_inputs(self):
+        root = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_files_'))
+        self.addCleanup(shutil.rmtree, root, True)
+        pack = root / 'ports' / 'TestGame-data'; (pack / 'captured_shaders').mkdir(parents=True)
+        (pack / 'program_00042a311fff2d7c_0.bin').write_bytes(b'program')
+        (pack / 'captured_shaders' / '0249aa2883957c70.bin').write_bytes(b'capture')
+        (pack / 'env.txt').write_text('DM_LANG=en-US\n')
+        p = self.FakePort(root, pack)
+        pipeline.Port.pull_captures(p)
+        pipeline.Port.pull_ue_programs(p)
+        self.assertEqual((p.aw / 'captured_shaders' / '0249aa2883957c70.bin').read_bytes(), b'capture')
+        self.assertEqual((p.dirs['v1'] / 'ue_programs' / 'program_00042a311fff2d7c_0.bin').read_bytes(), b'program')
+        self.assertFalse((p.dirs['v1'] / 'ue_programs' / 'env.txt').exists())   # only the programs
+        self.assertFalse((p.aw / 'captured_shaders' / 'env.txt').exists())
+
+    def test_a_file_already_there_is_not_copied_again(self):
+        root = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_files_'))
+        self.addCleanup(shutil.rmtree, root, True)
+        pack = root / 'ports' / 'TestGame-data'; pack.mkdir(parents=True)
+        (pack / 'program_00042a311fff2d7c_0.bin').write_bytes(b'program')
+        p = self.FakePort(root, pack)
+        (p.dirs['v1'] / 'ue_programs').mkdir(parents=True)
+        (p.dirs['v1'] / 'ue_programs' / 'program_00042a311fff2d7c_0.bin').write_bytes(b'oldeR!!')   # the same size: the file is the one already there
+        pipeline.Port.pull_ue_programs(p)
+        self.assertEqual((p.dirs['v1'] / 'ue_programs' / 'program_00042a311fff2d7c_0.bin').read_bytes(), b'oldeR!!')
+
+    def test_no_device_leaves_the_inputs_as_they_are(self):
+        """a port without a device (the desktop tool's mode) keeps what it has"""
+        root = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_files_'))
+        self.addCleanup(shutil.rmtree, root, True)
+        p = self.FakePort(root, root / 'ports' / 'TestGame-data')
+        p.o = pipeline.Options(folder=root, app=False)
+        self.assertEqual(pipeline.Port.pull_ue_programs(p), [])
+
+
 class SubfolderScan(unittest.TestCase):   # the updates and the DLC in a subfolder next to the base game (a download's layout: 本体加补丁/1DLC/)
     BASE = 0x0100B8A026F14000
 

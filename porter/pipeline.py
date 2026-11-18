@@ -1417,6 +1417,7 @@ class Port:
         try:
             if getattr(self, 'glslc_why', ''): self.glslc_capture()   # shaders the game compiles at boot with its own GLSLC: the game's own compiler, here on the phone app or on the device
             if getattr(self, "ue_why", ""): self.device_ue()   # Unreal's shader code archives, decoded with the game's own Oodle (on the device, or here on the phone app) into <version dir>/ue_shaders before the split reads them
+            self.pull_ue_programs()   # the programs of the app's run: they join the split's inputs (after the capture, which rewrites that folder)
             nsp.split_shaders(PY, NXNATIVE, [self.dirs[v] / 'RomFS' for v in sv], [self.dirs[v] / 'ExeFS/main' for v in sv], pkg, self.env, self.logs, self.g, bool(self.derived or self.provisional),
                                oodle=getattr(self, 'oodle_run', None),   # Oodle-compressed archives: the game's own decoder (on the device, or here on the phone app)
                                aoc=self.aoc)   # DLC with shaders of its own (Xenoblade Chronicles 3's archives)
@@ -1469,20 +1470,45 @@ class Port:
         PROG.end(note)
         for d in (self.work / 'tmp').glob('shvk_*'): nsp.rmtree(d)   # the translator's work folders
 
+    def pack_files(self, folder, dst, pattern):
+        """The files of the data pack's own folder on the device, copied into dst: the host writes there what it captures (the programs the game hands it, the shaders the bundle lacks).
+        The app's mode: the porter runs on the phone and the pack is in its own folder, so the files are copied. The desktop tool's mode: the pack is installed on the shared storage, so they are
+        pulled. A device that cannot be reached leaves what was copied already there"""
+        dst = Path(dst); dst.mkdir(parents=True, exist_ok=True)
+        if self.o.app:
+            src = self.data_dir() / folder if folder else self.data_dir()
+            if not src.is_dir(): return []
+            got = []
+            for p in sorted(src.iterdir()):
+                if not p.is_file() or (pattern and not pattern(p.name)): continue
+                if (dst / p.name).is_file() and (dst / p.name).stat().st_size == p.stat().st_size: continue
+                shutil.copyfile(p, dst / p.name); got.append(p.name)
+            return got
+        try:
+            adb = Adb(self.tools.get('adb'), self.o.device or getattr(self, 'cfg', {}).get('device'), log=say)
+            adb.pick()
+            base = f'{datapack.files_folder(self.package)}/{folder}' if folder else datapack.files_folder(self.package)
+            return adb.pull_new(base, dst, pattern=pattern)
+        except AdbError as e:
+            say(f'the pack\'s {folder or "files"} not pulled ({e})'); return []
+
     def pull_captures(self):
         """Shaders whose code no game file holds: the app saves each one the bundle lacks on the device (gfx_vk_shader.c vk_shader_missing), and they are
         pulled here into <build folder>/android/captured_shaders, kept from port to port, for shader_vk.py to translate into the bundle (Xenoblade Chronicles 3: effect and model shaders).
         Whenever adb can reach the device, also for a port that does not install (the GUI ports first and installs with its own button, issue #512). A device that cannot be
         reached leaves the captures already pulled, and a port without --install needs no device, so it does not mention one that is not connected"""
-        if not self.tools.get('adb'): return   # optional for a port that does not install (toolchain.require)
-        adb = Adb(self.tools['adb'], self.o.device or self.cfg.get('device'), log=say)
-        try:
-            adb.pick()
-            got = adb.pull_new(f'{datapack.files_folder(self.package)}/captured_shaders', self.aw / 'captured_shaders', pattern=lambda n: re.fullmatch(r'[0-9a-f]{16}\.bin', n))
-        except AdbError as e:
-            if self.o.install or 'no device connected' not in str(e): say(f'shaders captured on the device not pulled ({e})')
-            return
+        got = self.pack_files('captured_shaders', self.aw / 'captured_shaders', pattern=lambda n: re.fullmatch(r'[0-9a-f]{16}\.bin', n))
         if got: say(f'{len(got)} shader(s) missing from the bundle, captured on the device: {" ".join(n[:16] for n in got)}')
+
+    def pull_ue_programs(self):
+        """The programs the game handed the driver while it ran on the phone: the host writes every program it is given into the pack's folder (DM_NVN_SHDUMP, hle_nvn.c), so the
+        scenes the player reached are programs the headless capture (device_ue_programs) never sees. They join the split's inputs (the version dir's ue_programs), so the next port
+        translates them too: the shaders of a scene are only known once the game has been there"""
+        got = []
+        for v in self.versions:
+            got += self.pack_files('', self.dirs[v] / 'ue_programs', pattern=lambda n: n.startswith('program_') and n.endswith('.bin'))
+        if got: say(f'{len(got):,} program(s) of the app\'s run added to the shaders of {", ".join(self.versions)}')
+        return got
 
     def translator(self):
         """The shader translator (dm/gfx/tools/dmsh_xlate over dm/third_party/ryujinx) built from the repository's source with the player's .NET SDK, once for every game,
