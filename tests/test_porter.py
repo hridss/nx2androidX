@@ -1474,11 +1474,17 @@ class UnrealShaders(unittest.TestCase):
     class FakePort:
         """the parts of Port.device_ue it uses"""
         UE_ROUNDS = 4
+        UE_INLINE_BYTES = pipeline.Port.UE_INLINE_BYTES
         def __init__(self, root, answers):
             self.versions, self.dirs = ['v1'], {'v1': root / 'extract' / 'v1'}
             self.work, self.logs = root / 'work', root / 'logs'
             self.oodle_where = 'here'
             self.answers, self.asked = answers, []   # answers: the raw bytes each stream decodes to (missing: the decoder fails)
+            self.device_ue_inline = lambda d, v: pipeline.Port.device_ue_inline(self, d, v)   # the inline path (the shaders in the cooked packages) is the real one
+            self.programs = []   # the run-time shader capture (the programs the game hands the driver): the fake only records the call, a capture runs the game
+            self.device_ue_programs = lambda d, v: self.programs.append((d, v))
+            self.ue_inline_batch = lambda *a: pipeline.Port.ue_inline_batch(self, *a)
+            self.ue_done = lambda d: pipeline.Port.ue_done(self, d)
             for d in (self.dirs['v1'] / 'RomFS', self.dirs['v1'] / 'ExeFS', self.work / 'tmp', self.logs): d.mkdir(parents=True, exist_ok=True)
         def device_oodle_job(self, job, out, bnsh=False):
             """the game's own Oodle decoder: the job's streams, decoded (a stream it fails on comes back with no bytes)"""
@@ -1567,6 +1573,34 @@ class UnrealShaders(unittest.TestCase):
         p = self.port([[(b'one', 6), (b'two', 4)]], {b'one': b'123456', b'two': b'5678'}, root=p.root)   # the run again, the decoder gets both
         pipeline.Port.device_ue(p)
         self.assertEqual(p.asked, [[b'two']])   # the stream on disk is not asked for again
+
+    class FakePak:
+        """the parts of a pak the inline path uses: its files and their entries (the data is in the file itself)"""
+        files = {'Nuts/Content/Materials/A.uexp': 0, 'Engine/GlobalShaderCache-GLSL_SWITCH.bin': 0}
+        def __init__(self, path): pass
+        def entry(self, name): return dict(off=0, raw=4, size=4, method='Oodle', encrypted=False, block_size=1 << 20, blocks=[(0, 4)])
+        def read(self, name): return b'stored'
+    def test_the_inline_form_decodes_the_cooked_packages(self):
+        """the shaders are inline in the cooked packages (It Takes Two): the pak holds no shader code archive, so the cooked packages go to the game's own decoder, and the
+        ones that hold records are kept"""
+        root = Path(tempfile.mkdtemp(prefix='nx2a_test_ue_inline_'))
+        self.addCleanup(shutil.rmtree, root, True)
+        p = self.FakePort(root, {b'comp': b'LSLG a record'})
+        (p.dirs['v1'] / 'RomFS' / 'Content').mkdir(parents=True, exist_ok=True)
+        pak = p.dirs['v1'] / 'RomFS' / 'Content' / 'pakchunk0-Switch.pak'
+        pak.write_bytes(b'comp')   # the pak's data: one block of four bytes
+        patches = [mock.patch.object(pipeline.uepak, 'job', lambda *a, **k: ([], 0)),   # no shader code archive
+                   mock.patch.object(pipeline.uepak, 'unreal_paks', lambda *a, **k: [str(pak)]),
+                   mock.patch.object(pipeline.uepak, 'Pak', self.FakePak)]
+        for q in patches: q.start()
+        self.addCleanup(lambda: [q.stop() for q in patches])
+        pipeline.Port.device_ue(p)
+        self.assertEqual(p.asked, [[b'comp', b'comp']])   # the two packages went to the game's decoder
+        base = p.dirs['v1'] / 'ue_inline' / 'Content' / 'pakchunk0-Switch.pak'
+        self.assertEqual((base / 'Nuts' / 'Content' / 'Materials' / 'A.uexp').read_bytes(), b'LSLG a record')
+        self.assertEqual((base / 'Engine' / 'GlobalShaderCache-GLSL_SWITCH.bin').read_bytes(), b'LSLG a record')
+        self.assertEqual((p.dirs['v1'] / 'ue_inline' / 'stamp').read_text(), pipeline.nsp.ue_stamp(p.dirs['v1']))
+        self.assertEqual(len(p.programs), 1)   # the programs the game hands the driver are captured too (the chain's form of this generation's shaders)
 
 
 class SubfolderScan(unittest.TestCase):   # the updates and the DLC in a subfolder next to the base game (a download's layout: 本体加补丁/1DLC/)
