@@ -89,7 +89,7 @@ def by_title(tid):
 #   fps_locks.tsv  engine frame limits in game memory (hle_fpslock.c): build, what, ptr_off, field, kind, copies, ptr2
 #   ue_malloc.tsv  Unreal Engine's allocator on a host zone (hle_uemalloc.c): build, what, layout, obj, vtable, cut
 BUILD_TABLES = {'fps_locks.tsv': ('DM_GAME_FPS_LOCKS', ('build', 'what', 'ptr_off', 'field', 'kind', 'copies', 'ptr2'), ('FPS_F32', 'VSYNCS_I32', 'MS_F32', 'SEC_F32', 'FPS_I32')),
-                'ue_malloc.tsv': ('DM_GAME_UE_MALLOC', ('build', 'what', 'layout', 'obj', 'vtable', 'cut'), ('UE5', 'UE4_27', 'UE5_6'))}
+                'ue_malloc.tsv': ('DM_GAME_UE_MALLOC', ('build', 'what', 'layout', 'obj', 'vtable', 'cut'), ('UE5', 'UE4_27', 'UE5_6', 'UE4_26'))}
 
 
 def build_table(g, fname):
