@@ -199,6 +199,7 @@ static void force_init(void) {
 static void *force_lookup(const char *name) {
     for (unsigned i = 0; i < g_nforce; i++)
         if (!strcmp(g_force[i].name, name)) {
+if (g_force[i].gate) { const char *e = getenv(g_force[i].gate); if (!e || !strtol(e, NULL, 0)) return NULL; }   // Gated entry, switch off: the module keeps its definition
             if (g_force[i].to) {   // a guest alias (hle.h HLE_FORCE_ALIAS); the caller holds g_modules_mu or is relocating at startup, as for resolve_sym
                 void *p = loaded_sym(g_force[i].to);
                 if (!g_force_hits[i]++) {
