@@ -869,6 +869,11 @@ class Port:
         self.oodle_serve_why = self.oodle_why if self.oodle_kind == 'pkz' else ''
         # Unreal paks (version 11) and IoStore containers: their shader code archives are decoded with the game's own Oodle too (device_ue)
         self.ue_why = src['ue_decode'][1] if src['ue_decode'][0] else ''
+        # Legacy Unreal paks with LZ5 blocks (DRAGON QUEST XI S): the files decoded by the game's own LZ5 on the device (device_ue_legacy), for a profile that opts in (ue_legacy_decode device)
+        uld = self.g.get('ue_legacy_decode', '')
+        if uld not in ('', 'device'): raise BuildError(f'{self.g.id}: ue_legacy_decode must be device or absent: {uld}')
+        self.uel_why = src['ue_legacy'][1] if src['ue_legacy'][0] and uld == 'device' else ''
+        uel_cached = self.uel_why and all(self.uel_stamp_ok(v) for v in self.versions)
         # Already decoded UE archives need no device: rebuilding an APK's keyboard or host must also work after the player disconnects adb.
         ue_cached = self.ue_why and all((self.dirs[v] / 'ue_shaders/stamp').is_file() and
                                       (self.dirs[v] / 'ue_shaders/stamp').read_text() == nsp.ue_stamp(self.dirs[v]) for v in self.versions)
