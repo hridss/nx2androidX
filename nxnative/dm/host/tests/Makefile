@@ -6,7 +6,7 @@ GINC = $(if $(strip $(GAME)),-I../gen/$(GAME) -I../../games/$(GAME),$(error GAME
 GAME_H = ../gen/$(GAME)/game_profile.h
 # macOS's <ucontext.h> needs _XOPEN_SOURCE (and _DARWIN_C_SOURCE to keep the rest of the SDK's declarations): crash.c and hle_thread.c use the ucontext routines
 UCTX = $(if $(filter Darwin,$(shell uname -s)),-D_XOPEN_SOURCE=600 -D_DARWIN_C_SOURCE)
-run: $(B)/t_touch $(B)/t_gesture $(B)/t_oe $(B)/t_fs $(B)/t_fs_commit_list $(B)/t_thread_leak $(B)/t_fs_case $(B)/t_audio $(B)/t_audio_spsc $(B)/t_swkbd $(B)/t_altstack $(B)/t_condvar $(B)/t_condvar_old $(B)/t_pctl $(B)/t_time $(B)/t_shared_font $(B)/t_vorbis $(B)/t_vorbis_divides $(B)/t_hid $(B)/t_haptics $(B)/t_haptics_apple $(B)/t_cheats
+run: $(B)/t_touch $(B)/t_gesture $(B)/t_oe $(B)/t_fs $(B)/t_fs_commit_list $(B)/t_thread_leak $(B)/t_fs_case $(B)/t_audio $(B)/t_audio_spsc $(B)/t_swkbd $(B)/t_altstack $(B)/t_condvar $(B)/t_condvar_old $(B)/t_pctl $(B)/t_audren_sv $(B)/t_time $(B)/t_shared_font $(B)/t_vorbis $(B)/t_vorbis_divides $(B)/t_hid $(B)/t_haptics $(B)/t_haptics_apple $(B)/t_cheats
 	$(B)/t_touch
 	$(B)/t_gesture
 	$(B)/t_oe 2>/dev/null
@@ -21,6 +21,7 @@ run: $(B)/t_touch $(B)/t_gesture $(B)/t_oe $(B)/t_fs $(B)/t_fs_commit_list $(B)/
 	$(B)/t_condvar
 	$(B)/t_condvar_old
 	$(B)/t_pctl
+	$(B)/t_audren_sv
 	$(B)/t_time
 	$(B)/t_shared_font
 	$(B)/t_vorbis
@@ -62,6 +63,8 @@ $(B)/t_altstack: t_altstack.c t_altstack_stub.c ../crash.c ../dm.h $(GAME_H) | $
 	clang -O1 -Wno-unused-function $(UCTX) -I.. $(GINC) -o $@ t_altstack.c t_altstack_stub.c ../crash.c
 $(B)/t_pctl: t_pctl.c ../hle_misc.c ../hle.h ../dm.h $(GAME_H) | $(B)
 	clang -O1 -Wall -Werror -Wno-unused-function -I.. $(GINC) -o $@ t_pctl.c
+$(B)/t_audren_sv: t_audren_sv.c ../hle_sf.c ../hle_audren_sv.c ../hle.h ../dm.h $(GAME_H) | $(B)
+	clang -O1 -Wall -Werror -Wno-unused-function -I.. $(GINC) -o $@ t_audren_sv.c
 $(B)/t_shared_font: t_shared_font.c ../hle_sdk16.c ../hle.h ../dm.h $(GAME_H) | $(B)
 	clang -O1 -Wall -Werror -Wno-unused-function -Wno-frame-address -I.. $(GINC) -o $@ t_shared_font.c
 $(B)/t_hid: t_hid.c ../hle_hid.c ../hle_haptics.c ../hle_haptics.h ../pad_slots.h ../dm_input.h ../hle.h ../dm.h $(GAME_H) | $(B)

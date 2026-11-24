@@ -246,13 +246,14 @@ qos_class_t qos_class_self(void) { return t_qos; }
 // ---------------- sections ----------------
 const struct mach_header_64 _mh_execute_header = {0xfeedfacf};
 #define SECT(n) extern const uint8_t __start_##n[] __attribute__((weak, visibility("hidden"))); extern const uint8_t __stop_##n[] __attribute__((weak, visibility("hidden")));
-SECT(swhle) SECT(swforce) SECT(swnvn)
+SECT(swhle) SECT(swforce) SECT(swnvn) SECT(swsf)
 uint8_t *getsectiondata(const struct mach_header_64 *mh, const char *seg, const char *sect, unsigned long *size) {
     (void)mh; (void)seg;
     const uint8_t *a = NULL, *b = NULL;
     if (!strcmp(sect, "swhle")) { a = __start_swhle; b = __stop_swhle; }
     else if (!strcmp(sect, "swforce")) { a = __start_swforce; b = __stop_swforce; }
     else if (!strcmp(sect, "swnvn")) { a = __start_swnvn; b = __stop_swnvn; }
+    else if (!strcmp(sect, "swsf")) { a = __start_swsf; b = __stop_swsf; }
     if (!a || !b) { if (size) *size = 0; return NULL; }
     if (size) *size = (unsigned long)(b - a);
     return (uint8_t *)a;

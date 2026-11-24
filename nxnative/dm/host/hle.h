@@ -46,6 +46,30 @@ typedef struct { const char *name; void *fn; const char *why; } hle_force_ent;
     __attribute__((used, DM_SECTION("swforce"))) static const hle_force_ent hle_force_##cname = {mangled, (void *)(uintptr_t)cname##_bs, why}; \
     static ret cname(__VA_ARGS__)
 
+// Host service sessions (hle_sf.c): a request on a session the host serves, as its service sees it, and the answer it fills in. The input is the raw CMIF data after the "SFCI"
+// header; the buffers are the client's A (send), B (receive) and X (pointer) descriptors, read and written in place (one address space); the output is the raw data after "SFCO",
+// zeroed beforehand. A service may copy one kernel handle to the client (an event's read end) and move one (a new session: an out object outside a domain)
+typedef struct {
+    unsigned cmd, object;                              // CMIF command; domain object (0 outside a domain)
+    const uint8_t *in; size_t in_len;                  // raw input data
+    uint32_t copy[4], move[4]; unsigned ncopy, nmove;  // handles the client sent
+    struct { uint8_t *p; uint64_t size; } a[4], b[4], x[4]; unsigned na, nb, nx;
+    uint8_t out[0xc0]; size_t out_len;                 // raw output data (zeroed; out_len is how much of it the service wrote)
+    uint32_t out_copy, out_move;                       // handles for the client (0: none)
+    unsigned out_object;                               // an out object id in a domain session (0: none)
+    void *ctx;                                         // the session's own state (sf_session)
+} sf_req;
+typedef Result (*sf_answer)(sf_req *r);
+uint32_t sf_session(const char *name, sf_answer answer, void *ctx, void (*close)(void *ctx));   // a new host session (its handle), for a service to move to its client
+// A service the host serves in its own file: SF_SERVICE("name", answer) registers it (the swsf section), and connecting to that name gives a session answered by it
+typedef struct { const char *name; sf_answer answer; } sf_service_ent;
+#define SF_SERVICE(svc, fn) __attribute__((used, DM_SECTION("swsf"))) static const sf_service_ent sf_service_##fn = {svc, fn}
+// Host-made kernel events (hle_thread.c) for a service that hands its client an event: a new event's read end (the write end in *w, none when NULL), a signal by the write end
+// from any thread (0 once that end is closed), and a second read end of an event (0 when h is no read end)
+uint32_t hle_new_event(uint32_t *w);
+int hle_signal_event_handle(uint32_t w);
+uint32_t hle_dup_readable_handle(uint32_t h);
+
 // Operation mode (0 handheld / 1 docked): owned by hle_oe.c, and the hid controller style follows it; the front end can switch it at runtime
 int dm_opmode(void);
 void dm_set_opmode(int m);          // On change, push notification 30 / 31 according to the switches the game has turned on

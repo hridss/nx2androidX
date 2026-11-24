@@ -20,7 +20,10 @@ int dm_setname_self(const char *name);
 void *pthread_get_stackaddr_np(pthread_t t);
 size_t pthread_get_stacksize_np(pthread_t t);
 int pthread_threadid_np(pthread_t t, uint64_t *id);
+// glibc declares getdtablesize itself (bionic does not): only the shim is wanted where there is no declaration to clash with
+#ifndef __GLIBC__
 static inline int getdtablesize(void) { return (int)sysconf(_SC_OPEN_MAX); }
+#endif
 #include <time.h>
 #ifndef DM_CLOCK_NSEC_NP
 #define DM_CLOCK_NSEC_NP

@@ -643,6 +643,42 @@ def cpk_shaders(path, rel, ents, out):
             print(f'[RED] /{rel}/{e[0]}: {x}; not scanned', flush=True); continue
         scan_blob(d, f'/{rel}/{e[0]}', out)
 
+# Diablo III's packages (Diablo III: Eternal Collection's .cpk files, not CRI's): control sections each followed by its code area in the zlib streams of the game's SNO assets, see d3cpk.py and d3cpk_shaders
+D3CPK = b'D3CPK'   # job tag of a Diablo III package's byte range (d3cpk_jobs)
+def d3cpk_jobs(files, parts=64):
+    """Diablo III's console packages (d3cpk.py; .cpk like CRI's, another format) in byte ranges of about equal length: Diablo III: Eternal Collection 2.7.7 has 37, 16 GB.
+    → ([(path, rel, (D3CPK, start, end)), …], the package paths)"""
+    import d3cpk
+    ds = []
+    for p, r in files:
+        if not p.lower().endswith('.cpk'): continue
+        with open(p, 'rb') as f: h = f.read(8)
+        if d3cpk.is_d3cpk(h): ds.append((p, r, os.path.getsize(p)))
+    step = max(sum(n for *_, n in ds) // parts, 1 << 24)
+    return [(p, r, (D3CPK, a, min(a + step, n))) for p, r, n in ds for a in range(0, n, step)], {p for p, _, _ in ds}
+
+def d3cpk_shaders(path, rel, start, end, out):
+    """A byte range of a Diablo III package (d3cpk_jobs): every zlib stream whose record starts in it (d3cpk.streams), searched for control sections each directly followed by its code area
+    (control +0x704 bytes), as the game's shader SNO assets hold them (2.7.7: a control section of 0x850 bytes; the programs the game draws the title with are in ClientCommon.cpk). Each is a
+    program of one stage (separable_pairs). A control section of a plausible length (0x760 to 0x880 bytes, as tfxo_shaders) not followed by its code area in the same stream is counted and named:
+    in ClientCommon.cpk none is (3,528 control sections), so a stream that splits a file would show here"""
+    import d3cpk
+    with open(path, 'rb') as f:
+        f.seek(start); d = f.read(end - start + d3cpk.SPAN)
+    lost = []
+    for p, _, x in d3cpk.streams(d, 0, end - start, start):
+        label = f'/{rel}@{start + p:#x}'
+        for m in re.finditer(re.escape(CTL_MAGIC), x):
+            c = m.start()
+            if c + 0x708 > len(x): continue
+            n, k = struct.unpack_from('<I', x, c + 0x20)[0], struct.unpack_from('<I', x, c + 0x704)[0]
+            if not 0x760 <= n <= 0x880: continue   # the magic in other data
+            ctl, code = x[c:c + n], x[c + n:c + n + k]
+            st = glslc_stage(ctl, code) if len(code) == k else None
+            if st and not check(label, st, ctl, code): out.append((f'{label}#D3@{c:#x}', st, ctl, code))
+            else: lost.append(f'{label}+{c:#x}')
+    if lost: print(f'[RED] /{rel} {start:#x}..{end:#x}: {len(lost)} control section(s) not followed by their code area in the same stream, left out (first: {lost[0]})', flush=True)
+
 def pgdat_members(d, label):
     """A PlatinumGames DAT archive: 'DAT\\0', u32 file count, then the offsets of five tables: file offsets (u32 each), extensions (4 bytes each), names (u32 name length, then one name of that
     length each), file lengths (u32 each), a name hash map. Members may be DAT archives again. → [(name, data)], or None when the tables do not fit the data (another game's file that only starts
@@ -1637,7 +1673,7 @@ def ps_inputs(code):
     """Generic attributes a pixel shader reads: SPH words 6–13 are the input map, 8 bits for each of the 32 attributes (Ryujinx ShaderHeader.ImapTypes), non-zero = read; the translated MSL inputs are exactly user(locn<attribute>)"""
     return {i for i in range(32) if struct.unpack_from('<I', code, 0x30 + 4 * (6 + (i >> 2)))[0] >> ((i & 3) * 8) & 0xff}
 
-SINGLE_STAGE = ('#GLSLC@', '#UE', '#MTSPK@', '#MGFX@', '#NLG', '#PGSO', '#RAW@')   # sources whose every shader is a program of one stage: GLSLC outputs, Unreal's shader records, MT Framework's shader package (BNSH variations, Unity programs, MSHD and SDF pair theirs);
+SINGLE_STAGE = ('#GLSLC@', '#UE', '#MTSPK@', '#MGFX@', '#NLG', '#PGSO', '#RAW@', '#D3@')   # sources whose every shader is a program of one stage: GLSLC outputs, Unreal's shader records, MT Framework's shader package (BNSH variations, Unity programs, MSHD and SDF pair theirs);
 # MonoGame's effects, whose passes may name no vertex shader and keep the one bound (Celeste: 10 of its 13 effects draw through SpriteBatch's vertex shader, which is in main); Next Level Games'
 # archives (Luigi's Mansion 3 makes 5,317 programs of one stage each at boot); PlatinumGames' shader objects (Bayonetta 3: one stage each, pg_shader); and control sections loose in main
 # (Advance Wars 1+2: Re-Boot Camp's Bink shaders, raw_shaders), which no file pairs
@@ -1913,6 +1949,9 @@ def scan_file(args):
     # The original narrow MDB1 archives (and archives for another console) keep their existing readers.
     if head[:4] == b'MDB1' and path.endswith('.nx64.mvgl') and (members := mvgl_nvn_shaders(path, '/' + rel)) is not None:
         return rel, uniq_keys(members), var_pairs(members), trees
+    if len(args) > 2 and args[2][0] == D3CPK:   # a byte range of a Diablo III package (d3cpk_jobs)
+        d3cpk_shaders(path, rel, args[2][1], args[2][2], found)
+        return rel, uniq_keys(found), var_pairs(found), trees
     if len(args) > 2 and args[2][0] == eabig.JOB:   # EA BIG: EASF/chunkzip-wrapped shader archives (eabig.py), selected by their magic without reading the other assets
         try:
             with open(path, 'rb') as f:
@@ -2100,9 +2139,10 @@ def main():
     pz_jobs, pkzs = pkz_jobs(files)   # Bayonetta 3's PKZ archives, Oodle Kraken decoded by the game's own decoder in the Mac host
     ar_jobs, ards = ard_jobs(files)   # Xenoblade Chronicles 3's archive (bf3.arh / bf3.ard)
     cp_jobs, cpks = cpk_jobs(files)   # CRI CPK entries, decoded and scanned recursively (PlatinumGames DATs)
+    d3_jobs, d3s = d3cpk_jobs(files)   # Diablo III's packages (zlib streams, d3cpk.py)
     ls_jobs, lspks = lspk_jobs([(p, r) for p, r in files if p not in paks])   # Divinity: Original Sin 2's Larian packages (and their footerless _N parts)
-    big += cp_jobs + pak_jobs + tr_jobs + ue_jobs + bd_jobs + arc_jobs + pz_jobs + ar_jobs + ls_jobs + ea_jobs
-    files = [(p, r) for p, r in files if not linkdata_jobs(p, r) and p not in paks and p not in trp and p not in uep and p not in bdts and p not in arcs and p not in pkzs and p not in ards and p not in cpks and p not in lspks and p not in ea_archives]
+    big += cp_jobs + d3_jobs + pak_jobs + tr_jobs + ue_jobs + bd_jobs + arc_jobs + pz_jobs + ar_jobs + ls_jobs + ea_jobs
+    files = [(p, r) for p, r in files if not linkdata_jobs(p, r) and p not in paks and p not in trp and p not in uep and p not in bdts and p not in arcs and p not in pkzs and p not in ards and p not in cpks and p not in d3s and p not in lspks and p not in ea_archives]
     results += pool_map(scan_file, big, J, (common, {}, zdicts)) + pool_map(scan_file, files, J, (common, {}, zdicts), chunksize=16)
     trees, defer = {}, []
     for rel, uniq, pr, extra in results:

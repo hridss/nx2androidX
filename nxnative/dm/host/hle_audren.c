@@ -36,9 +36,8 @@ static size_t ar_align(size_t n, size_t a) { return (n + a - 1) & ~(a - 1); }
 // sizing code and its revision gates and checked by running that code in isolation (no firmware code runs here; an unknown revision falls back to the SDK's size).
 // It is not an emulator's copy: the service's command representation is independent of the client SDK's, and the SDK's local server instead sizes its own CPU
 // structures, which is what inflates the requirement when its answer is forwarded. The game sizes its allocation by this, so it has to be the service's number
-static size_t ar_service_work_size(const uint8_t *p) {
-    uint32_t revision = *(const uint32_t *)(p + 0x34);
-    if ((revision & 0xffffff) != 0x564552) revision = *(const uint32_t *)(p + 0x38);
+// dm_audren_work_size: the same for a parameter whose revision the caller found (SDK 1.3.1's 0x34-byte parameter has it at +0x30: audren:u, hle_audren_sv.c)
+size_t dm_audren_work_size(const uint8_t *p, uint32_t revision) {
     if ((revision & 0xffffff) != 0x564552 || revision < 0x31564552 || revision > 0x3f564552) return 0;
     unsigned r = (revision >> 24) - 0x30;
     size_t n[11];
@@ -71,12 +70,25 @@ static size_t ar_service_work_size(const uint8_t *p) {
         + voices * (splitters * 0x50 + (r >= 8 ? 0x284 : 0x250)) + (voices + sub + effects + sinks + 0x65) * 0x28 + 0x2c4;
     return ar_align(size + commands + 0x7e, WORK_PAGE);
 }
+// An SDK without the renderer in the process (SDK 1.3.1, Rayman Legends: Definitive Edition: no ExecuteAudioRendererRendering, only CreateAudioRendererManagerByHipc) is only the client of
+// audren:u, which the host serves (hle_audren_sv.c). Its work size, open and close go to the SDK as the game called them: the SDK's own client talks to the service
+static int ar_in_process(void) {
+    static int v = -1;
+    if (v < 0) { v = guest_sym("_ZN2nn5audio29ExecuteAudioRendererRenderingENS0_19AudioRendererHandleE") != NULL; if (!v) LOG("audren: the SDK has no renderer of its own: its client talks to audren:u, served by the host"); }
+    return v;
+}
+static size_t ar_service_work_size(const uint8_t *p) {
+    uint32_t revision = *(const uint32_t *)(p + 0x34);
+    if ((revision & 0xffffff) != 0x564552) revision = *(const uint32_t *)(p + 0x38);
+    return dm_audren_work_size(p, revision);
+}
 // The game sizes its allocation by the DSP service's budget (Eden #387: RTK14's own pools were only a few hundred bytes from full, and the extra CPU-sized
 // allocation this port used to ask for pushed another one out — boot returned -51 and exited). The larger CPU representation the local SDK runs is
 // backend storage the host supplies at open (ar_open)
 HLE_FORCE("_ZN2nn5audio30GetAudioRendererWorkBufferSizeERKNS0_22AudioRendererParameterE", "renderer work buffer: DSP service budget, with extra local CPU backend storage supplied by the host",
           size_t, h_ar_WorkSize, const uint8_t *param) {
     static size_t (*orig)(const uint8_t *); if (!orig) orig = gsym("_ZN2nn5audio30GetAudioRendererWorkBufferSizeERKNS0_22AudioRendererParameterE");
+    if (!ar_in_process()) return orig(param);
     uint8_t p[P_SIZE]; cpu_manual(p, param); size_t n = orig(p);
     size_t service = *(int32_t *)(param + P_DEVICE) == 0 ? ar_service_work_size(p) : 0;
     size_t guest_n = service ? service : n;
@@ -166,7 +178,7 @@ static Result ar_open(void **handle, void *ev, const uint8_t *param, void *work,
     static Result (*orig_ev)(void **, void *, const uint8_t *, void *, size_t), (*orig)(void **, const uint8_t *, void *, size_t);
     if (!orig_ev) orig_ev = gsym("_ZN2nn5audio17OpenAudioRendererEPNS0_19AudioRendererHandleEPNS_2os11SystemEventERKNS0_22AudioRendererParameterEPvm");
     if (!orig) orig = gsym("_ZN2nn5audio17OpenAudioRendererEPNS0_19AudioRendererHandleERKNS0_22AudioRendererParameterEPvm");
-    if (t_in_open) return orig(handle, param, work, sz);
+    if (t_in_open || !ar_in_process()) return ev ? orig_ev(handle, ev, param, work, sz) : orig(handle, param, work, sz);
     uint8_t p[P_SIZE]; cpu_manual(p, param);
     LOG("audren: OpenAudioRenderer%s rate %d samples per frame %d mix buffers %d submixes %d voices %d sinks %d effects %d splitters %d (original device %d mode %d → CPU / manual) work buffer %p+%#zx",
         ev ? "" : " (no event)", *(int32_t *)param, *(int32_t *)(param + 4), *(int32_t *)(param + 8), *(int32_t *)(param + 0xc), *(int32_t *)(param + 0x10), *(int32_t *)(param + 0x14),
@@ -202,6 +214,7 @@ HLE_FORCE("_ZN2nn5audio17OpenAudioRendererEPNS0_19AudioRendererHandleERKNS0_22Au
           Result, h_ar_Open0, void **handle, const uint8_t *param, void *work, size_t sz) { return ar_open(handle, NULL, param, work, sz); }
 HLE_FORCE("_ZN2nn5audio18CloseAudioRendererENS0_19AudioRendererHandleE", "close the renderer: stop the host render thread first, then hand over to the SDK", void, h_ar_Close, void *obj, void *state) {
     static void (*orig)(void *, void *); if (!orig) orig = gsym("_ZN2nn5audio18CloseAudioRendererENS0_19AudioRendererHandleE");
+    if (!ar_in_process()) { orig(obj, state); return; }
     // Join the render thread first (it checks g_open every round and at most every 10 ms while waiting for the output): it may be inside exec(), which uses the renderer the SDK is about to free.
     // A fixed 20 ms sleep used to stand in for this, and a renderer reopened inside that window ran a second thread over the first one's static buffers
     if (obj == g_handle[0] && g_render_tt) { atomic_store(&g_open, 0); dm_guest_thread_join(g_render_tt); g_render_tt = NULL; }

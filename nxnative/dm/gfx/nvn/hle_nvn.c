@@ -1553,6 +1553,7 @@ static void sleep_until_ns(uint64_t dl);
 static uint64_t present_period(const win_t *o);
 static uint64_t rt_period_ns(const win_t *o, uint64_t period);
 static int present_itv(const win_t *o);
+static int present_unpaced(const win_t *o);
 __attribute__((weak)) void dm_main_yield_stats(uint64_t *n, uint64_t *ns) { *n = 0; *ns = 0; }   // The host's hle_thread.c provides the ground truth; 0 in graphics unit tests
 __attribute__((weak)) uint32_t dm_guest_work_qos(unsigned *count) { if (count) *count = 0; return QOS_CLASS_UNSPECIFIED; }
 __attribute__((weak)) void dm_perf_frame_start(uint64_t pace_ns, uint64_t pq_ns) { (void)pace_ns; (void)pq_ns; }   // Android (perf_android.c): a frame's work starts, for the CPU performance hint
@@ -1577,7 +1578,8 @@ NVN(nvnWindowAcquireTexture, NVNwindowAcquireTextureResult, NVNwindow *w, NVNsyn
         if (rtp && rt_period != rtp) { rt_period = rtp; set_time_constraint(rtp); }
         rt_comp_tick(rtp);
         uint64_t p0 = now_ns();
-        if (mtl_link_active()) { if (!mtl_link_wait_tick(present_itv(o), period ? 2 * period : 33333333ull) && wait) sleep_until_ns(at); }   // DM_PRESENT_LINK: pacing fully follows the display link (wait for the present interval's display-link ticks when running fast, go immediately when behind); our own 60 Hz clock is only the fallback when no display-link tick arrives
+        if (present_unpaced(o)) {}   // present interval 0: no vsync wait (Ori and the Blind Forest's shader prewarm, present_unpaced); only the free texture the ticket wait below gives
+        else if (mtl_link_active()) { if (!mtl_link_wait_tick(present_itv(o), period ? 2 * period : 33333333ull) && wait) sleep_until_ns(at); }   // DM_PRESENT_LINK: pacing fully follows the display link (wait for the present interval's display-link ticks when running fast, go immediately when behind); our own 60 Hz clock is only the fallback when no display-link tick arrives
         else if (wait) sleep_until_ns(at);
         pace_ns = now_ns() - p0;
     } else {   // DM_DETCLOCK_PACE=1 (used by the screenshot gate): while the guest clock advances per frame, each frame's wall clock is no shorter than one step -- frame count and in-game time are deterministic, and the background loading thread has at least one step of wall clock available per frame;
@@ -1878,6 +1880,13 @@ static void present_cfg(const win_t *o) {
         msrc, o->interval, scr > 0 ? "window, fixed 60 Hz" : "no window, fixed 60 Hz");
 }
 static int present_itv(const win_t *o) { int c = fps_step_cap(), k = atomic_load(&g_fs_k); return c ? (k && fstep_on() ? k : 60 / c) : g_display_mode ? 1 : o->interval > 0 ? o->interval : 1; }   // vsyncs per frame that presentation follows
+// Present interval 0 swaps without waiting for a vsync on Horizon: the window's acquire waits only for a texture the display has let go of, the display shows the newest frame at each
+// vsync, and the game paces itself (or runs as fast as it can; the Switch's unlocked-frame-rate mods set interval 0 to go past 60). The acquire took it as 1 and waited a display
+// tick each frame. Ori and the Blind Forest: Definitive Edition sets Unity's vSyncCount to 0 only for its shader prewarm behind the first loading screen and back to 1 after it: the
+// prewarm draws shaders until a per-frame time budget runs out and waits 15 frames whenever it drew 2 or fewer, and each draw waits for the graphics worker, which sat in that tick
+// wait, so the loading screen took about 5 minutes. Presentation keeps one frame per display tick and the acquire's ticket wait still holds a texture until the frame it showed is
+// taken or dropped; a host frame cap (fps_target, the frame step) or display mode decides the pacing itself and keeps it
+static int present_unpaced(const win_t *o) { present_cfg(o); return o->interval == 0 && !g_display_mode && !fps_step_cap(); }
 static uint64_t present_period(const win_t *o) {
     present_cfg(o);
     int was = atomic_load(&g_game_itv), want = o->interval > 0 ? o->interval : 1;

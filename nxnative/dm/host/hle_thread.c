@@ -1009,6 +1009,25 @@ static void h_close_event(uint32_t h) {   // holding G: an event handle (either 
     event_t *e = g_h[i].obj; if (--e->refs == 0) free(e);
     g_h[i].type = O_FREE; g_h[i].obj = NULL;
 }
+// ---------- Host-made kernel events, for a service that hands its client an event (audren:u, hle_audren_sv.c) ----------
+uint32_t hle_new_event(uint32_t *w) {   // A new kernel event, as svcCreateEvent (0x45): the read end returned, the write end in *w (none when NULL, never signaled)
+    event_t *e = calloc(1, sizeof *e); e->refs = 2;
+    G_lock(); uint32_t hr = h_new(O_EVENT_R, e); if (w) *w = h_new(O_EVENT_W, e); pthread_mutex_unlock(&G);
+    return hr;
+}
+uint32_t hle_dup_readable_handle(uint32_t h) {   // A second read end of an event (a service's QuerySystemEvent hands one out per ask), 0 if h is no read end
+    G_lock(); event_t *e = h_peek(h, O_EVENT_R); uint32_t r = 0;
+    if (e) { e->refs++; r = h_new(O_EVENT_R, e); }
+    pthread_mutex_unlock(&G);
+    return r;
+}
+int hle_signal_event_handle(uint32_t w) {   // Signal a host-made kernel event by its write end (any thread); 0 once that end is closed
+    G_lock();
+    event_t *e = h_peek(w, O_EVENT_W);
+    if (e) { e->signaled = 1; wake_sync_waiters(e); }
+    pthread_mutex_unlock(&G);
+    return e != NULL;
+}
 // ---------- SystemEvent of the service layer ----------
 // Real device: the service hands the read end of a kernel event to the client, and the guest waits on it through SDK nn::os. Host: on a guest thread, call the SDK's own
 // CreateSystemEvent(inter-process=true), and the SDK creates the kernel event through SVC 0x45; the write-end handle is recorded, after which any thread (including the host audio thread) can signal it.
