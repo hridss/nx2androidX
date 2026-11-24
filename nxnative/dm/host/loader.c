@@ -191,10 +191,22 @@ static void force_init(void) {
     for (unsigned i = 0; i < g_nforce; i++)
         for (unsigned j = i + 1; j < g_nforce; j++)
             if (!strcmp(g_force[i].name, g_force[j].name)) die("duplicate entry in the forced takeover list: %s", g_force[i].name);
+    for (unsigned i = 0; i < g_nforce; i++)   // an alias binds to the guest's definition: a target the host takes over would bypass that take-over
+        if (g_force[i].to)
+            for (unsigned j = 0; j < g_nforce; j++)
+                if (!strcmp(g_force[j].name, g_force[i].to)) die("forced alias %s: its target %s is itself taken over", g_force[i].name, g_force[i].to);
 }
 static void *force_lookup(const char *name) {
     for (unsigned i = 0; i < g_nforce; i++)
         if (!strcmp(g_force[i].name, name)) {
+            if (g_force[i].to) {   // a guest alias (hle.h HLE_FORCE_ALIAS); the caller holds g_modules_mu or is relocating at startup, as for resolve_sym
+                void *p = loaded_sym(g_force[i].to);
+                if (!g_force_hits[i]++) {
+                    if (!p) LOG("[RED] forced alias %s: no loaded module defines %s; bound without the alias", name, g_force[i].to);
+                    else if (g_flag.imports) LOG("force %s -> %s  (%s)", name, g_force[i].to, g_force[i].why);
+                }
+                void *hlecount_wrap(const char *, const char *, void *); return p ? hlecount_wrap("ALIAS", name, p) : NULL;
+            }
             if (!g_force_hits[i]++ && g_flag.imports) LOG("force %s  (%s)", name, g_force[i].why);
             void *hlecount_wrap(const char *, const char *, void *); return hlecount_wrap("FORCE", name, g_force[i].fn);   // A counting stub when DM_HLECOUNT is set
         }

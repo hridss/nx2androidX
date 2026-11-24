@@ -612,6 +612,44 @@ def pkz_shaders(path, rel, ents, out):
 
 # CPK and binding-table readers adapted from seedds/nxnative's shader_split.py.
 # The local NieR 1.0.3 DAT census matches its 1,371 objects / 1,225 distinct keys.
+UBIART_IPK = bytes.fromhex('50ec12ba')
+def ipk_shaders(path, rel, out):
+    """A UbiArt IPK archive (Rayman Legends: Definitive Edition, bundle_nn.ipk, version 7, 26,878 files). Big-endian: magic 0x50EC12BA, version, platform, +0xc base offset (the data start),
+    +0x10 file count; entries from +0x38: u32 offset count, u32 size, u32 compressed size (0: stored), u64 time, u64 offset × count (from the base), u32 + directory, u32 + name, u32 CRC, u32 0.
+    Compressed entries are zlib. The shaders are whole GLSLC outputs in the engine's .fxb effect files (enginedata/shaders/compiled/nx: renderpct, afterfx, font, movie; 5,893 programs);
+    shaders_dev/ holds a development build of the same effects with other keys, which the game does not ask for. Only the .fxb entries are read: the 2.6 GB of .ckd cooked assets hold none.
+    A damaged archive is named and left out, not fatal (as for a CPK the reader cannot read)"""
+    label = f'/{rel}'
+    shaders = []   # held until every entry is parsed: a table that runs past its end makes the whole archive's layout unproven
+    with open(path, 'rb') as f:
+        h = f.read(0x38)
+        if len(h) < 0x38: print(f'[RED] {label}: {len(h)} bytes, shorter than a UbiArt IPK header (0x38); not scanned', flush=True); return
+        ver, _plat, base, n = struct.unpack_from('>IIII', h, 4)
+        if ver != 7: print(f'[RED] {label}: UbiArt IPK version {ver} (only version 7 is read); not scanned', flush=True); return
+        t = f.read(max(base - 0x38, 0))
+        if base < 0x38 or len(t) != base - 0x38: print(f'[RED] {label}: the IPK header puts its data at {base:#x}, outside the file; not scanned', flush=True); return
+        p = 0
+        for i in range(n):
+            try:
+                noff, size, csize = struct.unpack_from('>III', t, p); p += 20
+                off = struct.unpack_from('>Q', t, p)[0] if noff else 0; p += 8 * noff
+                pl = struct.unpack_from('>I', t, p)[0]; d = t[p + 4:p + 4 + pl].decode('latin1'); p += 4 + pl
+                nl = struct.unpack_from('>I', t, p)[0]; name = d + t[p + 4:p + 4 + nl].decode('latin1'); p += 4 + nl + 8
+            except struct.error:
+                print(f'[RED] {label}: entry {i} of {n} runs past the IPK table ({len(t) + 0x38:#x} bytes): not the layout of a version 7 archive; not scanned', flush=True); return
+            if not name.endswith('.fxb') or '/shaders_dev/' in '/' + name: continue
+            f.seek(base + off); b = f.read(csize or size)
+            if len(b) != (csize or size): print(f'[RED] {label}/{name}: the entry at {base + off:#x} runs past the end of the archive; not scanned', flush=True); continue
+            if csize:
+                try: b = zlib.decompress(b)
+                except zlib.error as e: print(f'[RED] {label}/{name}: invalid zlib stream ({e}); not scanned', flush=True); continue
+            if len(b) != size: print(f'[RED] {label}/{name}: {len(b)} bytes decoded, the entry says {size}', flush=True)
+            found = []
+            scan_blob(b, f'{label}/{name}', found)
+            if not found: found = glslc_shaders(b, f'{label}/{name}', need=False)
+            shaders += found
+    out += shaders
+
 CPK = b'CPK '
 def cpk_jobs(files, parts=64):
     """Every entry of every CRI CPK archive in ranges of about equal length (Bayonetta 2: six in the RomFS root, 9.5 GB, 6,091 files, 12 GB of them CRILAYLA-compressed; its shaders are BNSH
@@ -1949,6 +1987,9 @@ def scan_file(args):
     # The original narrow MDB1 archives (and archives for another console) keep their existing readers.
     if head[:4] == b'MDB1' and path.endswith('.nx64.mvgl') and (members := mvgl_nvn_shaders(path, '/' + rel)) is not None:
         return rel, uniq_keys(members), var_pairs(members), trees
+    if head[:4] == UBIART_IPK:   # a UbiArt IPK archive (ipk_shaders): its .fxb effect files, without reading the rest
+        ipk_shaders(path, rel, found)
+        return rel, uniq_keys(found), var_pairs(found), trees
     if len(args) > 2 and args[2][0] == D3CPK:   # a byte range of a Diablo III package (d3cpk_jobs)
         d3cpk_shaders(path, rel, args[2][1], args[2][2], found)
         return rel, uniq_keys(found), var_pairs(found), trees
