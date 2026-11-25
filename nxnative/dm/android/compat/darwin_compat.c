@@ -319,7 +319,23 @@ int clonefile(const char *src, const char *dst, uint32_t flags) {
 }
 int renamex_np(const char *from, const char *to, unsigned flags) {
     unsigned lf = (flags & RENAME_SWAP ? 2u /* RENAME_EXCHANGE */ : 0) | (flags & RENAME_EXCL ? 1u /* RENAME_NOREPLACE */ : 0);
-    return (int)syscall(SYS_renameat2, AT_FDCWD, from, AT_FDCWD, to, lf);
+    if (!syscall(SYS_renameat2, AT_FDCWD, from, AT_FDCWD, to, lf)) return 0;
+    if (!(flags & RENAME_SWAP)) return -1;
+    // Emulated storage (/sdcard) does not implement RENAME_EXCHANGE: the host's save commit cannot swap the new
+    // directory with the committed one atomically. Fall back to an exchange through a temporary sibling path so a
+    // configurable save root works there too. Internal app storage still takes the atomic path above.
+    if (errno != EINVAL && errno != ENOTSUP && errno != EOPNOTSUPP && errno != ENOSYS) return -1;
+    char tmp[PATH_MAX];
+    if (snprintf(tmp, sizeof tmp, "%s.swap", from) >= (int)sizeof tmp) { errno = ENAMETOOLONG; return -1; }
+    if (!access(tmp, F_OK) && remove(tmp)) return -1;
+    if (rename(from, tmp)) return -1;
+    if (rename(to, from)) { int e = errno; rename(tmp, from); errno = e; return -1; }
+    if (rename(tmp, to)) {                       // committed has moved to from; put both back on failure
+        int e = errno;
+        if (!rename(from, to)) rename(tmp, from);
+        errno = e; return -1;
+    }
+    return 0;
 }
 
 // ---------------- sysctl: the process start time ----------------
