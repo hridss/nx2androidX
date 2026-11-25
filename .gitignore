@@ -43,3 +43,12 @@ title.keys
 /android/.idea/
 /android/.agentbridge/
 android/gradle/gradle-daemon-jvm.properties
+
+# the model side (the training pipeline, the evaluation) moved to the private
+# repository zFitness/nx2-memory; .venv-train is the old training venv, kept
+# only until the new repository's own venv is in place
+/.venv-train/
+# the work dir: the fetched model (devtools/fetch_memory_model.py) and the
+# corpus the old pipeline left behind
+.memembed
+/.memembed*/

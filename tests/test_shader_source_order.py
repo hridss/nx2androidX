@@ -72,7 +72,12 @@ class ShaderSourceOrder(unittest.TestCase):
         split_os.walk = lambda directory: ((d.replace('\\', '/'), dirs, fs) for d, dirs, fs in os.walk(directory))
         with mock.patch.object(self.split.cf, 'ProcessPoolExecutor', SerialPool), mock.patch.object(self.split, 'os', split_os):
             with mock.patch.object(self.split, 'open', open_fixture, create=True), mock.patch.object(sys, 'argv', argv):
-                with mock.patch.dict(os.environ, {'DM_SPLIT_AOC': (root / 'DLC').as_posix(), 'DM_GLSLC_CAPTURE': '', 'DM_UE_SHADERS': '', 'J': '1'}):
+                # Windows: the simulated POSIX path (posixpath on a 'C:/...' path) makes the split's spill folder a nonsense one ('D:\...\C:'), and the split's
+                # fallback there (the forked children, this line's pool without semaphores) has no os.fork: the payloads stay in memory, and what this test is
+                # about (the order the sources are found in) does not depend on them
+                env = {'DM_SPLIT_AOC': (root / 'DLC').as_posix(), 'DM_GLSLC_CAPTURE': '', 'DM_UE_SHADERS': '', 'J': '1'}
+                if os.name == 'nt': env['DM_SHADER_SPILL'] = '0'
+                with mock.patch.dict(os.environ, env):
                     self.split.main()
         return [(out / f).read_bytes().splitlines() for f in files]
 

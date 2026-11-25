@@ -65,6 +65,7 @@ with them.
 | The Android NDK, the .NET SDK and platform-tools | their own terms (Apache-2.0, MIT, Apache-2.0) | Downloaded by the Setup tab from Google and Microsoft. |
 | The Python modules the phone app ships (lz4, capstone, pillow, fonttools, pyyaml, pycryptodome, backports.zstd) | permissive (BSD, MIT, Apache-2.0) | Fetched as wheels at build time into the APK's payload. |
 | The cheat files (the community's Atmosphère codes) | the cheat files are the community's own work | The app carries none of them. The player downloads them from the community libraries (the drawer's download row) or imports a zip (Settings → Environment → Cheats); the files come from switch-cheats-db, MyNXCheats and the Chinese community's collection, and our own repository (`zFitness/nx2a-cheats`) collects them with each file's author in the credit beside it. Nothing of them is in this repository or in the APK. |
+| The `kuake` CLI (the Quark drive's file manager) | AGPL-3.0-or-later | Fetched by the release pipeline when it publishes a version to the netdisks (`python3 -m devtools.netdisk install`, into `tools/kuake/`, which is not committed). It is run as a program, not linked into anything here, and it is not in this repository, in any bundle or in the APK. Upstream: https://github.com/zhangjingwei/kuake_cli |
 
 ## The game's own content
 

@@ -1,0 +1,63 @@
+# Publishes a release to the netdisks (devtools/netdisk/): the APK and the game profiles package go into the
+# folder the players download from, and the files that are not this release's are moved out of the way.
+#
+# It runs when a release is published, and the maintainer can run it by hand (Actions -> Run workflow) for a
+# release that has to go up again. Nothing else publishes to the netdisks: a build of a branch does not, and a
+# tag push does not.
+#
+# A release is published right after its tag is pushed, and the build that tag started attaches the APK a while
+# later, so the run waits for the files before it publishes. The cookie is the repository's secret
+# NX2A_KUAKE_COOKIE (the session cookie of pan.quark.cn); without it that netdisk is skipped and the others go.
+name: Netdisk
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'the release to publish (empty: the latest one)'
+        required: false
+        default: ''
+  release:
+    types: [published]
+
+permissions:
+  contents: read   # the release and its files
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'   # the Python the build scripts run on
+      - name: the manual trigger is the maintainer's
+        # The netdisk is the maintainer's own drive: nobody else publishes to it by hand.
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.actor }}" != "zFitness" ]; then
+            echo "::error::only zFitness publishes to the netdisks by hand"
+            exit 1
+          fi
+      - name: the release to publish
+        id: pick
+        run: |
+          # the release that was published, or the one the maintainer named, or the latest one
+          tag="${{ inputs.tag }}"
+          if [ "${{ github.event_name }}" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "the release to publish: ${tag:-the latest one}"
+      - name: the tool the netdisks drive
+        # the kuake CLI: the release's binary for the runner, or one built from that release's source when it
+        # carries none for this machine
+        run: python -m devtools.netdisk install
+      - name: the netdisks
+        # The wait is for the build that the tag started: it attaches the APK and the profiles package a while
+        # after the release is published.
+        run: python -m devtools.netdisk publish --tag "${{ steps.pick.outputs.tag }}" --wait 3600
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KUAKE_COOKIE: ${{ secrets.NX2A_KUAKE_COOKIE }}

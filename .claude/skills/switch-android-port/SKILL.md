@@ -21,6 +21,7 @@ Other references:
 - `references/switches.md`: every host and backend switch, and whether it changes live.
 - `references/hdr-corruption.md`: bounded dynamic HDR captures, NaN/infinity analysis, single-pixel draw/depth history, and shader-repair reversals.
 - `references/neo-case-study.md`: NEO's bring-up, bug by bug, with numbers and dead ends.
+- `references/device-cli.md`: the phone's command line — the app's glibc environment, the porter and the tools on the device, the headless host, and the traps of writing into the phone's toolchain.
 - `nxnative/docs/agents/03-bringup.md` and `05-debugging.md`: upstream's failure catalogue and debugging recipes. Written for Apple, but the host and rewriter parts apply here too.
 
 ## Rules for working on the device

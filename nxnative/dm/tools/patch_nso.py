@@ -90,6 +90,10 @@ if BUILD_ID in PATCHES['FRAME_STEP'] and NAME == 'main':
     PATCH_OFF = max(PATCH_OFF, (FS_STATE_OFF + 0x4000 + 0xFFFF) & ~0xFFFF)
 ORIG_TEXT = bytes(IMG[:segs[0][2]])   # the text as the file has it, before any cut or site (stub_address reads the adrp pairs from it)
 cuts = list(PATCHES['CUTS'].get(BUILD_ID, []))
+# Retain the original ABI boundary at each registered observation site before cuts.
+# A checked BL -> NOP cut removes the call, not its caller-clobbered register contract.
+obs_calls = {off for off, *_ in PATCHES['OBS'].get(BUILD_ID, [])
+             if 4 <= off < TEXT_END and struct.unpack_from('<I', IMG, off - 4)[0] >> 26 == 0x25}
 for off, ob, nb, why in cuts:
     ob, nb = bytes.fromhex(ob), bytes.fromhex(nb)
     assert len(ob) == len(nb) and IMG[off:off + len(ob)] == ob, f'cut original bytes mismatch {off:#x}: {bytes(IMG[off:off + len(ob)]).hex()}'
@@ -1110,8 +1114,8 @@ if any(fb - fa > BIG_FN for fa, fb in funcs):
         split += [(p, q) for p, q in ps if bisect.bisect_left(sites18, p) < bisect.bisect_left(sites18, q)]   # the pieces that hold x18 sites
         print(f'function {fa:#x}..{fb:#x} ({(fb - fa) / 2**20:.2f} MB, no unwind entries) analysed in {len(ps)} pieces')
     funcs = split
-# The long part: every piece is disassembled with its details, and a big function without unwind entries has hundreds of them (OCTOPATH TRAVELER 0's main: 71 MB in 298 pieces). The
-# progress is printed, so the wait is not a silence (the porter passes the lines on, and the phone's screen shows them).
+# The long part: every piece is disassembled with its details, and a big function without unwind entries has hundreds of
+# them (OCTOPATH TRAVELER 0's main: 71 MB in 298 pieces). The progress is printed, so the wait is not a silence.
 pieces_total = sum(fb - fa for fa, fb in funcs); pieces_done = 0
 for pi, (fa, fb) in enumerate(funcs):
     if pi % 4 == 0: print(f'progress: {pieces_done / 2**20:.1f} MB of {pieces_total / 2**20:.1f} MB ({pi + 1}/{len(funcs)} pieces)', flush=True)
@@ -1222,7 +1226,10 @@ for off, oid, ow, why in obs:
     assert f'{w:08x}' == ow, f'observation gate original instruction mismatch {off:#x}: {w:08x}'
     # Function entries, or the instruction right after a bl, only: dm_gate writes back only x0–x8 / x30, and host C code may modify x9–x17; at entry these carry no values under AAPCS64 (arguments are only in x0–x7 / x8),
     # and right after a call returns the callee was free to clobber them anyway (x16 / x17 are the veneer registers). Elsewhere, where the code ahead reads none of them before its next bl
-    after_bl = off >= 4 and struct.unpack_from('<I', IMG, off - 4)[0] >> 26 == 0x25
+    # Only a NOP may inherit that original boundary: another replacement could
+    # introduce live scratch-register values. Cut byte checks above still apply.
+    previous = struct.unpack_from('<I', IMG, off - 4)[0] if off >= 4 else 0
+    after_bl = previous >> 26 == 0x25 or (previous == 0xd503201f and off in obs_calls)
     assert off in set(starts) or after_bl or scratch_dead(off), f'observation gate neither at a function entry, after a bl nor before a call with x9–x17 unread {off:#x}'
     assert off < TEXT_END and off not in kinds and not any(lo <= off < hi for wseg in windows for lo, hi in [(wseg[0].address, wseg[-1].address + 4)]), f'observation gate conflicts with a rewrite site {off:#x}'
     put_branch(off, site_obs(off, oid, w)); stat('obs')

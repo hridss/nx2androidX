@@ -87,8 +87,27 @@ It refuses when the game's code on the device was rewritten with other rewriter 
 - `nxnative/`: our fork of nxnative (see [nxnative](#nxnative)), with the Android runtime in `nxnative/dm/android/` and the game profiles in `nxnative/dm/games/`.
 - `packaging/`: the player's bundle (`python packaging/build_bundle.py`).
 - `devtools/`: scripts for bringing up a game on a connected device (`devtools/device.json` names the device: `{"serial": "...", "package": "..."}`).
+- `phone_tools/`: the tools that travel with the app into the player's tool tree (`tool/tools/`), run on the phone with the guest python: `memory_search.py` searches what this phone knows (the upstream's cases, the knowledge documents, the closed issues, the player's own case files), `memory_embed.py` reads the static embedding model.
 - `probes/`, `RESEARCH.md`: the feasibility study and the first on-device probes.
 - `.githooks/`: the commit-msg hook (see [Commit messages](#commit-messages)).
+
+## The local search's model
+
+The search runs on the lexical side alone; the **embedding model** (5.6 MB) adds the semantic
+half. It is not in this repository: it is built and published in the private model repository
+`zFitness/nx2-memory`, published as a release asset of the public
+`zFitness/public-dist` (no token needed to fetch it).
+
+```bash
+python3 devtools/fetch_memory_model.py          # the latest release -> .memembed/memory-embed/
+python3 devtools/check_memory_model.py          # is it a working model?
+```
+
+`packaging/android-apk/build_assets.py` copies `.memembed/memory-embed` into the APK payload
+when it is there, and says "the search runs lexical only" when it is not — **a build without the
+model is not a broken build**. The repository is private, so the download needs a token with read
+access (`GH_TOKEN`, or the gh CLI's own). The model was trained on the public corpus only; a
+player's own case files never enter it.
 
 ## Adding a game
 
@@ -103,6 +122,26 @@ The phone app says the same version: its `versionName` in `android/app/build.gra
 A release checks only the games it adds or fixes, not the older ones; a break in an older game is fixed by a later patch release. The version is raised by a commit `chore(release): version <x.y.z>`.
 
 The release notes carry a `Community ports` section: the people whose work went into the version, named. `python3 devtools/release_contributors.py` lists the pull requests merged since the last tag and who opened them — paste the list into the notes file. A port that came from the community is credited twice: on the game's line in `docs/PORT_CHECKLIST.md` (`ported by @handle`, written there by `python3 docs/gen_tables.py`) and in that section.
+
+## The netdisks
+
+A release's files also go into the netdisks the players download from. The pipeline is `devtools/netdisk/`:
+
+```
+python3 -m devtools.netdisk install                             # the tool the netdisks drive, into tools/kuake/
+python3 -m devtools.netdisk publish                             # the release that was cut last
+python3 -m devtools.netdisk publish --tag v0.4.1-alpha02         # one release
+python3 -m devtools.netdisk publish --target quark --dry-run    # one netdisk, nothing touched
+python3 -m devtools.netdisk targets                             # the netdisks there are
+```
+
+The netdisk workflow (`.github/workflows/netdisk.yml`) runs it when a release is published, and the maintainer can run it by hand (Actions -> Netdisk -> Run workflow; only the maintainer's account may). A tag push does not publish to the netdisks: the build workflow only builds. A release is published right after its tag is pushed and the build that tag started attaches the APK a while later, so the run waits for the files (`--wait`) before it publishes.
+
+The cookie is the repository's secret `NX2A_KUAKE_COOKIE` (the session cookie of pan.quark.cn); without it the netdisk is skipped and the others still go. A local run needs the same cookie in the environment (`KUAKE_COOKIE=... python3 -m devtools.netdisk publish`) and a machine that can reach the netdisk.
+
+Every netdisk is a target of its own — its own credentials, its own tool, its own thread — so one that is down, out of space or out of cookies does not hold the others back, and a file that fails does not stop the files after it. A new netdisk is a new module in `devtools/netdisk/targets/` and a line in the registry there. A target puts the release's files into its folder and moves the files that are not this release's into an archive folder beside it; it never throws anything away.
+
+The Quark target puts them into `我的/nx2AndroidX` (the folder the share link points at) and moves the older versions into `我的/旧版本`: the folder the players see holds the current version, and the history stays.
 
 ## Building the bundle
 

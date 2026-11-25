@@ -506,6 +506,23 @@ def main():
     # assistant finds them at $NX2A_REPO/tools/<name>.py without looking for them
     if (REPO / 'phone_tools').is_dir():
         copy_tree(REPO / 'phone_tools', tool / 'tools', skip=TOOL_SKIP)
+    # The static embedding model of the local search (phone_tools/memory_search.py): 5.6 MB, built on the
+    # computer from the public corpus and published as a release of the public distribution
+    # repository (zFitness/public-dist). Fetch it with devtools/fetch_memory_model.py before building.
+    # It is optional - the search runs without it, on the lexical side alone - so a build that does
+    # not have it is not a broken build.
+    model = REPO / '.memembed/memory-embed'
+    if (model / 'meta.json').is_file():
+        copy_tree(model, tool / 'tools/memory-embed', skip=TOOL_SKIP)
+        version = ''
+        try:
+            version = json.loads((model / 'meta.json').read_text(encoding='utf-8')).get('version', '')
+        except (OSError, ValueError):
+            pass
+        print(f'>> the embedding model of the local search{f" ({version})" if version else ""}')
+    else:
+        print('>> no embedding model (.memembed/memory-embed): the search runs lexical only')
+        print('   fetch it: python3 devtools/fetch_memory_model.py')
     # the tool's own patch script (the interpreter paths of the programs the porter starts) and the SDK's
     # globalization fix (the phone's .NET has no ICU): both are run by the app, so they travel with it
     shutil.copy2(REPO / 'packaging/android-apk/patch_interp.py', tool / 'tools/patch_interp.py')

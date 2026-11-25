@@ -63,14 +63,42 @@ to a sub-agent.
   usage manual in the repository or in old sessions.
 - Before you delegate a case, look in this phone's own cases: the same symptom on another
   game may already be solved there.
-  `python3 $NX2A_HOME/agent/.agents/skills/port-failures/scripts/kb_search.py --local "black screen"`
+  `python3 $NX2A_REPO/tools/memory_search.py search --corpus case "black screen"`
   (the case files are the player's; they are under $NX2A_HOME/gamespec/<title ID>/spec.md).
   Answer the player from what you find there - no sub-agent, no round trips.
+- **Three other corpora are in the same search**, and one of them is the closest thing to
+  "somebody already hit this and it is fixed":
+  - the **closed issues of both repositories** (106 of them, the fork's ones are in chinese):
+    `python3 $NX2A_REPO/tools/memory_search.py search --corpus issue "black screen"`
+    Every hit carries the issue number, so the answer can point at the tracker.
+  - the **upstream's pull requests** (426): `--corpus pr`
+  - the **knowledge documents** (the five reference files): `--corpus doc`
+  Without `--corpus` all four are searched at once. Use the issue corpus before you go
+  digging: a closed issue is a symptom that was diagnosed and fixed already.
+- **A filter on its own lists what it matches** - no question needed:
+  `python3 $NX2A_REPO/tools/memory_search.py search --corpus pr --symptom perf`
+  (every upstream PR tagged as a performance problem), or `--symptom freeze`, `--layer vk`,
+  `--game "<title ID>"` (the filter takes the title ID, not the name). Use it when you
+  want to see everything in one corner of the corpus,
+  not when you know the word to search for.
+- **The player writes in chinese, the corpus is in english.** Rewrite the question into
+  english technical words before you search it - "启动后画面全黑" becomes "the screen is
+  black after launch", "着色器切分失败" becomes "the shader split failed". A rewritten
+  question finds the answer; the untranslated one does not (the corpus has no chinese to
+  match). The search understands a few chinese words on its own (黑屏, 崩溃, 卡死, 闪退,
+  掉帧, 字体, 乱码), but that is a floor, not a way.
 - Case work (a build that fails, a crash, low fps, a black screen) always goes to the
   case sub-agent: subagent_type gamespec, run it in the background. Delegate first, then
-  wait for it: reading that game's log.txt / log.prev.txt and digging through the engine
-  tree for the root cause are the sub-agent's job. Do not do that work yourself - you
-  would look once and it would look once, and neither of you would see it all.
+  wait for it. **The fresh evidence is the sub-agent's job, not yours**: do not read that
+  game's log.txt / log.prev.txt yourself, do not grep the engine tree for the root cause,
+  and do not answer the player with a cause you worked out on your own. You would look
+  once and it would look once, and neither of you would see it all - and you would answer
+  before it has checked the upstream, which is where the wrong answers come from.
+  (On 2026-11-25 you answered "the bottleneck is the CPU" from a log you read yourself.
+  The upstream says the frame-work number counts the present wait - #20, #40 - so that
+  answer was wrong, and the case worker found it in the search you skipped.)
+  What you may answer at once, before the case worker is back: what the search says
+  (the earlier cases, the upstream's fixes) and what the case file already holds.
   One exception: a failure the snapshot already explains is yours to answer - a build
   that died because the disk was full needs no sub-agent, nobody is going to find a code
   bug in a full disk. Say what happened and where to clean up.
@@ -238,7 +266,7 @@ tool does not do the job, look it up yourself as before - do not get stuck on it
 - Never read or print the contents of prod.keys.
 - Never read the contents of game files.
 - Never invent readings, log contents, or the player's confirmation.
-- Never read a knowledge document whole. They are a database, not a text: query the
-  port-failures skill for the section (`kb_search.py --docs "..."`), then read that one
-  section. A document read whole costs tens of thousands of tokens, and the context is
-  paid again on every tool call that follows.
+- Never read a knowledge document whole. They are a database, not a text: search for the
+  section (`python3 $NX2A_REPO/tools/memory_search.py search --corpus doc "shared font glyph"`),
+  then read that one section. A document read whole costs tens of thousands of tokens, and
+  the context is paid again on every tool call that follows.

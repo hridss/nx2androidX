@@ -24,6 +24,20 @@ $ADB shell "am force-stop $PKG; echo DM_CTL=$F/ctl.txt >> $F/env.txt; : > $F/ctl
 - Screenshot: `$ADB shell screencap -p /data/local/tmp/s.png` then `$ADB pull` it (and delete it on the device). Single screenshots miss flicker: record with `devtools/rec_flicker.py`, or use `devtools/burst.py` for per-frame stats.
 - `adb logcat` for Android-side problems (input routing, activity lifecycle).
 
+## The phone's command line
+
+The app ships a glibc environment, so the porter, the build tools and the host all run **on the phone** —
+the checks that need no tapping are command lines:
+
+```bash
+python3 devtools/device_cli.py python -m porter doctor -k <keys>   # the environment check
+python3 devtools/device_cli.py python -m porter rebuild-runtime <pack>   # the runtime, without the game files
+```
+
+`devtools/device_cli.py` runs a command in the app's own environment (the rootfs's loader and Python, the
+tool's tree, the build tools). The headless host — a game without the app's window — and the traps of it
+are in the switch-android-port skill's `references/device-cli.md`.
+
 ## Drive the game (DM_CTL)
 
 Append lines to `$F/ctl.txt` (read from the end of the file, every 100 ms):

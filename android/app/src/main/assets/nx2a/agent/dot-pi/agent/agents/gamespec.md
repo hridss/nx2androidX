@@ -38,8 +38,14 @@ so it works when GitHub does not answer.
 - The symptom you were given is probably in there. Open the skill's SKILL.md, then the
   reference it names (build-failures.md, shader-split.md, runtime-symptoms.md,
   device-findings.md, porting-method.md).
-- Search it: python3 $NX2A_HOME/agent/.agents/skills/port-failures/scripts/kb_search.py "black screen"
-  (add --symptom crash, --layer vk, --game "<game>" or --fork no to narrow it down).
+- Search it: python3 $NX2A_REPO/tools/memory_search.py search "black screen"
+  (add --corpus pr, --symptom crash, --layer vk, --game "<title ID>" or --fork no to narrow it
+  down). The corpus is in english: rewrite a chinese question into english technical words
+  before you search it.
+- A filter on its own lists what it matches, no question needed:
+  `search --corpus pr --symptom perf` (every upstream PR tagged as a performance problem),
+  `--symptom freeze`, `--layer vk`. Use it when you want to see a whole corner of the
+  corpus instead of one answer.
 - It says where each upstream fix lives (a core rule, or one game's profile) and whether this
   fork already has it. A case whose fix is here means the problem is elsewhere, not that the
   fix is missing.
@@ -48,7 +54,7 @@ so it works when GitHub does not answer.
 ## Diagnosis phase (this is the default)
 0. Before you dig: search this phone's own cases. The same symptom on another game may
    already be solved there, and that answer saves the whole reverse engineering.
-   `python3 $NX2A_HOME/agent/.agents/skills/port-failures/scripts/kb_search.py --local "black screen"`
+   `python3 $NX2A_REPO/tools/memory_search.py search --corpus case "black screen"`
    (the player's case files are under $NX2A_HOME/gamespec/<title ID>/spec.md; the search
    prints the game, the status, the cause and the fix). If a case matches, start from it
    and check whether it applies here.

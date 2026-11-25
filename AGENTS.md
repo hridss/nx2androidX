@@ -58,6 +58,18 @@ README 的 "For players" 一节讲桌面工具，那仍是真实存在的玩家�
   `QQBOT_GROUP_OPENID` 可以写多个群（逗号分隔），**逐群发送、逐群容错**：一个群拒收不影响其它群。
   公告里带链接；平台若拒收链接（`40054010`），脚本自动去掉链接再发一次，公告不会因此丢掉
 
+- **网盘由 release 触发，或由维护者手动触发**：`.github/workflows/netdisk.yml` 在 **release 发布之后**跑
+  （`on: release: [published]`）；维护者也可以手动跑（Actions → Netdisk → Run workflow，**只有 `zFitness`
+  能跑**）。**推 tag 不会发布到网盘**——那条 workflow（`android-apk.yml`）只管构建。它把 APK 与档案包放进
+  夸克网盘的 `我的/nx2AndroidX`，并把里面不是这一版的文件移到 `我的/旧版本`（**只移不删**）。
+  release 是推完 tag 紧接着发布的，APK 由那次构建稍后附上，所以流水线会等文件到齐（`--wait`）再发。
+  流水线在 `devtools/netdisk/`：每个网盘是一个独立的 target（自己的凭证、自己的工具、自己的线程），
+  **一个网盘挂了不影响其它网盘**；默认发"最后切出来的那一版"，`--tag` 指定某一版。
+  新增网盘 = `devtools/netdisk/targets/` 里加一个模块 + 注册表加一行。工具是 `kuake` CLI
+  （`python3 -m devtools.netdisk install` 装到 `tools/kuake/`），凭证是仓库 secret `NX2A_KUAKE_COOKIE`
+  （pan.quark.cn 的整段 cookie），**不配就跳过这个网盘，其它网盘照发**。
+  手动的老办法见 [nx2android-quark-upload skill](.claude/skills/nx2android-quark-upload/SKILL.md)
+
 - 预发布用 GitHub **pre-release**（`--prerelease`）；app 的更新检查读 "Latest"，所以正式版玩家不会被推上 alpha。
   **GitHub 不允许预发布成为 "Latest"**（API：drafts and prereleases cannot be set as latest）：要让某个 alpha
   成为当前版本，就去掉它的预发布标记（`gh release edit <tag> --prerelease=false`）——tag 名字里的 `alpha` 不变，
