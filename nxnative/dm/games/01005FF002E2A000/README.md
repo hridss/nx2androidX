@@ -55,6 +55,12 @@ On the Mac (2026-11-15, M4 Pro, macOS 27.2.1), from a fresh save, with the host 
 
 ## Open
 
+- **Android: the movie library's decoder.** The app boots into the title screen and stops when the background movie starts:
+  `CRASH sig=11 addr=0 pc=0 lr=libdmplay.so+0xe64d8` (0.4.1-alpha02 on a OnePlus PKX110, Android 17). No `[movie]` line comes before it,
+  so the decoder the SDK built for itself is the one the host's `movie::Decoder` methods were reached through; those now report the SDK's
+  failure instead of calling through the null symbol table ([`hle_movie.c` `md_of`](../../host/hle_movie.c)). Which constructor this
+  build's movie library (SDK 1.3.1) calls is still to be found — a boot with `DM_IMPORTS=1` lists the take-overs the host hits
+  ([android.tsv](android.tsv)). Until a movie plays, the port is registered as `boots`.
 - The frame rate on the M1 ([Rendering](#rendering)).
 - iPhone: one report so far ([iPhone](#iphone)); its iOS version, its console mode and the later levels are not known.
 - The grey screen after skipping the intro movie ([Input](#input)).

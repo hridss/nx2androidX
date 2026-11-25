@@ -1,0 +1,10 @@
+# Rayman Legends: Definitive Edition: the Android keys (dm/android/tools/android_profile.py); the profile itself is README.md
+# Ubisoft's UbiArt Framework on the console's NVN, SDK 1.3.1 (the oldest SDK in the games table).
+# On the phone (0.4.1-alpha02, OnePlus PKX110, Android 17) it boots into its title screen and stops when the SDK's movie library
+# starts the background movie: SIGSEGV at pc 0, addr 0, in the host's movie code (the host's Decoder methods on an object the SDK
+# built). Boots, not playable, until a movie plays; see README.md "Open".
+status	boots
+graphics	nvn
+readme_note	update 1.2
+# A boot that shows which take-overs the host hits (a start-time switch: put it in the pack's env.txt and restart the app):
+# env	DM_IMPORTS=1

@@ -63,7 +63,7 @@ HLE_FORCE("_ZN5movie9Extractor13SetDataSourceEPKc", "movie demuxer: the host doe
 #define MD_FMT_PCM16 1
 #define MD_PCM_CAP (8192 * 8 * 2)   // bytes per audio output: a Vorbis packet gives at most 4096 samples per channel (blocksize 8192), 8 channels at most
 
-typedef struct {
+typedef struct mdec {
     pthread_mutex_t mu;                          // guards the queues and slots below
     int type, fmt, mode, nout;                   // nout: output slots, MD_NOUT_VIDEO for video, MD_NOUT for audio (see the constructor)
     void **evc;                                  // the client's DecoderEvents: {input, output, format, error} EventType*, read at signal time as the SDK does (md_event)
@@ -88,6 +88,7 @@ typedef struct {
     uint64_t in_ns;                              // when the last packet came (md_tail)
     uint64_t dec_n, dec_ns, dec_max;            // decode timing (on the host thread, per packet)
     unsigned long ncall[24];
+    struct mdec *reg_next;                       // the decoders the host itself made (md_of trusts only those)
 } mdec_t;
 
 static struct {
@@ -118,7 +119,26 @@ static void md_syms(void) {
     G.size = msym("_ZNK5movie6Buffer4SizeEv");
     G.signal = msym("_ZN2nn2os11SignalEventEPNS0_9EventTypeE");
 }
-static mdec_t *md_of(void **self) { return self ? (mdec_t *)self[1] : NULL; }
+// The decoders the host made itself (the constructor adds one, md_free removes it): md_of trusts only these. A Decoder the SDK built for
+// itself (its constructor is a form the host does not take over) keeps its own implementation pointer in [self+8]; read as one of the
+// host's, that object led Configure to the symbol table below before any host constructor had filled it (a call through null: Rayman
+// Legends on Android, SIGSEGV at pc 0 and addr 0 while its movie library started). Its methods now report the SDK's failure instead.
+static mdec_t *g_decs; static pthread_mutex_t g_decs_mu = PTHREAD_MUTEX_INITIALIZER;
+static void dec_add(mdec_t *d) { pthread_mutex_lock(&g_decs_mu); d->reg_next = g_decs; g_decs = d; pthread_mutex_unlock(&g_decs_mu); }
+static void dec_del(mdec_t *d) {
+    pthread_mutex_lock(&g_decs_mu);
+    for (mdec_t **p = &g_decs; *p; p = &(*p)->reg_next) if (*p == d) { *p = d->reg_next; break; }
+    pthread_mutex_unlock(&g_decs_mu);
+}
+static mdec_t *md_of(void **self) {
+    void *p = self ? self[1] : NULL; if (!p) return NULL;
+    mdec_t *own = NULL;
+    pthread_mutex_lock(&g_decs_mu);
+    for (mdec_t *d = g_decs; d; d = d->reg_next) if (d == p) { own = d; break; }
+    pthread_mutex_unlock(&g_decs_mu);
+    if (!own) { static int red; if (red++ < 8) LOG("[RED] movie: a Decoder method on an object the host did not make (a constructor the host does not take over; DM_IMPORTS=1 lists the ones it hits): the host does nothing for it"); }
+    return own;
+}
 // An EventType pointer that can be signalled: 8-byte aligned and readable (vm_read_overwrite fails instead of faulting)
 static int ev_ok(const void *p) {
     uint64_t w; vm_size_t got = 0; uintptr_t a = (uintptr_t)p;
@@ -551,6 +571,7 @@ HLE_FORCE("_ZN5movie7DecoderC1ENS_11DecoderTypeENS_19DecoderOutputFormatENS_11De
     if (pthread_create(&d->wk, &a, md_worker, d)) die("movie: failed to create the decoder thread");
     pthread_attr_destroy(&a);
     self[1] = d;
+    dec_add(d);
     LOG("[movie] decoder %p: type %d output %d mode %d priority %d", (void *)self, type, fmt, mode, prio);
 }
 // SDK 4's constructor has no priority argument (Dark Souls Remastered, NintendoSDK_movie 4.5.0). Without this take-over the SDK built its own decoder and the host's Configure read it as a host one (a call through a null pointer)
@@ -558,6 +579,7 @@ HLE_FORCE("_ZN5movie7DecoderC1ENS_11DecoderTypeENS_19DecoderOutputFormatENS_11De
           void **self, int type, int fmt, int mode) { h_movie_Decoder(self, type, fmt, mode, 0); }
 static void md_free(void **self) {
     mdec_t *d = md_of(self); if (!d) return;
+    dec_del(d);   // a method that runs meanwhile reports failure instead of using a decoder being freed
     md_defer_drop(d);
     self[1] = NULL;
     LOG("[movie] decoder %p destroyed: %lu packets in, %lu frames out; decoded %llu packets, average %.2f ms per packet, longest %.2f ms", (void *)self, d->ncall[7], d->ncall[8],

@@ -13,7 +13,7 @@ with — the game is not missing on Android.
 
 These have an official Android release too, and are ported here anyway: Unpacking.
 
-**80 / 194 ported**
+**81 / 194 ported**
 
 This file is generated: `python3 docs/gen_tables.py` reads the profiles and writes it. The facts
 in a row are the profile's own — the name and the version from `game.tsv`, the status, the note
@@ -146,7 +146,7 @@ the author of the commit that introduced them.
 - [ ] Portal 2 · `0100ABD01785C000` · 1.0.3
 - [ ] Princess Peach: Showtime! · `01007A3009184000` · 1.0.0 · 60 fps
 - [ ] Raging Loop · `010020400E1C2000` · 1.0.0
-- [ ] Rayman Legends: Definitive Edition · `01005FF002E2A000` · 1.2
+- [x] Rayman Legends: Definitive Edition · `01005FF002E2A000` · boots · update 1.2
 - [ ] Red Dead Redemption · `01007820196A6000` · 1.0.7 · 60 fps
 - [ ] Return of the Obra Dinn · `010032E00E6E2000` · 1.0.1
 - [x] Rhythm Heaven Groove · `0100D9F01D474000` · playable · base game 1.0.0 · 60 fps · tested on the Xiaomi 15 (Adreno 830) · ported by @Flying-dragon-boxing
