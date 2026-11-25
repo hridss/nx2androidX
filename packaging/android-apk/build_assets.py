@@ -478,7 +478,7 @@ def add_tree(out: tarfile.TarFile, source: Path, prefix: str) -> int:
             # compiler and the apphosts unstartable on the phone: an ELF file is a program, give it one.
             # A tool the guest runs directly gets the bit even when it is not an ELF.
             if not member.mode & 0o111 and not path.suffix and (
-                    'bin' in rel.parts or 'tools' in rel.parts or 'dmsh_xlate_bin' in rel.parts):
+                    'bin' in rel.split('/') or 'tools' in rel.split('/') or 'dmsh_xlate_bin' in rel.split('/')):
                 member.mode = 0o755
             with path.open('rb') as f:
                 if f.read(4) == b'\x7fELF': member.mode = 0o755
