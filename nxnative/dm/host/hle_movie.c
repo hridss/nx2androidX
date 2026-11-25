@@ -66,6 +66,7 @@ HLE_FORCE("_ZN5movie9Extractor13SetDataSourceEPKc", "movie demuxer: the host doe
 typedef struct mdec {
     pthread_mutex_t mu;                          // guards the queues and slots below
     int type, fmt, mode, nout;                   // nout: output slots, MD_NOUT_VIDEO for video, MD_NOUT for audio (see the constructor)
+    int adopted;                                 // the host took this Decoder over on first use: its kind (video/audio) is settled at Configure
     void **evc;                                  // the client's DecoderEvents: {input, output, format, error} EventType*, read at signal time as the SDK does (md_event)
     void *ev[4];                                 // the entries that were events at registration: used when the client's entry no longer is one (by Metroid Dread's second movie its struct had been overwritten and Start crashed signalling)
     int w, h, fmt_sent, started, in_eos;          // in_eos: an end-of-stream packet was sent; no input until Flush / Stop (h_movie_AcqIn)
@@ -105,7 +106,13 @@ static struct {
     void *(*nvn_sync)(const void *buf);   // used only by the native texture mode; Engage's subsdk0 has it too, but it is not required
 } G;
 
-static void *msym(const char *n) { void *p = guest_sym(n); if (!p) die("movie: missing SDK symbol %s", n); return p; }
+// SDK 1.3.1 (Rayman Legends) exports the non-const forms only: the const member is looked up as its plain twin when it is absent
+static void *msym(const char *n) {
+    void *p = guest_sym(n);
+    if (!p && !strncmp(n, "_ZNK", 4)) { char alt[256]; snprintf(alt, sizeof alt, "_ZN%s", n + 4); p = guest_sym(alt); }
+    if (!p) die("movie: missing SDK symbol %s", n);
+    return p;
+}
 static void md_syms(void) {
     if (G.signal) return;
     G.set_data = msym("_ZN5movie6Buffer18SetDataAndCapacityEPvm");
@@ -122,7 +129,8 @@ static void md_syms(void) {
 // The decoders the host made itself (the constructor adds one, md_free removes it): md_of trusts only these. A Decoder the SDK built for
 // itself (its constructor is a form the host does not take over) keeps its own implementation pointer in [self+8]; read as one of the
 // host's, that object led Configure to the symbol table below before any host constructor had filled it (a call through null: Rayman
-// Legends on Android, SIGSEGV at pc 0 and addr 0 while its movie library started). Its methods now report the SDK's failure instead.
+// Legends on Android, SIGSEGV at pc 0 and addr 0 while its movie library started). md_of now takes such an object over on first use;
+// what it decodes (video or sound) is settled at Configure from its MediaData.
 static mdec_t *g_decs; static pthread_mutex_t g_decs_mu = PTHREAD_MUTEX_INITIALIZER;
 static void dec_add(mdec_t *d) { pthread_mutex_lock(&g_decs_mu); d->reg_next = g_decs; g_decs = d; pthread_mutex_unlock(&g_decs_mu); }
 static void dec_del(mdec_t *d) {
@@ -130,13 +138,30 @@ static void dec_del(mdec_t *d) {
     for (mdec_t **p = &g_decs; *p; p = &(*p)->reg_next) if (*p == d) { *p = d->reg_next; break; }
     pthread_mutex_unlock(&g_decs_mu);
 }
-static mdec_t *md_of(void **self) {
+static void h_movie_Decoder(void **self, int type, int fmt, int mode, int prio);
+
+/* The host's decoder behind this object, or NULL: the lookup alone (the destructor must not create one on its way out) */
+static mdec_t *md_find(void **self) {
     void *p = self ? self[1] : NULL; if (!p) return NULL;
     mdec_t *own = NULL;
     pthread_mutex_lock(&g_decs_mu);
     for (mdec_t *d = g_decs; d; d = d->reg_next) if (d == p) { own = d; break; }
     pthread_mutex_unlock(&g_decs_mu);
-    if (!own) { static int red; if (red++ < 8) LOG("[RED] movie: a Decoder method on an object the host did not make (a constructor the host does not take over; DM_IMPORTS=1 lists the ones it hits): the host does nothing for it"); }
+    return own;
+}
+
+__attribute__((noinline)) static mdec_t *md_of(void **self) {
+    mdec_t *own = md_find(self);
+    if (!own && self && self[1]) {
+        // A Decoder the SDK built for itself (its constructor is a form the host does not take over): the host takes it
+        // over here on first use. Every kind is created as the video decoder this SDK's player makes (AVC into NV12); what
+        // it really is comes out of the Configure call's MediaData (adopted, above). Without this every method of it failed
+        // and the player dropped the decoder, then used it (a crash after the first movie frame).
+        h_movie_Decoder(self, MD_TYPE_AVC, MD_FMT_NV12, 0, 0);
+        own = md_find(self);
+        if (own) { own->adopted = 1; static int said; if (said++ < 8) LOG("[movie] a decoder the SDK made itself: the host took it over (self %p); its kind is settled at Configure", (void *)self); }
+    }
+    if (!own && self && self[1]) { static int red; if (red++ < 8) LOG("[RED] movie: a Decoder method on an object the host did not make (a constructor the host does not take over; DM_IMPORTS=1 lists the ones it hits): the host does nothing for it (self %p impl %p)", (void *)self, self[1]); }
     return own;
 }
 // An EventType pointer that can be signalled: 8-byte aligned and readable (vm_read_overwrite fails instead of faulting)
@@ -578,7 +603,7 @@ HLE_FORCE("_ZN5movie7DecoderC1ENS_11DecoderTypeENS_19DecoderOutputFormatENS_11De
 HLE_FORCE("_ZN5movie7DecoderC1ENS_11DecoderTypeENS_19DecoderOutputFormatENS_11DecoderModeE", "movie decoder (SDK 4, no priority): host implementation", void, h_movie_Decoder4,
           void **self, int type, int fmt, int mode) { h_movie_Decoder(self, type, fmt, mode, 0); }
 static void md_free(void **self) {
-    mdec_t *d = md_of(self); if (!d) return;
+    mdec_t *d = md_find(self); if (!d) return;   // only the host's own: an object the host never took over has nothing to free here
     dec_del(d);   // a method that runs meanwhile reports failure instead of using a decoder being freed
     md_defer_drop(d);
     self[1] = NULL;
@@ -604,6 +629,17 @@ HLE_FORCE("_ZN5movie7DecoderD0Ev", "movie decoder deleting destructor: frees the
 
 HLE_FORCE("_ZN5movie7Decoder9ConfigureEPNS_9MediaDataE", "movie decoder configure", int, h_movie_Configure, void **self, void *md) {
     mdec_t *d = md_of(self); if (!d) return 0x1000;
+    if (d->adopted && md) {
+        // A decoder the host took over on first use: what it decodes is known from the MediaData (this SDK's player
+        // configures the video with width/height and the sound with channel-count). Both kinds are created as video.
+        int ch = 0, w = 0;
+        int audio = G.find_i32(md, "channel-count", &ch) && ch > 0;
+        int video = G.find_i32(md, "width", &w) && w > 0;
+        if (audio && !video) { d->type = MD_TYPE_AAC; d->fmt = MD_FMT_PCM16; d->nout = MD_NOUT; }
+        else if (video) { d->type = MD_TYPE_AVC; d->fmt = MD_FMT_NV12; d->nout = MD_NOUT_VIDEO; }
+        d->adopted = 0;
+        LOG("[movie] the decoder the host took over is %s (channel-count %d, width %d)", MD_AUDIO(d) ? "audio (AAC)" : "video (AVC)", ch, w);
+    }
     if (MD_AUDIO(d)) {   // codec-specific data as Android's MediaCodec takes it: Vorbis csd-0 = identification header, csd-1 = setup header; AAC csd-0 = AudioSpecificConfig
         for (int k = 0; k < 2 && md; k++) { void *b = NULL; char key[8]; snprintf(key, sizeof key, "csd-%d", k);
             if (G.find_buf(md, key, &b) && b && G.data(b) && G.size(b)) { size_t n = G.size(b); free(d->vhdr[k]); d->vhdr[k] = malloc(n); memcpy(d->vhdr[k], G.data(b), n); d->vhdr_n[k] = (int)n; } }
