@@ -118,8 +118,10 @@ static VkPipeline graphics_pipeline(const pkey *k, VkPipelineLayout layout) {
 // ---- pipeline prewarm: every pipeline the game needed is recorded (DM_ROOT/vk_pipelines.bin) and made again at the next boot on background
 // threads, before the game reaches it, so a scene seen once never stalls a frame on a pipeline compile again (the driver's compile, not the
 // pipeline cache's lookup, is the cost: tens of milliseconds per pipeline on Adreno). DM_VK_NOPREWARM=1 turns it off.
-#define PIPE_MAGIC 0x33455050u   // "PPE3"; geometry effects/rasterization now have separate pipeline keys
+#define PIPE_MAGIC 0x34455050u   // "PPE4"; records are also keyed on the game build and shader bundle (PPE3 kept stale records across a re-port)
 // debug_mode shifted the key's fields without changing its padded size; PPE1 prewarm records otherwise decoded as 76 colour targets and crashed Adreno at startup.
+// The header carries vk_cache_identity() after the magic and key size: a new build or bundle invalidates records without a magic bump.
+enum { PIPE_HDR_WORDS = 2 + 32 / sizeof(uint32_t) };
 static FILE *g_prec;
 // The records are written by a thread of their own: a flush to the app's files folder (FUSE) took tens of milliseconds, and made under g_pipe_mu it held up the replay's
 // pipeline lookups (a 66 ms frame with no pipeline built in it)
@@ -167,9 +169,10 @@ static void *prewarm_thread(void *arg) {
 static void prewarm_start(void) {
     const char *root = getenv("DM_ROOT"); if (!root) return;
     char path[1024]; snprintf(path, sizeof path, "%s/vk_pipelines.bin", root);
-    uint32_t hdr[2] = {PIPE_MAGIC, (uint32_t)sizeof(pkey)}, fh[2] = {0};
+    uint32_t hdr[PIPE_HDR_WORDS] = {PIPE_MAGIC, (uint32_t)sizeof(pkey)}, fh[PIPE_HDR_WORDS] = {0};
+    vk_cache_identity((uint8_t *)&hdr[2]);
     FILE *f = fopen(path, "rb");
-    if (f && fread(fh, sizeof fh, 1, f) == 1 && fh[0] == hdr[0] && fh[1] == hdr[1]) {
+    if (f && fread(fh, 1, sizeof fh, f) == sizeof fh && !memcmp(fh, hdr, sizeof hdr)) {
         fseek(f, 0, SEEK_END); long n = (ftell(f) - (long)sizeof fh) / (long)sizeof(pkey); fseek(f, sizeof fh, SEEK_SET);
         if (n > 0) { g_pw = malloc((size_t)n * sizeof(pkey)); g_pw_n = fread(g_pw, sizeof(pkey), (size_t)n, f); }
     }

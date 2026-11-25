@@ -192,6 +192,7 @@ vkshader_t *vk_shader_gs_topo(vkshader_t *gs, VkPrimitiveTopology topo);   // th
 VkShaderModule vk_shader_module(vkshader_t *s, uint64_t um, uint64_t im, uint32_t xo, int fd, uint32_t vi);   // the module, or its variant (integer views; extra outputs; fragment depth written)
 int vk_shader_gs_split_ready(vkshader_t *s); // both modules exist before either pass may be recorded
 void vk_shaders_open(const char *path);
+void vk_cache_identity(uint8_t out[32]);   // main build ID + shader bundle stamp; keys both writable Vulkan caches
 VkBuffer vk_support_buffer(void);
 VkBuffer vk_zero_buffer(void);
 VkBuffer vk_default_attribute_buffer(void);

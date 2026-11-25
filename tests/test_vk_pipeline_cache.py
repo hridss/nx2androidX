@@ -56,6 +56,8 @@ static int sync_test(int fd) { syncs++; return fail_sync ? -1 : fsync(fd); }
 #define VKLOG(...) ((void)0)
 #define LOG(format, ...) do { assert(strstr(format,"[RED] [vk] could not create an empty pipeline cache")); reds++; } while (0)
 #define VKCHK(x) assert((x)==VK_SUCCESS)
+static unsigned char cache_id[32];
+void vk_cache_identity(uint8_t out[32]) { memcpy(out,cache_id,sizeof cache_id); }
 #include "gfx_vk_pipeline_cache.inc"
 static void disk(const void *data,size_t n) { FILE *f=fopen(g_pcache_path,"wb"); assert(f); assert(fwrite(data,1,n,f)==n); assert(!fclose(f)); }
 static void *save_thread(void *unused) { (void)unused; vk_pipeline_cache_save(); return NULL; }
@@ -131,6 +133,12 @@ int main(int argc,char **argv) {
         reject=1; reds=0; creates=0; pcache_load(); assert(!V.pcache && reds==1 && creates==2);
         return 0;
     }
+    if (mode==6) {
+        // A new game build or shader bundle changes the identity: the old cache is ignored, and restoring it loads again.
+        memset(cache_id,0x11,sizeof cache_id); pcache_load(); assert(loaded==0);
+        memset(cache_id,0,sizeof cache_id); pcache_load(); assert(loaded==sizeof payload);
+        return 0;
+    }
     // Any envelope identity or payload change, truncation or trailing bytes stays out of the driver.
     for(size_t i=0;i<sizeof original;i++) {
         unsigned char bad[sizeof original]; memcpy(bad,original,sizeof bad); bad[i]^=1;
@@ -173,6 +181,12 @@ int main(int argc,char **argv) {
     def test_next_save_reuses_interrupted_temporary_file(self): self.check_case(3)
     def test_empty_cache_creation_failure_is_logged(self): self.check_case(4)
     def test_burst_of_new_pipelines_saves(self): self.check_case(5)
+    def test_cache_keyed_on_game_build_and_shader_bundle(self): self.check_case(6)
+
+    def test_prewarm_records_keyed_on_game_build_and_shader_bundle(self):
+        src = (DM / 'android/gfx_vk_exec_pipelines.inc').read_text(encoding='utf-8')
+        self.assertIn('#define PIPE_MAGIC 0x34455050u', src)
+        self.assertIn('vk_cache_identity((uint8_t *)&hdr[2])', src)
 
 
 if __name__ == '__main__': unittest.main()

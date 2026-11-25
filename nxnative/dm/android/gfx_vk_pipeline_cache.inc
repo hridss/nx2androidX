@@ -13,11 +13,11 @@ typedef struct {
     char magic[8];
     uint32_t schema,abi,vendor,device,driver,api;
     uint8_t uuid[VK_UUID_SIZE],device_uuid[VK_UUID_SIZE],driver_uuid[VK_UUID_SIZE];
-    char chain[16];
+    char chain[32];                  // vk_cache_identity(): game build + shader bundle, not a constant
     uint64_t bytes;
     uint8_t digest[32];
 } pcache_header;
-_Static_assert(sizeof(pcache_header)==136,"pipeline cache envelope layout changed");
+_Static_assert(sizeof(pcache_header)==152,"pipeline cache envelope layout changed");
 static VkPhysicalDeviceIDProperties g_pcache_ids={VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES};
 static char g_pcache_path[1024];
 static _Atomic uint64_t g_pcache_generation;
@@ -61,7 +61,7 @@ static pcache_header pcache_identity(void) {
     memcpy(h.uuid,V.props.pipelineCacheUUID,sizeof h.uuid);
     memcpy(h.device_uuid,g_pcache_ids.deviceUUID,sizeof h.device_uuid);
     memcpy(h.driver_uuid,g_pcache_ids.driverUUID,sizeof h.driver_uuid);
-    snprintf(h.chain,sizeof h.chain,"%s","nx2android");
+    vk_cache_identity((uint8_t *)h.chain);
     return h;
 }
 static uint32_t pcache_u32(const uint8_t *p) {
@@ -128,7 +128,7 @@ static size_t pcache_load(void) {
         memcpy(g_pcache_digest,digest,sizeof digest);g_pcache_bytes=bytes;g_pcache_digest_valid=1;g_pcache_migrate=legacy;
         atomic_store_explicit(&g_pcache_size,bytes,memory_order_relaxed);
     }
-    if (bytes) VKLOG("vk: loaded %zu pipeline-cache bytes for this device, driver and shader chain",bytes);
+    if (bytes) VKLOG("vk: loaded %zu pipeline-cache bytes for this device, driver, game build and shader bundle",bytes);
     free(data);return bytes;
 }
 void vk_pipeline_cache_changed(void) { pcache_burst(atomic_fetch_add_explicit(&g_pcache_generation,1,memory_order_relaxed)+1); }

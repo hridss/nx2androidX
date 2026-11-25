@@ -14,6 +14,24 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+// The two writable Vulkan products in the pack folder (the driver's pipeline cache and our prewarm records) used to be keyed only
+// on the device and a constant. A re-port replaces the game's build and shaders but keeps those files, so stale records were handed
+// to a different translator's driver state and crashed at startup. Hash-free identity: the loaded main build ID plus the bundle's
+// size and mtime; both are available before either product is read, and a full digest of a ~1 GB bundle every boot is too costly.
+void vk_cache_identity(uint8_t out[32]) {
+    memset(out, 0, 32);
+    const char *b = dm_main_build();
+    if (b) strncpy((char *)out, b, 16);
+    const char *p = getenv("DM_VK_SHADERS"); char buf[1024];
+    if (!p) { const char *r = getenv("DM_ROOT"); snprintf(buf, sizeof buf, "%s/shaders.dmsv", r ? r : "."); p = buf; }
+    struct stat st;
+    if (!stat(p, &st)) {
+        uint64_t size = (uint64_t)st.st_size;
+        uint32_t sec = (uint32_t)st.st_mtim.tv_sec, nsec = (uint32_t)st.st_mtim.tv_nsec;
+        memcpy(out + 16, &size, 8); memcpy(out + 24, &sec, 4); memcpy(out + 28, &nsec, 4);
+    }
+}
+
 // spv_size: 0 = the SPIR-V is stored as it is (spv_len bytes; every version 1 entry), else a zstd frame of spv_len bytes that decompresses to spv_size (version 2)
 typedef struct __attribute__((packed)) { uint64_t key; uint32_t stage, spv_off, spv_len, refl_off, refl_len, spv_size; } bent;
 static const uint8_t *g_bundle; static uint32_t g_nent; static const bent *g_ent;
