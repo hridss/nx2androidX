@@ -202,12 +202,13 @@ static int prepare_draw(int prim, int indexed) {
     if (g_front_ovr < -1) { const char *e = getenv("DM_VK_FRONT"); g_front_ovr = e ? (atoi(e) == 2 ? 2 : atoi(e) ? 1 : 0) : -1; }   // =2: the rule's answer inverted (a game that uses both windings)
     k.raster_discard = S.rast_discard; k.alt = (uint32_t)g_spv_alt; k.gs_split = (uint32_t)g_gs_split_mode; k.cull = g_no_cull ? 0 : S.poly.cull;
     // counter-clockwise front faces in Vulkan's framebuffer: Vulkan's clip space has y down, Metal's up (nvn_mtl.m: CCW when (front == CCW) != lower left), and the
-    // lower-left origin mode flips the viewport again, so CCW when (front == CCW) == lower left. Taken as given, upper-left games (NEO) culled their ground and walls
-    k.front = g_front_ovr == 0 || g_front_ovr == 1 ? (uint32_t)g_front_ovr : (((S.poly.front == NVN_FRONT_FACE_CCW) == (g_lower_left != 0)) != (g_flipy != 0)) ^ (g_front_ovr == 2);
+    // lower-left origin mode flips the viewport again, so CCW when (front == CCW) == lower left. The flip is captured when the NVN queue was initialized: a game
+    // may change the device origin later (Xenoblade 2 does) without rewriting its queue state. Taken as given, upper-left games (NEO) culled their ground and walls
+    k.front = g_front_ovr == 0 || g_front_ovr == 1 ? (uint32_t)g_front_ovr : (((S.poly.front == NVN_FRONT_FACE_CCW) == (g_queue_origin_ll != 0)) != (g_flipy != 0)) ^ (g_front_ovr == 2);
     static int plog = -1; if (plog < 0) plog = getenv("DM_VK_PIPE_LOG") ? atoi(getenv("DM_VK_PIPE_LOG")) > 0 : 0;   // the polygon-state lines come with DM_VK_PIPE_LOG: unset costs one branch per draw
-    if (plog) { static int n; if (n < 16) { static int seen[16]; int b = (S.poly.cull & 3) << 2 | (S.poly.front & 1) << 1 | (g_lower_left != 0); if (!seen[b]) { seen[b] = 1; n++;
-        VKLOG("polygon state: cull %d, front %d, lower-left origin %d, flipy %d → Vulkan cull %u front %u (DM_VK_FRONT=%d, DM_VK_NOCULL=%d)",
-              (int)S.poly.cull, (int)S.poly.front, g_lower_left != 0, g_flipy != 0, k.cull, k.front, g_front_ovr, g_no_cull); } } }
+    if (plog) { static int n; if (n < 16) { static int seen[16]; int b = (S.poly.cull & 3) << 2 | (S.poly.front & 1) << 1 | (g_queue_origin_ll != 0); if (!seen[b]) { seen[b] = 1; n++;
+        VKLOG("polygon state: cull %d, front %d, queue lower-left origin %d, flipy %d → Vulkan cull %u front %u (DM_VK_FRONT=%d, DM_VK_NOCULL=%d)",
+              (int)S.poly.cull, (int)S.poly.front, g_queue_origin_ll != 0, g_flipy != 0, k.cull, k.front, g_front_ovr, g_no_cull); } } }
     k.mode = S.poly.mode; k.depth_clamp = S.depth_clamp;
     k.bias_en = (S.poly.offset_en & (S.poly.mode == 0 ? 1 : S.poly.mode == 1 ? 2 : 4)) != 0;
     if (var == 2) k.bias_en = 0;

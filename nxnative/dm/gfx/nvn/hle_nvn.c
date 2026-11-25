@@ -790,7 +790,12 @@ NVN(nvnQueueBuilderGetQueueMemorySize, size_t, const NVNqueueBuilder *b) {
 }
 NVN(nvnQueueBuilderSetQueueMemory, void, NVNqueueBuilder *b, void *m, size_t n) { QB(b)->mem = m; QB(b)->mem_sz = n; }
 NVN(nvnQueueInitialize, NVNboolean, NVNqueue *q, const NVNqueueBuilder *b) {
-    *(queue_t *)q = (queue_t){MAGIC('Q', 'U', 'E', 'U'), ((const queue_builder_t *)b)->dev, 0};
+    NVNdevice *d = ((const queue_builder_t *)b)->dev;
+    // SET_WINDOW_ORIGIN is queued GPU state at initialization. A game can change the device's origin afterwards
+    // (Xenoblade 2 creates its queue before switching to upper-left) without rewriting the queue's raster flip;
+    // capture it here so the winding of its draws stays as the SDK set it, without a game rule.
+    *(queue_t *)q = (queue_t){MAGIC('Q', 'U', 'E', 'U'), d, 0,
+                              !d || ((const dev_t_ *)d)->origin == NVN_WINDOW_ORIGIN_MODE_LOWER_LEFT};
     OLOG("QueueInitialize %p", (void *)q); return 1;
 }
 NVN(nvnQueueFinalize, void, NVNqueue *q) { ((queue_t *)q)->magic = 0; }
@@ -1457,6 +1462,9 @@ static void submit_now(NVNqueue *q, int n, const NVNcommandHandle *h) {
     SEQ("submit %d handles", n);
     gfx_enter();
     pthread_mutex_lock(&g_sub_mu);
+    // The raster flip is per queue, not per device: the queue's recorded origin selects the winding for this submission
+    // (the submit lock keeps it stable while the replay thread runs).
+    mtl_set_queue_origin_lower_left(((const queue_t *)q)->origin_ll);
     uint64_t t0 = now_ns(), c0 = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID), i0, y0, s0 = thr_sys_ns(); thr_counts(&i0, &y0);
     if (!nvn_async()) ((queue_t *)q)->submits++;
     mtl_sub_begin(); ft_del_drain();

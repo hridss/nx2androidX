@@ -12,7 +12,7 @@ NAMES = ('SamplerBuilderSetDefaults', 'SamplerBuilderSetDevice', 'SamplerBuilder
 def production():
     source = (NVN / 'hle_nvn.c').read_text(encoding='utf-8')
     obj = (NVN / 'nvn_obj.h').read_text(encoding='utf-8')
-    types = '\n'.join(line for line in obj.splitlines() if any('} ' + name + ';' in line for name in ('samp_par', 'samp_builder_t', 'samp_t', 'queue_t', 'queue_builder_t')))
+    types = '\n'.join(line for line in obj.splitlines() if any('} ' + name + ';' in line for name in ('dev_t_', 'samp_par', 'samp_builder_t', 'samp_t', 'queue_t', 'queue_builder_t')))
     functions = []
     for name in NAMES:
         start = source.index('NVN(nvn' + name + ','); end = source.index('{', start); depth = 1; end += 1
@@ -46,7 +46,11 @@ int main(void) {
  float f[4]={0.25f,0.5f,0.75f,1}; entry_nvnSamplerBuilderSetBorderColor(&b,f);
  entry_nvnSamplerInitialize(&s,&b); entry_nvnSamplerGetBorderColor(&s,got); assert(!memcmp(f,got,sizeof f));
  NVNqueue q={0}; NVNqueueBuilder qb={0}; ((queue_builder_t *)&qb)->dev=&d;
- assert(entry_nvnQueueInitialize(&q,&qb)); ((queue_t *)&q)->submits=47;
+ ((dev_t_ *)&d)->origin = 0;  // NVN_WINDOW_ORIGIN_MODE_LOWER_LEFT: the queue captures the raster flip
+ assert(entry_nvnQueueInitialize(&q,&qb)); assert(((queue_t *)&q)->origin_ll==1);
+ ((dev_t_ *)&d)->origin = 1;  // NVN_WINDOW_ORIGIN_MODE_UPPER_LEFT, changed after the queue was made
+ assert(entry_nvnQueueInitialize(&q,&qb)); assert(((queue_t *)&q)->origin_ll==0);
+ ((queue_t *)&q)->submits=47;
  assert(entry_nvnQueueGetTotalCommandMemoryUsed(&q)==0);
  assert(entry_nvnQueueGetTotalControlMemoryUsed(&q)==0);
  assert(entry_nvnQueueGetTotalComputeMemoryUsed(&q)==0);
