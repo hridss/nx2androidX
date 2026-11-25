@@ -68,7 +68,7 @@ class ShaderSourceOrder(unittest.TestCase):
         split_os = mock.Mock(wraps=os)
         split_os.path, split_os.sep = path, sep
         split_os.environ = os.environ   # the real environment: the split puts its payload folder there (the pool's children read it)
-        split_os.makedirs = os.makedirs  # the real one: the payload folder beside the package is made for real
+        split_os.makedirs = lambda d, **kw: os.makedirs(d.replace('\\', '/'), **kw)   # the real one, its path as the real filesystem spells it (open_fixture's rule): a Windows path driven on this host would otherwise make a folder named "\tmp\...\payloads"
         split_os.walk = lambda directory: ((d.replace('\\', '/'), dirs, fs) for d, dirs, fs in os.walk(directory))
         with mock.patch.object(self.split.cf, 'ProcessPoolExecutor', SerialPool), mock.patch.object(self.split, 'os', split_os):
             with mock.patch.object(self.split, 'open', open_fixture, create=True), mock.patch.object(sys, 'argv', argv):

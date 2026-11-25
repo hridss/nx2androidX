@@ -34,7 +34,7 @@ void guest_clock_read_wait(void);     // A guest read of the system counter: wai
 typedef struct { const char *name; void *fn; const char *why; const char *to; } hle_force_ent;   // to: a guest alias (HLE_FORCE_ALIAS below), fn NULL
 #define HLE_FORCE(mangled, why, ret, cname, ...)                                                   \
     static ret cname(__VA_ARGS__);                                                                \
-    __attribute__((used, DM_SECTION("swforce"))) static const hle_force_ent hle_force_##cname = {mangled, (void *)cname, why}; \
+    __attribute__((used, DM_SECTION("swforce"))) static const hle_force_ent hle_force_##cname = {mangled, (void *)cname, why, NULL}; \
     static ret cname(__VA_ARGS__)
 // A guest alias: every reference to mangled binds to the loaded modules' own definition of target instead, as if the module had imported target. No host code runs and no
 // signature is restated, so the alias holds for every SDK that defines both. For a hardware class whose constructor the host takes over to build the SDK's software class in the
@@ -51,7 +51,7 @@ typedef struct { const char *name; void *fn; const char *why; const char *to; } 
     extern const char cname##_bs[];                                                               \
     __asm__(".text\n.p2align 2\n.globl " DM_ASM_SYM(#cname "_bs") "\n" DM_ASM_PRIVATE " " DM_ASM_SYM(#cname "_bs") "\n" DM_ASM_SYM(#cname "_bs") ":\n" \
             "    adrp x16, " DM_ASM_PAGE(#cname) "\n    add x16, x16, " DM_ASM_PAGEOFF(#cname) "\n    b " DM_ASM_SYM("dm_bigstack_enter") "\n"); \
-    __attribute__((used, DM_SECTION("swforce"))) static const hle_force_ent hle_force_##cname = {mangled, (void *)(uintptr_t)cname##_bs, why}; \
+    __attribute__((used, DM_SECTION("swforce"))) static const hle_force_ent hle_force_##cname = {mangled, (void *)(uintptr_t)cname##_bs, why, NULL}; \
     static ret cname(__VA_ARGS__)
 
 // Host service sessions (hle_sf.c): a request on a session the host serves, as its service sees it, and the answer it fills in. The input is the raw CMIF data after the "SFCI"
