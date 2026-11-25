@@ -19,8 +19,10 @@ runtime has to be rebuilt for the host to read them — the old host takes ten a
 roles stay off without a word.
 10: the host's writable Vulkan caches are keyed on the game build and shader bundle, with a new prewarm record magic:
 installed runtimes need rebuilding so their host rejects the old caches instead of reusing stale driver records.
+11: the host captures the NVN raster origin when a queue is initialized and uses that origin for winding: installed
+runtimes need rebuilding so games that switch the device origin after creating a queue keep their geometry and lighting.
 """
-PLAYER_API_REVISION = 10
+PLAYER_API_REVISION = 11
 
 # The game profiles the player imports (a package of nxnative/dm/games/<title ID>/ folders) into their own folder: what the package was cut from.
 # PROFILES_REVISION counts the syncs of upstream's profiles (1: the first sync, seedds/nxnative at PROFILES_COMMIT); PROFILES_COMMIT is the upstream commit the
