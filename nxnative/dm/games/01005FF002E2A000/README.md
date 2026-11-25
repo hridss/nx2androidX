@@ -20,6 +20,11 @@ On the Mac (2026-11-15, M4 Pro, macOS 27.2.1), from a fresh save, with the host 
 - **Resolved: the host stopped about 4 s in, `[RED] sf: the game connects to service hwopus itself`.** The game calls `HardwareOpusDecoder`'s members by name ([A hardware Opus class's members called directly](../../../docs/reference/audio.md#a-hardware-opus-classs-members-called-directly)).
 - **Current:** sound from the title screen on: 8,102 of the first 12,000 renderer frames carry sound (the logo movie's sound goes through its `AudioOut`), 19,681 of 36,000 to the first level, with no underrun. The service's effects that pass the dry signal (delay, reverb, biquad) and its unfollowed splitters do not concern this game, which opens none.
 
+## Movies
+
+- **Resolved: the host stopped when the background movie started, `CRASH sig=11 addr=0 pc=0 lr=libdmplay.so+0xe64d8`** (0.4.1-alpha02, OnePlus PKX110, Android 17). SDK 1.3.1's movie library builds its own `movie::Decoder` with a two-argument constructor (`_ZN5movie7DecoderC1ENS_11DecoderTypeENS_19DecoderOutputFormatE`) that no module imports, so the host's take-over never saw it. The host's methods then found an object they had not made and reported failure; the player dropped the decoder and used it after the first movie frames. The host now takes such a decoder over on first use and settles what it decodes (video AVC/NV12, sound AAC/PCM16) at Configure from the MediaData; SDK 1.3.1 exports `movie::Buffer`'s const members as their non-const twins only, and the host looks them up that way. The Ubisoft logo movie and the attract movie play at 60 fps with sound.
+- **Current:** the title screen is reached; gameplay is untested on Android.
+
 ## Files and shaders
 
 - RomFS: 17 files, 2.90 GB. Seven in the root (`bundle_nn.ipk` 2.6 GB and two smaller IPK archives, `.gf`, `.metapreload`, `.preres`, `.txt`), nine movies in `video/` (0.27 GB), one localisation file in `enginedata/localisation/`.
@@ -55,12 +60,6 @@ On the Mac (2026-11-15, M4 Pro, macOS 27.2.1), from a fresh save, with the host 
 
 ## Open
 
-- **Android: the movie library's decoder.** The app boots into the title screen and stops when the background movie starts:
-  `CRASH sig=11 addr=0 pc=0 lr=libdmplay.so+0xe64d8` (0.4.1-alpha02 on a OnePlus PKX110, Android 17). No `[movie]` line comes before it,
-  so the decoder the SDK built for itself is the one the host's `movie::Decoder` methods were reached through; those now report the SDK's
-  failure instead of calling through the null symbol table ([`hle_movie.c` `md_of`](../../host/hle_movie.c)). Which constructor this
-  build's movie library (SDK 1.3.1) calls is still to be found — a boot with `DM_IMPORTS=1` lists the take-overs the host hits
-  ([android.tsv](android.tsv)). Until a movie plays, the port is registered as `boots`.
 - The frame rate on the M1 ([Rendering](#rendering)).
 - iPhone: one report so far ([iPhone](#iphone)); its iOS version, its console mode and the later levels are not known.
 - The grey screen after skipping the intro movie ([Input](#input)).
