@@ -20,6 +20,15 @@ CUTS = {
         (0xbabf0c, 'caffbff2', 'caffbbf2', 'first arena subtraction: -(512 MB + 128 KB)'),
         (0xbabf1c, '2800c0f2', '4800a4f2', 'first arena stored capacity: 512 MB + 128 KB'),
     ],
+    # Update 1.0.2: the same six instructions, at the build's own offsets. The pack's NACP still reports v65536, but its main module is this build; without its own row the 60 GB reservation is left in place and nninitStartup crashes.
+    '2a720c7ce5c84905c1c6847211f670fb': [
+        (0x13e3fb0, 'e001c0d2', '2000c0d2', 'malloc address region: 60 GB to 4 GB'),
+        (0xb9c070, 'e98340b2', 'e9ff9fd2', 'first arena bump size, low part: mov x9,#0xffff'),
+        (0xb9c080, '4900a0f2', '4900a4f2', 'first arena bump size: 512 MB + 128 KB + 64 KB - 1'),
+        (0xb9c104, 'ea7b5fb2', 'ea8361b2', 'first arena subtraction, sign extension'),
+        (0xb9c10c, 'caffbff2', 'caffbbf2', 'first arena subtraction: -(512 MB + 128 KB)'),
+        (0xb9c11c, '2800c0f2', '4800a4f2', 'first arena stored capacity: 512 MB + 128 KB'),
+    ],
 }
 
 # Both complete functions and their callees match in base 1.0.0 and 1.0.1.
