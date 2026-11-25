@@ -188,6 +188,13 @@
     <string name="set_version">版本</string>
     <string name="set_file_provider_title">文件管理器访问</string>
     <string name="set_file_provider_note">App 自己的目录（运行时、存档、日志）会在系统选择器和文件管理器里显示为一个根，不用电脑也能查看和处理。</string>
+    <string name="save_root_title">存档目录</string>
+    <string name="save_root_internal">App 内部（默认）</string>
+    <string name="save_root_pick">选择存档目录</string>
+    <string name="save_root_set">存档目录已修改</string>
+    <string name="save_root_reset">恢复默认</string>
+    <string name="save_root_note">只有一个目录生效：游戏、游戏内存档管理和库页都读它。不会复制文件；其他模拟器的原始分游戏目录可以直接使用。改动后请重启正在运行的游戏。</string>
+    <string name="save_root_invalid">这个目录不能用（必须存在且可写）</string>
     <string name="set_rerun_onboarding">重新运行引导</string>
     <string name="set_rerun_onboarding_hint">已完成的部分（权限、环境、keys）会被认出来，直接呈现为完成</string>
     <string name="set_run_onboarding">运行</string>

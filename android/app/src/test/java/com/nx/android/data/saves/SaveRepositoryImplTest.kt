@@ -157,7 +157,7 @@ class SaveRepositoryImplTest {
                     SaveBackup.swapIn(tree, device, live, liveDevice)
                 }
             }
-            val repository = SaveRepositoryImpl(fixture.platform, Dispatchers.Unconfined, swap)
+            val repository = SaveRepositoryImpl(fixture.platform, Dispatchers.Unconfined, swap, fixture.roots)
             val job = async { repository.import(TITLE_ID, fixture.source(packageFile)) }
 
             enteredSwap.await()
@@ -172,10 +172,44 @@ class SaveRepositoryImplTest {
         }
     }
 
-    private class Fixture : AutoCloseable {
+    @Test
+    fun `a configured external root is the only save location`() = runBlocking {
+        val fixture = Fixture(externalPath = "external-saves")
+        try {
+            val root = SaveRoot.external(File(fixture.root, "external-saves"))
+            val live = root.live(TITLE_ID)
+            live.mkdirs()
+            File(live, "slot.dat").writeText("external")
+            val internal = SaveBackup.liveDir(fixture.platform.filesDir, TITLE_ID)
+            internal.mkdirs()
+            File(internal, "slot.dat").writeText("untouched")
+
+            val exported = fixture.repository.export(TITLE_ID, "game", CollectingTarget())
+            assertTrue(exported.isSuccess)
+
+            val result = fixture.repository.import(TITLE_ID,
+                fixture.source(fixture.packageFor(TITLE_ID, "slot.dat" to "imported")))
+            assertTrue(result.isSuccess)
+            assertEquals("imported", File(live, "slot.dat").readText())
+            assertEquals("untouched", File(internal, "slot.dat").readText())
+
+            assertTrue(fixture.repository.erase(TITLE_ID).isSuccess)
+            assertFalse(live.exists())
+            assertTrue(File(internal, "slot.dat").exists())
+        } finally {
+            fixture.close()
+        }
+    }
+
+    private class Fixture(externalPath: String? = null) : AutoCloseable {
         val root = Files.createTempDirectory("nx2a-save-repo").toFile()
         val platform = FakeSavePlatform(root)
-        val repository = SaveRepositoryImpl(platform, Dispatchers.Unconfined, FileSaveSwap())
+        val roots = object : SaveRootProvider {
+            override fun resolve(filesDir: File): SaveRoot =
+                if (externalPath == null) SaveRoot.internal(filesDir)
+                else SaveRoot.external(File(root, externalPath))
+        }
+        val repository = SaveRepositoryImpl(platform, Dispatchers.Unconfined, FileSaveSwap(), roots)
 
         fun packageFor(titleId: String, entry: Pair<String, String>): File {
             val tree = root.resolve("source-${titleId}")

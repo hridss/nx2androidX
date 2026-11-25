@@ -69,6 +69,8 @@ class PrefsStore @Inject constructor(@ApplicationContext ctx: Context) {
         const val FILE_PROVIDER = "file.provider"
         // the assistant's in-game entry: the slim handle on the game screen's right edge (on by default)
         const val AGENT_BADGE = "agent.badge"
+        // the single save root: blank means the app's own files/save, otherwise a chosen folder
+        const val SAVE_ROOT = "save.root"
     }
 
     val prefs: SharedPreferences = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
@@ -80,6 +82,21 @@ class PrefsStore @Inject constructor(@ApplicationContext ctx: Context) {
     fun writeKeys(path: String) {
         keys = path.trim()
         prefs.edit().putString(KEYS, keys).apply()
+    }
+
+    /** The chosen save folder, or "" for the app's internal default. A Compose read. */
+    var saveRoot by mutableStateOf(prefs.getString(SAVE_ROOT, "") ?: "")
+        private set
+
+    fun writeSaveRoot(path: String) {
+        val value = path.trim().trimEnd('/')
+        saveRoot = value
+        prefs.edit().putString(SAVE_ROOT, value).apply()
+    }
+
+    fun clearSaveRoot() {
+        saveRoot = ""
+        prefs.edit().remove(SAVE_ROOT).apply()
     }
 
     // ---- 通用读写（引导与库的记忆；键名见常量） ----

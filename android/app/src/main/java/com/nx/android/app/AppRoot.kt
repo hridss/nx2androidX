@@ -203,6 +203,10 @@ data class AppActions(
     // the file provider: the app's own folders are visible to the file managers (on by default)
     val fileProvider: () -> Boolean = { true },
     val onSetFileProvider: (Boolean) -> Unit = {},
+    // the one save root: blank means the app's own files/save
+    val saveRoot: () -> String = { "" },
+    val onSetSaveRoot: (String) -> Unit = {},
+    val onResetSaveRoot: () -> Unit = {},
 )
 
 /** The app's root: the guided setup until it is done, the main shell after */

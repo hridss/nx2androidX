@@ -35,15 +35,20 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.nx.android.R
+import com.nx.android.app.AppActions
 import com.nx.android.domain.StorageUsage
+import com.nx.android.feature.filepicker.PickerMode
+import com.nx.android.feature.filepicker.PickerRequest
 import com.nx.android.feature.storage.StorageViewModel
 import com.nx.android.core.ui.LocalAppLocale
 import com.nx.android.core.ui.components.ActionRow
 import com.nx.android.core.ui.components.InfoRow
 import com.nx.android.core.ui.components.NoteRow
+import com.nx.android.core.ui.components.QuietButton
 import com.nx.android.core.ui.components.rememberGameIcon
 import com.nx.android.core.ui.components.sizeText
 import com.nx.android.core.ui.theme.NxPalette
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -66,7 +71,8 @@ import java.util.Date
  * 看出来，不必去比数字。
  */
 @Composable
-fun StorageSection(viewModel: StorageViewModel) {
+fun StorageSection(viewModel: StorageViewModel, actions: AppActions, onRequest: (PickerRequest) -> Unit) {
+    val locale = LocalAppLocale.current
 
     // 应用退到后台：这一节不再算数，统计立刻停下（协程被取消 ⇒ 遍历在下一个取消点停）
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -111,6 +117,24 @@ fun StorageSection(viewModel: StorageViewModel) {
     InfoRow(title = stringResource(R.string.storage_measured_at), value = measuredAtText(snapshot.scannedAt))
     NoteRow(stringResource(R.string.storage_note_scope))
     NoteRow(stringResource(R.string.storage_note_rules))
+
+    // 存档根目录：选一次，游戏与库页共用同一个；没有回退、不复制，重置回到默认位置
+    val saveRoot = actions.saveRoot()
+    InfoRow(
+        title = stringResource(R.string.save_root_title),
+        value = saveRoot.ifEmpty { stringResource(R.string.save_root_internal) },
+        trailing = {
+            QuietButton(stringResource(R.string.common_modify), onClick = {
+                onRequest(PickerRequest(PickerMode.DIR, emptySet(),
+                    saveRoot.takeIf { it.isNotBlank() }?.let { File(it) },
+                    locale.str(R.string.save_root_pick),
+                    onPicked = { folder -> actions.onSetSaveRoot(folder.path) }))
+            })
+        },
+    )
+    QuietButton(stringResource(R.string.save_root_reset), enabled = saveRoot.isNotBlank(),
+        onClick = { actions.onResetSaveRoot() })
+    NoteRow(stringResource(R.string.save_root_note))
 }
 
 /** 汇总：合计（大字 + 品牌色） */

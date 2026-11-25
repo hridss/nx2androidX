@@ -287,6 +287,21 @@ class MainActivity : ComponentActivity() {
         // 文件管理器能不能看见 App 的私有目录（运行时、存档、日志）。文档提供器自己读这份设置。
         fileProvider = { prefs.bool(PrefsStore.FILE_PROVIDER, true) },
         onSetFileProvider = { on -> prefs.put(PrefsStore.FILE_PROVIDER, on) },
+        // The save root is the one folder the guest and the library panel use; no copy, no fallback.
+        saveRoot = { prefs.saveRoot },
+        onSetSaveRoot = { path ->
+            val folder = java.io.File(path)
+            if (folder.isDirectory && folder.canWrite()) {
+                prefs.writeSaveRoot(folder.path)
+                toast(locale.str(R.string.save_root_set))
+            } else {
+                toast(locale.str(R.string.save_root_invalid))
+            }
+        },
+        onResetSaveRoot = {
+            prefs.clearSaveRoot()
+            toast(locale.str(R.string.save_root_reset))
+        },
         onShareBuildLog = { id ->
             lifecycleScope.launch {
                 val session = port.history.firstOrNull { it.id == id }

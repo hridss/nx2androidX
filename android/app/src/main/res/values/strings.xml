@@ -189,6 +189,13 @@
     <string name="set_version">Version</string>
     <string name="set_file_provider_title">File manager access</string>
     <string name="set_file_provider_note">The app\'s own folders (the runtime, the saves, the logs) show up as one root in the system picker and in the file managers, so they can be looked at and fixed without a computer.</string>
+    <string name="save_root_title">Save folder</string>
+    <string name="save_root_internal">App internal (default)</string>
+    <string name="save_root_pick">Choose the save folder</string>
+    <string name="save_root_set">Save folder changed</string>
+    <string name="save_root_reset">Reset to default</string>
+    <string name="save_root_note">One folder is used: the game, the in-game save manager and the library all read it. Nothing is copied; other emulators\' raw per-game folders can be used as-is. Restart a running game to apply a change.</string>
+    <string name="save_root_invalid">That folder is not usable (it must exist and be writable)</string>
     <string name="set_rerun_onboarding">Run the setup again</string>
     <string name="set_rerun_onboarding_hint">The parts that are done (the permission, the environment, the keys) are recognised and shown as done</string>
     <string name="set_run_onboarding">Run</string>

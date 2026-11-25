@@ -70,6 +70,8 @@ The save actions in the library panel became a backup-and-share affair: an expor
 
 An import is not taken on trust: a package carrying another game's title ID is refused, a path pointing out of the folder is refused, and the unpacked size is capped.
 
+**Settings → Storage → Save folder** points the app at a folder holding one raw per-title-ID folder per game (plus `<titleId>_device` where the game mounts a device save). That folder becomes the only save location — the same folders other Switch emulators use can be pointed at directly, with no copying or import. **Reset to default** returns to the app's own internal save folder; nothing is copied or deleted either way.
+
 ### The in-game drawer and frame generation
 
 The ☰ menu button opens the in-game drawer, with four tabs: **performance**, **HUD**, **frame generation** and **controls**.

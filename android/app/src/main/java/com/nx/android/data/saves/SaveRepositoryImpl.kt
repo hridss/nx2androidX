@@ -30,6 +30,7 @@ class SaveRepositoryImpl @Inject constructor(
     private val platform: SavePlatform,
     @IoDispatcher private val io: CoroutineDispatcher,
     private val saveSwap: SaveSwap,
+    private val roots: SaveRootProvider,
 ) : SaveRepository {
     private val locks = ConcurrentHashMap<String, Mutex>()
 
@@ -45,8 +46,9 @@ class SaveRepositoryImpl @Inject constructor(
     override suspend fun export(titleId: String, gameName: String, target: SaveTarget): Result<Unit> = runResult {
         withTitleLock(titleId) {
             checkTitle(titleId)
-            val live = SaveBackup.liveDir(platform.filesDir, titleId)
-            val device = SaveBackup.deviceDir(platform.filesDir, titleId)
+            val root = roots.resolve(platform.filesDir)
+            val live = root.live(titleId)
+            val device = root.device(titleId)
             val tree = SaveBackup.packageName(gameName, titleId, stamp()).removeSuffix(".${SaveBackup.EXT}")
             val out = target.open() ?: throw IOException("Could not open the place the file manager gave")
             withContext(io) {
@@ -72,9 +74,9 @@ class SaveRepositoryImpl @Inject constructor(
                     val stream = source.open() ?: throw IOException("Could not read the file the file manager gave")
                     val unpacked = stream.use { SaveBackup.unpack(it, tmp) }
                     withContext(NonCancellable) {
+                        val root = roots.resolve(platform.filesDir)
                         saveSwap.install(unpacked.tree, unpacked.device,
-                            SaveBackup.liveDir(platform.filesDir, titleId),
-                            SaveBackup.deviceDir(platform.filesDir, titleId))
+                            root.live(titleId), root.device(titleId))
                     }
                 } finally {
                     withContext(NonCancellable) { tmp.deleteRecursively() }
@@ -90,9 +92,8 @@ class SaveRepositoryImpl @Inject constructor(
         withTitleLock(titleId) {
             checkTitle(titleId)
             withContext(io) {
-                SaveBackup.erase(
-                    SaveBackup.liveDir(platform.filesDir, titleId),
-                    SaveBackup.deviceDir(platform.filesDir, titleId))
+                val root = roots.resolve(platform.filesDir)
+                SaveBackup.erase(root.live(titleId), root.device(titleId))
             }
         }
     }
@@ -132,4 +133,8 @@ abstract class SaveDataModule {
     @Binds
     @Singleton
     abstract fun bindSaveRepository(impl: SaveRepositoryImpl): SaveRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSaveRootProvider(impl: AndroidSaveRootProvider): SaveRootProvider
 }

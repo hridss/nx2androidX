@@ -154,7 +154,7 @@ fun SettingsScreen(ob: OnboardingState, build: EnvBuildState, drivers: List<Driv
                 ) {
                     when (section) {
                         SettingsSection.ENVIRONMENT -> EnvironmentSection(ob, build, actions, onRequest)
-                        SettingsSection.STORAGE -> StorageSection(storageViewModel)
+                        SettingsSection.STORAGE -> StorageSection(storageViewModel, actions, onRequest)
                         SettingsSection.DRIVERS -> DriversSection(drivers, driverRepository, actions, onRequest, onDrivers)
                         SettingsSection.DISPLAY -> DisplaySection(actions, onRequest)
                         SettingsSection.AGENT -> AgentSettingsSection(agentViewModel)

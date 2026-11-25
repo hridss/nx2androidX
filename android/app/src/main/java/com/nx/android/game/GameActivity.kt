@@ -73,6 +73,7 @@ import com.nx.android.data.CheatSettings
 import com.nx.android.data.FrameGenSettings
 import com.nx.android.data.GameLog
 import com.nx.android.data.Gamespec
+import com.nx.android.data.saves.SaveRoot
 import com.nx.android.data.LosslessDll
 import com.nx.android.data.MotionKnobs
 import com.nx.android.data.MotionSettings
@@ -634,10 +635,24 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         hudFahrenheit = prefs.bool(PrefsStore.HUD_TEMP_F, false)
         // 助手的游戏内入口：默认在画面上，玩家可以在设置里收走
         agentBadge = prefs.bool(PrefsStore.AGENT_BADGE, true)
+        // The chosen save root: the host's setenv(..., 0) lets this row replace its internal default.
+        // When no root is chosen, no row is sent and today's internal folder is used exactly.
+        val saveRootPref = prefs.saveRoot
+        val saveEnv = if (saveRootPref.isBlank() || titleId == null) {
+            emptyArray()
+        } else {
+            val live = SaveRoot.external(File(saveRootPref)).live(titleId.uppercase())
+            if (!live.isDirectory && !live.mkdirs()) {
+                toast(locale.str(R.string.save_root_invalid))
+                endProcess()
+                return
+            }
+            arrayOf("DM_SAVE=${live.path}")
+        }
         // 体感的两行也交给宿主：开不开（默认按设备有没有陀螺仪）与保留甩动方向（每个游戏各一份）
         val env = (fgSettings?.load()?.envLines(LosslessDll.ensure(this)?.absolutePath) ?: emptyArray()) +
             (motionSettings?.load(hasGyroscope(this))?.envLines() ?: emptyArray()) +
-            (cheatSettings?.envLine(cheatsDir()) ?: emptyArray())
+            (cheatSettings?.envLine(cheatsDir()) ?: emptyArray()) + saveEnv
         if (!Native.start(pack, filesDir.path, titleId, resources.displayMetrics.densityDpi, env, this)) {
             endProcess()   // the save import asked to end: it happens at the next start
             return
