@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nx.android.R
+import com.nx.android.agent.ui.AgentEntry
 import com.nx.android.appstate.LibraryState
 import com.nx.android.appstate.PortState
 import com.nx.android.domain.ALIAS_AUTO
@@ -92,7 +94,8 @@ private fun sourceMatchesTarget(target: File, candidate: File): Boolean {
 @Composable
 fun BuildsRoute(viewModel: BuildsViewModel, keys: String, envReady: Boolean,
                 actions: AppActions, onRequest: (PickerRequest) -> Unit, onLog: (String) -> Unit,
-                onOpenProfiles: () -> Unit) {
+                onOpenProfiles: () -> Unit, onOpenGameList: () -> Unit, onOpenAgent: () -> Unit = {},
+                agentVisible: Boolean = true) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val locale = LocalAppLocale.current
     LaunchedEffect(uiState.running) { if (uiState.running) viewModel.buildStarted() }
@@ -109,20 +112,23 @@ fun BuildsRoute(viewModel: BuildsViewModel, keys: String, envReady: Boolean,
         }
     }
     BuildsScreen(viewModel.library, viewModel, uiState, keys, envReady, actions, onRequest, onLog,
-        onImportProfiles = onOpenProfiles)
+        onImportProfiles = onOpenProfiles, onOpenGameList = onOpenGameList,
+        onOpenAgent = onOpenAgent, agentVisible = agentVisible)
 }
 
 @Composable
 private fun BuildsScreen(lib: LibraryState, viewModel: BuildsViewModel, uiState: BuildsUiState,
                          keys: String, envReady: Boolean, actions: AppActions,
                          onRequest: (PickerRequest) -> Unit, onLog: (String) -> Unit,
-                         onImportProfiles: () -> Unit) {
+                         onImportProfiles: () -> Unit, onOpenGameList: () -> Unit,
+                         onOpenAgent: () -> Unit, agentVisible: Boolean = true) {
     val locale = LocalAppLocale.current
     val running = uiState.running
     val target = uiState.target?.let(::File) ?: uiState.gameFile.takeIf { running }?.let { File(it) }
     val selected = uiState.history.firstOrNull { it.id == viewModel.selectedBuildId }
     val current = uiState.history.firstOrNull { it.id == viewModel.port.buildId }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberPageScroll()).padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -168,15 +174,26 @@ private fun BuildsScreen(lib: LibraryState, viewModel: BuildsViewModel, uiState:
                             }
                         }
                     }
-                    CapsuleButton(stringResource(R.string.builds_choose_game_file), onClick = {
-                        onRequest(PickerRequest(PickerMode.FILE, GAME_FILE_EXTENSIONS, File("/storage"),
-                            locale.str(R.string.builds_choose_game_file), onPicked = { viewModel.setTarget(it) }))
-                    })
+                    // The main action and the secondary one: picking the file is what this page is for, the list is there to be read
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CapsuleButton(stringResource(R.string.builds_choose_game_file), onClick = {
+                            onRequest(PickerRequest(PickerMode.FILE, GAME_FILE_EXTENSIONS, File("/storage"),
+                                locale.str(R.string.builds_choose_game_file), onPicked = { viewModel.setTarget(it) }))
+                        }, modifier = Modifier.weight(1f))
+                        QuietButton(stringResource(R.string.builds_game_list), onClick = onOpenGameList)
+                    }
                 }
                 if (uiState.history.isNotEmpty()) History(uiState, viewModel)
             }
         }
         Spacer(Modifier.height(12.dp))
+    }
+    // 助手的入口：贴在页面的右下角，不拖。它在滚动列外面，滚到哪儿都在那儿
+    Box(Modifier.align(Alignment.BottomEnd).padding(24.dp)) {
+        if (agentVisible) {
+            AgentEntry(onClick = onOpenAgent)
+        }
+    }
     }
 }
 

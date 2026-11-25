@@ -120,7 +120,7 @@ internal fun EnvStep(uiState: OnboardingUiState, onUnpack: () -> Unit) {
             Text(
                 when {
                     ready -> stringResource(R.string.env_ready)
-                    uiState.unpacking -> stringResource(R.string.onb_unpacking, uiState.unpackStep)
+                    uiState.unpacking -> stringResource(R.string.onb_building, uiState.unpackProgress)
                     else -> stringResource(R.string.onb_no_env)
                 },
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
@@ -149,7 +149,7 @@ private fun EnvStepUnpackingPreview() {
     PreviewSurface {
         Column(Modifier.fillMaxWidth()) {
             EnvStep(
-                uiState = previewState(ObStep.ENV, unpacking = true, unpackStep = "rootfs"),
+                uiState = previewState(ObStep.ENV, unpacking = true, unpackProgress = 42),
                 onUnpack = {},
             )
         }

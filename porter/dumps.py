@@ -83,7 +83,7 @@ def nca_size(f, at):   # the NCA an NCZ at offset at expands to: the header plus
     return NCA_HEAD + block[1] if block else max([NCA_HEAD] + [o + s for o, s, *_ in secs])
 
 
-def _pfs0_header(names, sizes):   # the header of a PFS0 holding these files in this order; its string table pads the header to 0x20
+def pfs0_header(names, sizes):   # the header of a PFS0 holding these files in this order; its string table pads the header to 0x20
     strs = b''.join(n.encode() + b'\0' for n in names)
     hlen = 16 + 0x18 * len(names) + len(strs)
     strs += b'\0' * (-hlen % 0x20)
@@ -102,7 +102,7 @@ def size(path):   # what a dump takes once decompressed (an NSP / XCI: its own s
     n = Path(path).stat().st_size
     if not n or not compressed(path): return n   # an empty file (a download cut short) holds nothing, and the scan skips it
     p = plan(path)
-    return len(_pfs0_header([e[0] for e in p], [e[3] for e in p])) + sum(e[3] for e in p)
+    return len(pfs0_header([e[0] for e in p], [e[3] for e in p])) + sum(e[3] for e in p)
 
 
 class _Stream:   # one zstd stream of an NCZ, read through a view that ends where the NCZ does (else the reader would go on into the next file)
@@ -161,7 +161,7 @@ def decompress(src, dst, done=lambda n: None):
     from one run to the next). done(n) is called with each n bytes written"""
     src, dst = Path(src), Path(dst)
     p = plan(src)
-    hdr = _pfs0_header([e[0] for e in p], [e[3] for e in p])
+    hdr = pfs0_header([e[0] for e in p], [e[3] for e in p])
     tmp = dst.with_name(dst.name + '.partial')
     # A ticketless NSZ (no .tik: its NCAs were converted from title-key to standard crypto, which rewrites their headers) has NCAs whose SHA-256 is no longer their name,
     # as nsz says (it skips the check for them: Fs/Nsp.py ticketless): Metroid Dread's base game decompressed by nsz itself to the same hash. Cartridge dumps (XCZ) have no tickets

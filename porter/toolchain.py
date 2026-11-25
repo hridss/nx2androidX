@@ -61,6 +61,21 @@ def find_ndk(cfg=None):
     return next((x for x in found if x[1] == NDK_REVISION), found[-1])
 
 
+def toolchain_lib_dirs():
+    """Where the build tools' own libraries are: the toolchain's lib folder (the toolchain's libshaderc, which glslc needs).
+
+    The phone says where its toolchain is (NX2A_TOOLCHAIN): the layout there is the app's business, not the
+    pipeline's. The older name is accepted as well, so an environment built before the rename still works."""
+    out = []
+    given = os.environ.get('NX2A_TOOLCHAIN')
+    if given: out.append(Path(given) / 'lib')
+    repo = os.environ.get('NX2A_REPO')
+    if repo:
+        for name in ('toolchain', 'toolchains'):
+            out.append(Path(repo) / name / 'lib')
+    return [d for d in out if d.is_dir()]
+
+
 def find_dotnet(cfg=None):
     """The dotnet to use: the configured one as it is; otherwise the first of DOTNET_ROOT, PATH and the usual places that has SDK 10, else the first that has a
     runtime 10 (a runtime-only dotnet, as the phone ships it, runs the C# tools but cannot build them), else the first found"""

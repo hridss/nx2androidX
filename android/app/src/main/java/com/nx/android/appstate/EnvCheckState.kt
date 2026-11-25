@@ -63,6 +63,12 @@ class EnvCheckState @Inject constructor(
     var known by mutableStateOf(false); private set
 
     /**
+     * The environment is being unpacked again (the app brought a newer rootfs). The old tree keeps
+     * working until the new one is whole, but the chip says what is going on.
+     */
+    var preparing by mutableStateOf(false)
+
+    /**
      * The machine's firmware has been imported.
      *
      * It is optional (only a game that reads the console's system data needs it), so a missing one only
@@ -88,7 +94,7 @@ class EnvCheckState @Inject constructor(
      */
     val chip: EnvCheck.Chip
         get() = if (!known) EnvCheck.Chip.CHECKING
-        else EnvCheck.chip(envReady, keysOk, if (phantomKnown) phantom else null, firmwareImported, profilesCount > 0)
+        else EnvCheck.chip(envReady, keysOk, if (phantomKnown) phantom else null, firmwareImported, profilesCount > 0, preparing)
 
     /** The doctor is running */
     var running by mutableStateOf(false); private set
@@ -261,10 +267,10 @@ class EnvCheckState @Inject constructor(
             val dest = File(paths.files, "import/profiles.zip")
             val candidates = packageCandidates()
             var failure = if (candidates.isEmpty()) "the release does not carry a package yet" else "no answer"
-            for ((url, sha) in candidates) {
+            for (url in candidates) {
                 if (packageCancelled) break
                 try {
-                    val file = ProfilesDownloader.download(url, dest, sha,
+                    val file = ProfilesDownloader.download(url, dest,
                         { p -> postUpdate(ProfilesPackage.Update.Downloading(p)) }, { packageCancelled }).getOrThrow()
                     postUpdate(ProfilesPackage.Update.Idle)
                     importPackage(file) { ok, _ ->
@@ -291,21 +297,21 @@ class EnvCheckState @Inject constructor(
     /**
      * Where the package may be.
      *
-     * This build's release first: its package is the one this build made, so the digest in the app's manifest checks
-     * it. Then the newest release: its package is a valid one, but not this build's (its name is not even the one
-     * this build knows), so it is taken as it comes.
+     * This build's release first: it carries the package this build made. Then the newest release: its
+     * package is a valid one, but not this build's (its name is not even the one this build knows), so it
+     * is taken as it comes.
      */
-    private fun packageCandidates(): List<Pair<String, String>> {
-        val out = mutableListOf<Pair<String, String>>()
+    private fun packageCandidates(): List<String> {
+        val out = mutableListOf<String>()
         val name = profilesExpectedName
         if (name.isNotEmpty()) {
-            out += ProfilesPackage.assetUrl(ProfilesPackage.tag(BuildConfig.VERSION_NAME), name) to profilesExpected
+            out += ProfilesPackage.assetUrl(ProfilesPackage.tag(BuildConfig.VERSION_NAME), name)
         }
         val latest = runCatching { runBlocking { UpdateChecker.latestTag() }.getOrThrow() }.getOrNull()
         if (latest != null) {
             for (n in runCatching { ProfilesDownloader.packagesOf(latest) }.getOrDefault(emptyList())) {
                 val url = ProfilesPackage.assetUrl(latest, n)
-                if (out.none { it.first == url }) out += url to ""
+                if (!out.contains(url)) out += url
             }
         }
         return out
@@ -342,7 +348,7 @@ class EnvCheckState @Inject constructor(
      */
     private fun importPackage(packageFile: File, onDone: (Boolean, String) -> Unit) {
         val buf = StringBuilder()
-        PortRunner(env, guestLauncher, locale) { line -> buf.appendLine(line) }
+        PortRunner(env, guestLauncher, locale::str) { line -> buf.appendLine(line) }
             .importProfiles(packageFile.absolutePath) { code ->
                 importingProfiles = false
                 readProfiles()
@@ -394,7 +400,7 @@ class EnvCheckState @Inject constructor(
         noOutput = false
         rows = listOf()
         val out = StringBuilder()
-        PortRunner(env, guestLauncher, locale) { line -> out.appendLine(line) }
+        PortRunner(env, guestLauncher, locale::str) { line -> out.appendLine(line) }
             .doctor(keysPath, json = true) {
                 running = false
                 val parsed = DoctorOutput.rows(out.toString())

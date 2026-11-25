@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1080" viewBox="0 0 1800 1080" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L10,3.5 z" fill="#8b939f"/>
+    </marker>
+    <style>
+      .bg { fill: #14161a; }
+      .box { fill: #1d2027; stroke: #3d434c; stroke-width: 1.6; }
+      .app { fill: #1a2333; stroke: #4c7bd6; stroke-width: 2; }
+      .env { fill: #1c2822; stroke: #4a9d6e; stroke-width: 2; }
+      .kb  { fill: #2a2318; stroke: #c89b4a; stroke-width: 2; }
+      .ext { fill: #241d29; stroke: #8f6bb0; stroke-width: 2; }
+      .inner { fill: #232830; stroke: #4a515b; stroke-width: 1.4; }
+      .t  { fill: #e9ecf2; font-size: 22px; }
+      .tb { fill: #e9ecf2; font-size: 22px; font-weight: 600; }
+      .ts { fill: #a9b2bf; font-size: 17px; }
+      .tk { fill: #e3bd78; font-size: 17px; }
+      .tm { fill: #93b7f2; font-size: 16px; }
+      .arrow { stroke: #8b939f; stroke-width: 2; fill: none; marker-end: url(#arw); }
+      .dash { stroke: #7a838f; stroke-width: 1.7; fill: none; stroke-dasharray: 7 6; marker-end: url(#arw); }
+      .label { fill: #99a2ae; font-size: 15px; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1080"/>
+
+  <text class="tb" x="60" y="58">nx2androidX — the assistant, entirely on the phone</text>
+  <text class="ts" x="60" y="88">No PC, no root, no proot. The agent runs inside the app's own Linux environment; the model is the player's.</text>
+
+  <!-- the phone -->
+  <rect x="40" y="116" width="1040" height="916" rx="26" fill="none" stroke="#2f343d" stroke-width="2"/>
+  <text class="label" x="62" y="144">the phone — everything below runs here</text>
+
+  <!-- App -->
+  <rect class="app" x="80" y="170" width="440" height="126" rx="12"/>
+  <text class="tb" x="104" y="206">App (Kotlin / Compose)</text>
+  <text class="ts" x="104" y="236">floating ball → panel: chat + tool column,</text>
+  <text class="ts" x="104" y="260">streamed Markdown, model picker, BYOK settings</text>
+  <text class="ts" x="104" y="284">the player picks the model and pastes the key</text>
+
+  <!-- RPC -->
+  <rect class="box" x="80" y="330" width="440" height="116" rx="12"/>
+  <text class="tb" x="104" y="366">RPC adapter (PiAgentChat)</text>
+  <text class="ts" x="104" y="396">JSONL over stdio — the same event stream</text>
+  <text class="ts" x="104" y="420">the panel already knows how to render</text>
+
+  <!-- rootfs -->
+  <rect class="env" x="80" y="480" width="440" height="236" rx="12"/>
+  <text class="tb" x="104" y="516">glibc rootfs (ships with the app)</text>
+  <text class="ts" x="104" y="544">the porting tools run in this environment too</text>
+  <rect class="inner" x="104" y="562" width="392" height="86" rx="8"/>
+  <text class="tb" x="120" y="594" font-size="20">pi — one long-lived process</text>
+  <text class="ts" x="120" y="620">reads files, runs commands, edits the tree</text>
+  <text class="tm" x="120" y="642">`--mode rpc`, no turn limit</text>
+  <text class="ts" x="104" y="678">the key never leaves the device: it is injected</text>
+  <text class="ts" x="104" y="700">into the process, not stored anywhere else</text>
+
+  <!-- sub-agents -->
+  <rect class="box" x="80" y="746" width="440" height="132" rx="12"/>
+  <text class="tb" x="104" y="782">sub-agents</text>
+  <text class="ts" x="104" y="810">case worker — owns one game's case file</text>
+  <text class="ts" x="104" y="834">explorers — read-only, run in parallel</text>
+  <text class="ts" x="104" y="860">the player confirms every code change</text>
+
+  <!-- tools -->
+  <rect class="box" x="80" y="906" width="440" height="92" rx="12"/>
+  <text class="tb" x="104" y="940">tools</text>
+  <text class="ts" x="104" y="966">log_triage · builds.py · upstream_pr.py · shot.py</text>
+  <text class="ts" x="104" y="988">the phone's own scripts, not desktop ones</text>
+
+  <!-- proxy (inside the phone, right column) -->
+  <rect class="box" x="580" y="170" width="460" height="140" rx="12"/>
+  <text class="tb" x="604" y="206">in-app CONNECT proxy</text>
+  <text class="ts" x="604" y="236">the guest has no DNS of its own; the proxy</text>
+  <text class="ts" x="604" y="260">resolves and carries the TLS bytes</text>
+  <text class="tm" x="604" y="286">HTTPS_PROXY = 127.0.0.1:7879</text>
+
+  <!-- knowledge -->
+  <rect class="kb" x="580" y="480" width="460" height="264" rx="12"/>
+  <text class="tb" x="604" y="516">knowledge that ships with it</text>
+  <text class="tk" x="604" y="548">387 upstream pull requests → a diagnosis</text>
+  <text class="ts" x="604" y="576">build failures · shader splits · crashes ·</text>
+  <text class="ts" x="604" y="600">black screens · freezes · device findings</text>
+  <text class="ts" x="604" y="624">a case index, searchable with no network</text>
+  <text class="ts" x="604" y="656">skills: port-failures · inspect-game ·</text>
+  <text class="ts" x="604" y="680">card-unpack · environment-check · cheats</text>
+  <text class="ts" x="604" y="706">every case says which layer owns the fix —</text>
+  <text class="ts" x="604" y="728">the engine, or one game's profile</text>
+
+  <!-- outside the phone: model -->
+  <rect class="ext" x="1140" y="330" width="620" height="150" rx="12"/>
+  <text class="tb" x="1164" y="366">the player's model API</text>
+  <text class="ts" x="1164" y="396">MiniMax · GLM · DeepSeek · Kimi · …  (BYOK)</text>
+  <text class="ts" x="1164" y="422">the request goes out from the phone, encrypted,</text>
+  <text class="ts" x="1164" y="446">straight to the provider — nothing of ours</text>
+  <text class="ts" x="1164" y="470">is in the middle, and we hold no key</text>
+
+  <!-- outside the phone: data -->
+  <rect class="box" x="1140" y="540" width="620" height="150" rx="12"/>
+  <text class="tb" x="1164" y="576">the player's own data</text>
+  <text class="ts" x="1164" y="606">their dumps, their keys, their console</text>
+  <text class="ts" x="1164" y="632">we ship no game content, no keys, no firmware,</text>
+  <text class="ts" x="1164" y="656">and there is no link to obtain any of them</text>
+  <text class="ts" x="1164" y="682">the tool never downloads either</text>
+
+  <!-- arrows inside -->
+  <path class="arrow" d="M300,296 L300,326"/>
+  <path class="arrow" d="M300,446 L300,476"/>
+  <path class="arrow" d="M300,716 L300,742"/>
+  <path class="arrow" d="M300,878 L300,902"/>
+  <!-- pi -> proxy -->
+  <path class="arrow" d="M496,605 C540,605 545,240 576,240"/>
+  <!-- proxy -> model api -->
+  <path class="arrow" d="M1044,240 L1136,240 L1136,404 L1140,404"/>
+  <!-- knowledge -> agent -->
+  <path class="dash" d="M576,600 C540,600 540,520 498,520"/>
+  <!-- the phone's data -> the tool -->
+  <path class="dash" d="M1140,616 L1096,616 L1096,940 L524,940"/>
+</svg>

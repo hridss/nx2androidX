@@ -29,6 +29,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nx.android.R
+import com.nx.android.agent.ui.AgentEntry
 import com.nx.android.app.AppActions
 import com.nx.android.appstate.LibraryState
 import com.nx.android.appstate.PortState
@@ -59,7 +60,8 @@ import java.io.File
 @Composable
 fun LibraryScreen(lib: LibraryState, port: PortState, actions: AppActions,
                   onGoBuilds: () -> Unit, onRequest: (PickerRequest) -> Unit, uiState: LibraryUiState? = null,
-                  viewModel: LibraryViewModel? = null, navActive: Boolean = false) {
+                  viewModel: LibraryViewModel? = null, navActive: Boolean = false,
+                  onOpenAgent: () -> Unit = {}, agentVisible: Boolean = true) {
 
     // a port ends: the cards' statuses are re-read
     LaunchedEffect(port.phase) { viewModel?.refresh() ?: lib.rescan() }
@@ -170,6 +172,8 @@ fun LibraryScreen(lib: LibraryState, port: PortState, actions: AppActions,
         actions = libraryActions,
         navActive = navActive,
         padConnected = padConnected,
+        onOpenAgent = onOpenAgent,
+        agentVisible = agentVisible,
     )
 
     // 配置面板不在这里画：它要盖住顶栏，所以由页面的根（MainScreen）在最上层画（见 ui/App.kt）
@@ -179,10 +183,11 @@ fun LibraryScreen(lib: LibraryState, port: PortState, actions: AppActions,
 fun LibraryRoute(viewModel: LibraryViewModel, port: PortState,
                  actions: AppActions,
                  onGoBuilds: () -> Unit, onRequest: (PickerRequest) -> Unit,
-                 navActive: Boolean = false) {
+                 navActive: Boolean = false, onOpenAgent: () -> Unit = {},
+                 agentVisible: Boolean = true) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     LibraryScreen(viewModel.library, port, actions, onGoBuilds, onRequest, uiState, viewModel,
-        navActive = navActive)
+        navActive = navActive, onOpenAgent = onOpenAgent, agentVisible = agentVisible)
 }
 
 /** 页面上的动作：选一个游戏、构建、运行、看正在跑的构建、开配置 */
@@ -210,6 +215,8 @@ internal fun LibraryContent(
     actions: LibraryActions,
     navActive: Boolean = false,
     padConnected: Boolean = false,
+    onOpenAgent: () -> Unit = {},
+    agentVisible: Boolean = true,
 ) {
     val sel = entries.getOrNull(heroIndex)
     // 提示条上确认键那一项写的文案：与左下角主按钮完全一样（同一个 mainActionOf）
@@ -263,21 +270,32 @@ internal fun LibraryContent(
         }
         Spacer(Modifier.height(18.dp))
     }
+    // 右下角这一摞：助手的入口在最下面，贴着角；按键提示在它上面一行。
+    // 提示条比入口宽，所以入口靠右对齐（Column 宽的是提示条），右边缘始终在角上。
     // 按键提示：接了手柄才浮出来，靠右下角（不占地方：插上手柄时页面别的东西也不挪）
-    AnimatedVisibility(
-        visible = navActive && padConnected && entries.isNotEmpty(),
-        modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
-        enter = fadeIn(), exit = fadeOut(),
-    ) {
-        NavHintBar(
-            listOfNotNull(
-                NavHint("←→", stringResource(R.string.ui_nav_move)),
-                // 确认键那一项写的与主按钮一样：运行 / 构建 / 查看构建 / 更新运行库
-                mainLabel?.let { NavHint("A", it) },
-                NavHint("Start", stringResource(R.string.ui_nav_details)),
-                NavHint("L/R", stringResource(R.string.ui_nav_tabs)),
-            )
-        )
+    Box(Modifier.align(Alignment.BottomEnd).padding(24.dp)) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AnimatedVisibility(
+                visible = navActive && padConnected && entries.isNotEmpty(),
+                enter = fadeIn(), exit = fadeOut(),
+            ) {
+                NavHintBar(
+                    listOfNotNull(
+                        NavHint("←→", stringResource(R.string.ui_nav_move)),
+                        // 确认键那一项写的与主按钮一样：运行 / 构建 / 查看构建 / 更新运行库
+                        mainLabel?.let { NavHint("A", it) },
+                        NavHint("Start", stringResource(R.string.ui_nav_details)),
+                        NavHint("L/R", stringResource(R.string.ui_nav_tabs)),
+                    )
+                )
+            }
+            if (agentVisible) {
+                AgentEntry(onClick = onOpenAgent)
+            }
+        }
     }
     }
 }

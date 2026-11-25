@@ -41,6 +41,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -61,6 +62,7 @@ import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.nx.android.NxApp
 import com.nx.android.R
+import com.nx.android.core.storage.AppPaths
 import com.nx.android.core.ui.ProvideAppLocale
 import com.nx.android.core.ui.theme.NxPalette
 import com.nx.android.core.ui.theme.NxTheme
@@ -70,6 +72,7 @@ import com.nx.android.data.CheatRepo
 import com.nx.android.data.CheatSettings
 import com.nx.android.data.FrameGenSettings
 import com.nx.android.data.GameLog
+import com.nx.android.data.Gamespec
 import com.nx.android.data.LosslessDll
 import com.nx.android.data.MotionKnobs
 import com.nx.android.data.MotionSettings
@@ -90,6 +93,14 @@ import com.nx.android.game.hud.HudField
 import com.nx.android.game.hud.HudOverlay
 import com.nx.android.game.input.PadEditor
 import com.nx.android.game.input.PadView
+import com.nx.android.agent.runtime.GamespecExporter
+import com.nx.android.agent.runtime.openGamespecIssue
+import com.nx.android.agent.ui.AgentConversationState
+import com.nx.android.agent.ui.AgentDrawerHost
+import com.nx.android.agent.ui.AgentEdgeBadge
+import com.nx.android.appstate.PageFacts
+import com.nx.android.appstate.PageState
+import com.nx.android.appstate.PageStateStore
 import com.nx.android.game.overlay.GameDrawer
 import com.nx.android.game.overlay.TextPrompt
 import com.nx.android.input.GamepadScan
@@ -169,12 +180,24 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     @Inject lateinit var compiler: RuntimeCompiler
     @Inject lateinit var runtimeStorage: RuntimeStorage
+    /** 攻关档案的导出：打包器在环境里跑 */
+    @Inject lateinit var exporter: GamespecExporter
+    /** 玩家的 nx2android 文件夹：攻关档案（gamespec/）落在里面 */
+    @Inject lateinit var paths: AppPaths
+    /** 助手的会话：整个 App 一份——首页的抽屉与这里的抽屉看的都是它 */
+    @Inject lateinit var agentConversation: AgentConversationState
+    /** 页面状态快照：助手想知道玩家此刻在哪一局，就读它 */
+    @Inject lateinit var pageState: PageStateStore
 
     /** 界面语言：toast 与抽屉里的词从这里取 */
     private val locale: AppLocale get() = (application as NxApp).locale
 
     private var paused by mutableStateOf(false)
     private var drawerOpen by mutableStateOf(false)
+    /** 助手的侧抽屉开着吗（游戏里从右边缘那枚徽标进来） */
+    private var agentDrawerOpen by mutableStateOf(false)
+    /** 抽屉第一次打开之后就一直留在组合里；之前不组合它（游戏启动时不必付这份开销） */
+    private var agentEverOpened by mutableStateOf(false)
     private var fgSettings: FrameGenSettings? = null
     private var rateSettings: RateSettings? = null
     private var motionSettings: MotionSettings? = null
@@ -187,6 +210,23 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
     /** 这次进来是要重建运行库的（游戏闪退后玩家点的「重新构建」）：目录里那份对不上也不将就，重编一次 */
     private var forceRebuild = false
 
+    /** 玩家在处理哪一局：助手据此知道这局是哪一局、运行参数是什么 */
+    private fun gamePageState(): PageState {
+        val facts = mutableMapOf<String, String>()
+        // 运行参数：包里的 env.txt 写着它们（语言与 Vulkan 驱动）
+        packPath?.let { pack ->
+            val (lang, driver) = PackEnvStore.current(File(pack))
+            if (!lang.isNullOrBlank()) facts[PageFacts.LANGUAGE] = lang
+            if (!driver.isNullOrBlank()) facts[PageFacts.DRIVER] = driver
+        }
+        return PageState(
+            page = "game",
+            titleId = packTitleId.orEmpty(),
+            name = packName,
+            facts = facts,
+        )
+    }
+
     /** the game UI (surface, pad, drawer) is in the view tree: the native calls and the input paths are live */
     private var gameUiReady = false
     private lateinit var padView: PadView
@@ -196,6 +236,9 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
     private var hudDevice by mutableStateOf(false)
     private var hudFields by mutableStateOf(HudField.DEFAULT)
     private var hudFahrenheit by mutableStateOf(false)
+
+    // 助手在游戏画面上的入口（右缘的那条把手）：玩家可以在设置里把它收走
+    private var agentBadge by mutableStateOf(true)
 
     /** 游戏要文字时（宿主的通知 3）：App 用系统输入法问玩家 */
     private data class TextReq(val title: String, val text: String, val max: Int)
@@ -454,6 +497,13 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
                 } else {
                     preparePhase = PreparePhase.FAILED
                     prepareReason = outcome.reason
+                    // 起不来也是这局的事：记进那局的档案
+                    Gamespec.appendEvent(
+                        paths.nxHome,
+                        packTitleId.orEmpty(),
+                        Gamespec.LAUNCH_FAILED,
+                        outcome.reason,
+                    )
                 }
             }
         }
@@ -531,6 +581,13 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
             }
         }
         try { writer?.close() } catch (e: Exception) {}
+        // 重建是这局的事：记进那局的档案（玩家问「刚才为什么重编了一遍」时查得到）
+        Gamespec.appendEvent(
+            paths.nxHome,
+            packTitleId.orEmpty(),
+            Gamespec.REBUILD,
+            if (result.success) "runtime rebuild done" else "runtime rebuild failed: ${result.reason}",
+        )
         if (!result.success) return PrepareOutcome(reason = result.reason)
         return null
     }
@@ -545,6 +602,12 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
             preparePhase = PreparePhase.FAILED
             prepareReason = locale.str(R.string.game_cannot_load_host, t.message)
             showLoading()
+            Gamespec.appendEvent(
+                paths.nxHome,
+                packTitleId.orEmpty(),
+                Gamespec.LAUNCH_FAILED,
+                prepareReason,
+            )
             return
         }
         installGameUi()
@@ -569,6 +632,8 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         hudFields = HudField.of(prefs.str(PrefsStore.HUD_FIELDS, "").split(",").filter { it.isNotBlank() })
             .ifEmpty { HudField.DEFAULT }
         hudFahrenheit = prefs.bool(PrefsStore.HUD_TEMP_F, false)
+        // 助手的游戏内入口：默认在画面上，玩家可以在设置里收走
+        agentBadge = prefs.bool(PrefsStore.AGENT_BADGE, true)
         // 体感的两行也交给宿主：开不开（默认按设备有没有陀螺仪）与保留甩动方向（每个游戏各一份）
         val env = (fgSettings?.load()?.envLines(LosslessDll.ensure(this)?.absolutePath) ?: emptyArray()) +
             (motionSettings?.load(hasGyroscope(this))?.envLines() ?: emptyArray()) +
@@ -759,9 +824,22 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
 
     /** 抽屉打开：这时宿主该知道自己的 build 编号了（金手指页要拿它去库里挑文件） */
     private fun openDrawer() {
+        // 两个抽屉不叠在一起：助手抽屉让位（游戏继续跑）
+        if (agentDrawerOpen) closeAgentDrawer()
         AppLog.line("cheats: the drawer opened")
         drawerOpen = true
         refreshCheatStatus()
+    }
+
+    /** 助手的抽屉打开：游戏照常跑着——助手要看着它抓帧、翻日志，停了就什么都看不到 */
+    private fun openAgentDrawer() {
+        agentDrawerOpen = true
+        drawerOpen = false        // 设置抽屉让位：两个抽屉不叠在一起
+    }
+
+    /** 助手抽屉收起：游戏本来就在跑，这里只是把抽屉收走 */
+    private fun closeAgentDrawer() {
+        agentDrawerOpen = false
     }
 
     /** 金手指页的状态：文件在不在、出处是什么（进游戏时读一遍，之后下载完再读） */
@@ -928,6 +1006,15 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
                 packPath = packPath,
                 modifier = Modifier.align(Alignment.TopCenter).displayCutoutPadding().padding(top = 8.dp),
             )
+            // 助手的徽标：右边缘垂直居中的一条小把手，点它就滑出助手抽屉。
+            // 它排在设置抽屉之前——设置抽屉开着的时候，那块遮罩把它盖住。
+            // 玩家可以在设置里收走它（那条把手是画面上的东西，游戏画面该是游戏的）。
+            if (agentBadge && !agentDrawerOpen) {
+                AgentEdgeBadge(
+                    onClick = { openAgentDrawer() },
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                )
+            }
             GameDrawer(
                 paused = paused,
                 open = drawerOpen,
@@ -987,6 +1074,25 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
                     endProcess()
                 },
             )
+            // 助手的侧抽屉：从右边滑出来的那张（与首页同一套），开着的时候游戏照常跑着
+            // 第一次打开之前不组合它：徽标点开之后它才进组合，然后就一直留着
+            LaunchedEffect(agentDrawerOpen) { if (agentDrawerOpen) agentEverOpened = true }
+            if (agentEverOpened) {
+                AgentDrawerHost(
+                    open = agentDrawerOpen,
+                    conversation = agentConversation,
+                    chips = listOf(
+                        R.string.agent_chip_game_crash,
+                        R.string.agent_chip_game_fps,
+                        R.string.agent_chip_game_build,
+                    ),
+                    haze = null,   // 游戏画面是 SurfaceView，磨砂糊不到它：走玻璃的兜底底色
+                    onCollapse = { closeAgentDrawer() },
+                    onExpand = {},
+                    onOpenSettings = {},
+                    onExportGamespec = { packTitleId?.let { exportGamespec(it) } },
+                )
+            }
             // 布局编辑器：App 自己的面板，画在游戏画面上（游戏先等着）
             if (editorOpen) {
                 PadEditor(
@@ -1048,6 +1154,21 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
             return forwardsKeyToGame(e.keyCode)
         }
         if (!forwardsKeyToGame(e.keyCode)) return false   // 音量键：系统的事，游戏与宿主都不沾
+        // 助手抽屉开着的时候，键是输入框的事：中文输入法的删除键走的是按键事件这条路，
+        // 被这里转走就删不掉了（英文输入法走 deleteSurroundingText，所以它没事）。
+        // 键也不进游戏——玩家在打字，不是在玩。
+        if (agentDrawerOpen) {
+            if (e.keyCode == KeyEvent.KEYCODE_BACK && e.action == KeyEvent.ACTION_DOWN) {
+                closeAgentDrawer()
+            }
+            return super.dispatchKeyEvent(e)   // 交给焦点所在的输入框
+        }
+        // 游戏的文本输入框开着的时候，编辑键（删除、光标）也归输入框——
+        // 中文输入法的删除键走按键事件这条路，转给宿主就删不掉了。
+        // Back 照旧给宿主：那个提示框是它提的，它自己管。
+        if (textReq != null && e.keyCode != KeyEvent.KEYCODE_BACK) {
+            return super.dispatchKeyEvent(e)
+        }
         if (e.keyCode == KeyEvent.KEYCODE_BACK) {
             if (e.action == KeyEvent.ACTION_DOWN) {
                 val hostPanel = !drawerOpen && hostPanelUp()   // 抽屉在前面时，Back 归抽屉
@@ -1086,6 +1207,8 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
     // ---- lifecycle: the same dance as the NativeActivity's callbacks ----
     override fun onResume() {
         super.onResume()
+        // 助手看得见的页面状态：游戏页在前台时它说了算（这一局是哪一局、跑的是什么参数）
+        pageState.setGame(gamePageState())
         if (!gameUiReady) return   // Loading 期：宿主与手柄都还没就位
         Native.lifecycle(1)
         padView.fetchLayout()
@@ -1122,12 +1245,28 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         }.getOrDefault("")
     }
 
+    /**
+     * 导出这局的攻关档案：在环境里跑打包器，把 zip 放进下载目录，再把玩家送到提 issue 的页面。
+     *
+     * 玩家拿去提 issue 用的是这个包（表单里自己附上）。档案本身不动——导出是快照，导出完了还能继续往里记。
+     */
+    private fun exportGamespec(titleId: String) {
+        lifecycleScope.launch {
+            val result = exporter.export(this@GameActivity, titleId)
+            result.onSuccess { target ->
+                toast(locale.str(R.string.agent_gamespec_exported, target.name))
+                openGamespecIssue(this@GameActivity)
+            }.onFailure {
+                toast(locale.str(R.string.agent_gamespec_export_failed, it.message.orEmpty()))
+            }
+        }
+    }
+
     /** The phone's language changed (configChanges holds it): the app's words are read again */
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         locale.configurationChanged()
-    }
-    override fun onPause() { super.onPause(); if (gameUiReady) Native.lifecycle(0) }
+    }    override fun onPause() { super.onPause(); if (gameUiReady) Native.lifecycle(0) }
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) immersive()
@@ -1135,6 +1274,8 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     override fun onDestroy() {
+        // 这一局没了：助手看到的页面状态回到主界面那一页
+        pageState.setGame(null)
         ctrlListener?.let { runCatching { inputManager.unregisterInputDeviceListener(it) } }
         ctrlListener = null
         externalDisplay?.stop()   // 外接屏：把它收起来，宿主那边也放回手机

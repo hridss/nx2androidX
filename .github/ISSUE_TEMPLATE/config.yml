@@ -1,4 +1,4 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
   - name: Porting guide
     url: https://github.com/zFitness/nx2androidX/blob/android/docs/PORTING_GUIDE.md

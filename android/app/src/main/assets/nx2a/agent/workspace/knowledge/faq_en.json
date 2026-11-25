@@ -58,6 +58,14 @@
       {
         "q": "How do I get the game's runtime log out?",
         "a": "Game details → \"Manage\" → \"Share the log\". A game that has not run yet says it has no runtime log yet."
+      },
+      {
+        "q": "The game crashes immediately on launch (the game screen never appears). What should I do?",
+        "a": "Check the following in order:\n\n1. Switch to a different Vulkan driver in Settings and try again;\n2. Review the log of that build (build details → \"Share log\") to confirm the port is complete;\n3. If the crashes began after importing save data, and every launch fails (typically around the title screen), the save data is most likely incompatible with this environment. Open the game's detail panel and run \"Manage → Delete the saves\", then start the game again. To keep that save for investigation, export it first."
+      },
+      {
+        "q": "What should I know before importing save data from another emulator or console?",
+        "a": "Save data is installed as-is; the app performs no content conversion. Saves exported by other emulators (Eden, yuzu, Ryujinx, etc.) or console tools may carry internal state this environment cannot read, and in some cases the game will crash on launch. It is recommended to:\n\n1. Export the current save data as a backup before importing;\n2. Confirm the save comes from the same game version as this port (including updates and DLC state);\n3. If the game crashes on every launch after importing, run \"Manage → Delete the saves\" and start over."
       }
     ]
   },
@@ -76,6 +84,10 @@
       {
         "q": "How do I reach the app's own directory?",
         "a": "Turn on Settings → About → \"File manager access\". The system then mounts the app's directory (the runtime, the saves, the logs) as one root: the file manager can go into it, and you can copy things out of it. Switch it off and that root is gone."
+      },
+      {
+        "q": "Can I remove the assistant's handle on the game screen?",
+        "a": "Yes. Settings → Assistant → \"In-game entry\", turn it off, and the next game starts without the handle on the right edge. The assistant is still around: the ball at the bottom right of the library and builds pages, and the full chat page."
       },
       {
         "q": "How do I connect and set up a gamepad?",

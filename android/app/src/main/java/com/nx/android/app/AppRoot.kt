@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -70,9 +71,14 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nx.android.R
 import com.nx.android.appstate.LibraryState
+import com.nx.android.appstate.EnvBuildState
 import com.nx.android.appstate.OnboardingState
+import com.nx.android.appstate.PageFacts
+import com.nx.android.appstate.PageState
+import com.nx.android.appstate.PageStateStore
 import com.nx.android.appstate.PlayerState
 import com.nx.android.appstate.PortState
+import com.nx.android.appstate.lastBuildOf
 import com.nx.android.core.ui.ProvideAppLocale
 import com.nx.android.core.ui.components.CapsuleButton
 import com.nx.android.core.ui.components.QuietButton
@@ -82,6 +88,7 @@ import com.nx.android.core.ui.nav.OnNavKey
 import com.nx.android.core.ui.theme.GlassSheet
 import com.nx.android.core.ui.theme.NxPalette
 import com.nx.android.core.ui.theme.NxTheme
+import com.nx.android.core.storage.AppPaths
 import com.nx.android.data.AppLocale
 import com.nx.android.data.PadPlayers
 import com.nx.android.data.PrefsStore
@@ -90,19 +97,28 @@ import com.nx.android.domain.EnvCheck
 import com.nx.android.domain.GAME_FILE_EXTENSIONS
 import com.nx.android.domain.GameConfig
 import com.nx.android.domain.GameEntry
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import com.nx.android.domain.GameIdentity
 import com.nx.android.domain.drivers.DriverRepository
 import com.nx.android.domain.environment.EnvironmentSetup
+import com.nx.android.agent.ui.AgentScreen
 import com.nx.android.feature.builds.BuildsRoute
+import com.nx.android.feature.builds.SupportedGamesOverlay
 import com.nx.android.feature.builds.BuildsViewModel
 import com.nx.android.feature.drivers.DriverRoute
+import com.nx.android.feature.environment.EnvBuildDialog
+import com.nx.android.feature.environment.EnvBuildViewModel
 import com.nx.android.feature.environment.EnvChecklistDialog
 import com.nx.android.feature.environment.EnvChip
 import com.nx.android.feature.environment.EnvironmentCheckViewModel
 import com.nx.android.feature.environment.GameProfilesDialog
 import com.nx.android.feature.filepicker.FilePickerScreen
 import com.nx.android.feature.filepicker.PickerMode
+import com.nx.android.domain.UpdatePhase
 import com.nx.android.feature.filepicker.PickerRequest
+import com.nx.android.agent.ui.AgentDrawerHost
+import com.nx.android.agent.ui.AgentConversationState
 import com.nx.android.feature.faq.FaqScreen
 import com.nx.android.feature.gamedetail.GameDetailRoute
 import com.nx.android.feature.library.HeroBackground
@@ -111,6 +127,10 @@ import com.nx.android.feature.library.LibraryViewModel
 import com.nx.android.feature.logs.LogOverlay
 import com.nx.android.feature.onboarding.OnboardingScreen
 import com.nx.android.feature.onboarding.OnboardingViewModel
+import com.nx.android.agent.runtime.AgentSetup
+import com.nx.android.agent.ui.AgentIntroDialog
+import com.nx.android.agent.ui.AgentSettingsViewModel
+import com.nx.android.agent.ui.AgentSettingsSection
 import com.nx.android.feature.settings.SettingsScreen
 import com.nx.android.feature.settings.SettingsSection
 import com.nx.android.feature.storage.StorageViewModel
@@ -143,7 +163,7 @@ enum class Tab(@StringRes val label: Int, val icon: ImageVector) {
  * 判断只在这一处做（页面的根），页面自己只管「我收到这个动作时做什么」——
  * 这样不会出现两个页面同时响应，也不会要动一处就想起另一处。
  */
-private enum class NavHost { NONE, LIBRARY, PANEL, SETTINGS, FAQ }
+private enum class NavHost { NONE, LIBRARY, PANEL, SETTINGS, FAQ, AGENT }
 
 /** The screens' way back to the activity's own privileges: what they may ask for, nothing else */
 data class AppActions(
@@ -154,6 +174,8 @@ data class AppActions(
     val onStartPort: (file: File, cfg: GameConfig) -> Unit,
     val onCancelPort: () -> Unit,
     val onRun: (pack: File, name: String) -> Unit,
+    // 攻关修好了之后「去跑一下」：按 title ID 把那一局交到游戏页（门照旧走）
+    val onRunByTitleId: (String) -> Unit = {},
     // 闪退之后的「重新构建」：重建运行库再进一次游戏
     val onRunRebuild: (pack: File, name: String) -> Unit = { _, _ -> },
     // 桌面快捷方式：管理下拉里的「发送到桌面」（只对已完成的游戏出现）
@@ -204,10 +226,19 @@ fun AppRoot(
     startTab: Int,
     launchBuildId: String,
     padController: PadCenterController,
+    agentSetup: AgentSetup,
+    agentState: AgentConversationState,
+    pageState: PageStateStore,
     padCenterOpen: Boolean,
     onPadCenter: (Boolean) -> Unit,
+    // the assistant's full chat page: the portrait room (the activity turns the screen portrait for it);
+    // the quick surface — the ball and the side panel — lives inside MainScreen and needs no orientation
+    agentFullOpen: Boolean = false,
+    onAgentFull: (Boolean) -> Unit = {},
     crash: CrashReport? = null,
     onCrashHandled: () -> Unit = {},
+    /** 导出一局的攻关档案（库页选中的那局） */
+    onExportGamespec: ((String) -> Unit)? = null,
 ) {
     NxTheme {
         // 界面语言：整棵树读同一份资源，玩家在设置里换语言时这里跟着换
@@ -221,6 +252,7 @@ fun AppRoot(
             val onboardingViewModel: OnboardingViewModel = hiltViewModel()
             val onboardingUiState by onboardingViewModel.uiState.collectAsStateWithLifecycle()
             val environmentCheckViewModel: EnvironmentCheckViewModel = hiltViewModel()
+            val envBuildViewModel: EnvBuildViewModel = hiltViewModel()
             // 开源声明：引导走完的那一刻弹一次，老用户（早已完成引导）升级后第一次启动也弹；记在 prefs 里，只此一次
             LaunchedEffect(onboardingUiState.active) {
                 if (!onboardingUiState.active
@@ -244,14 +276,20 @@ fun AppRoot(
                         port,
                         library,
                         onboarding,
+                        envBuildViewModel.build,
                         drivers,
                         environmentSetup,
                         actions,
                         startTab,
                         launchBuildId,
                         padController = padController,
+                        agentSetup = agentSetup,
+                        agentState = agentState,
+                        pageState = pageState,
                         padCenterOpen = padCenterOpen,
                         onPadCenter = onPadCenter,
+                        agentFullOpen = agentFullOpen,
+                        onAgentFull = onAgentFull,
                         outerOverlayOpen = outerOverlayOpen,
                         onRequest = { pickerReq = it },
                         onDrivers = { driversOpen = true },
@@ -259,67 +297,77 @@ fun AppRoot(
                                 onEnvCheck = { envCheckOpen = true },
                         crash = crash,
                         onCrashHandled = onCrashHandled,
+                        onExportGamespec = onExportGamespec,
                     )
                 }
-                val volumes = remember(ctx, locale.mode) { StorageVolumes.list(ctx, locale) }
-                pickerReq?.let { req ->
-                    Box(Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.45f))) {
-                        if (!actions.storageOk()) {
-                            // 内置文件管理器读不了没有全文件访问的存储：给授权入口
-                            Column(
-                                Modifier
-                                    .fillMaxSize()
-                                    .padding(24.dp),
-                                verticalArrangement = Arrangement.spacedBy(
-                                    12.dp,
-                                    Alignment.CenterVertically
-                                ),
+            val volumes = remember(ctx, locale.mode) { StorageVolumes.list(ctx, locale) }
+            pickerReq?.let { req ->
+                Box(Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.45f))) {
+                    if (!actions.storageOk()) {
+                        // 内置文件管理器读不了没有全文件访问的存储：给授权入口
+                        Column(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(
+                                12.dp,
+                                Alignment.CenterVertically
+                            ),
+                        ) {
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                stringResource(R.string.app_storage_permission_needed),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                stringResource(R.string.app_storage_permission_picker),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Spacer(Modifier.weight(1f))
-                                Text(
-                                    stringResource(R.string.app_storage_permission_needed),
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    stringResource(R.string.app_storage_permission_picker),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Spacer(Modifier.weight(1f))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Spacer(Modifier.weight(1f))
-                                    QuietButton(
-                                        stringResource(R.string.common_cancel),
-                                        onClick = { pickerReq = null })
-                                    CapsuleButton(
-                                        stringResource(R.string.app_grant_permission),
-                                        onClick = {
-                                            pickerReq = null
-                                            actions.onAskStorage()
-                                        })
-                                }
+                                QuietButton(
+                                    stringResource(R.string.common_cancel),
+                                    onClick = { pickerReq = null })
+                                CapsuleButton(
+                                    stringResource(R.string.app_grant_permission),
+                                    onClick = {
+                                        pickerReq = null
+                                        actions.onAskStorage()
+                                    })
                             }
-                        } else {
-                            FilePickerScreen(
-                                req = req,
-                                volumes = volumes,
-                                onPicked = { f ->
-                                    pickerReq = null
-                                    req.onPicked(f)
-                                },
-                                onCancel = { pickerReq = null },
-                            )
                         }
+                    } else {
+                        FilePickerScreen(
+                            req = req,
+                            volumes = volumes,
+                            onPicked = { f ->
+                                pickerReq = null
+                                req.onPicked(f)
+                            },
+                            onCancel = { pickerReq = null },
+                        )
                     }
                 }
+            }
                 // 驱动页：盖住整屏，在页面之外
                 if (driversOpen) {
                     DriverRoute(onClose = { driversOpen = false })
+                }
+                // 环境的重建：跳不过去的弹框，盖住所有页面（环境没好之前没什么可用的）
+                val envBuild = envBuildViewModel.build
+                if (envBuild.running || envBuild.error.isNotEmpty()) {
+                    EnvBuildDialog(
+                        progress = envBuild.progress,
+                        error = envBuild.error,
+                        onRetry = { envBuild.retry() },
+                    )
                 }
                 // 环境检查清单：顶栏胶囊点开的，盖住整屏
                 if (envCheckOpen) {
@@ -448,12 +496,17 @@ private fun OpenSourceNoticeDialog(onClose: () -> Unit, onRepo: () -> Unit) {
 @Composable
 fun MainScreen(
     prefs: PrefsStore, locale: AppLocale, port: PortState, library: LibraryState,
-    onboarding: OnboardingState, drivers: DriverRepository,
+    onboarding: OnboardingState, envBuild: EnvBuildState, drivers: DriverRepository,
     environmentSetup: EnvironmentSetup, actions: AppActions, startTab: Int,
     launchBuildId: String,
     padController: PadCenterController,
+    agentSetup: AgentSetup,
+    agentState: AgentConversationState,
+    pageState: PageStateStore,
     padCenterOpen: Boolean,
     onPadCenter: (Boolean) -> Unit,
+    agentFullOpen: Boolean = false,
+    onAgentFull: (Boolean) -> Unit = {},
     outerOverlayOpen: Boolean = false,
     onRequest: (PickerRequest) -> Unit,
     onDrivers: () -> Unit,
@@ -461,6 +514,8 @@ fun MainScreen(
     onEnvCheck: () -> Unit,
     crash: CrashReport? = null,
     onCrashHandled: () -> Unit = {},
+    /** 导出一局的攻关档案（库页选中的那局） */
+    onExportGamespec: ((String) -> Unit)? = null,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(startTab) }
     // 设置是一整页，盖住顶栏与下面的页面：从顶栏的设置图标进来，关掉才回到底下的页面
@@ -472,9 +527,18 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     // 常见问题：也是一整页，从顶栏设置旁边的那个图标进来
     var faqOpen by remember { mutableStateOf(false) }
+    // 助手的侧面板：从悬浮球进来（悬浮球自己也是这层画的），盖在页面内容的右缘。
+    // 面板是横屏原生的：它不转竖屏，只有面板里的「展开详聊」才进竖屏的全屏页
+    var agentPanelOpen by remember { mutableStateOf(false) }
+    // 抽屉第一次打开之后就一直留在组合里（滚动位置与排版缓存都在），冷启动时先不组合它——
+    // 组合里没有位置可保（第一次打开本来就没有），省下的却是真金白银的启动开销
+    var agentEverOpened by rememberSaveable { mutableStateOf(false) }
     // 档案的处理弹窗：在线更新还是本地导入。构建页的「去导入」叫醒它。
     // 它盖住整屏，所以画在这一层（页面里画的遮罩只盖得到顶栏下面那一条缝）
     var profilesOpen by remember { mutableStateOf(false) }
+    // The list of the games the porter knows: a full cover too (the top bar is under it), and the
+    // builds page only reports the intent — a cover drawn in the page covers the strip under the top bar
+    var gameListOpen by remember { mutableStateOf(false) }
     // 手柄中心：从顶栏的手柄按钮进来，盖住整屏（跟设置页一样）。开着不开着是活动那边
     // 的一份（分发层也要知道：手柄的键该进中心还是进页面）
     val padDevices by GamepadScan.devices.collectAsStateWithLifecycle()
@@ -483,7 +547,8 @@ fun MainScreen(
     // 手柄导航归谁：谁在最上面，谁拿走手柄。
     // 手柄中心开着的时候，手柄的键进中心（活动层就不发了），外面还盖着东西的时候也一样。
     val navHost = when {
-        outerOverlayOpen || padCenterOpen || profilesOpen -> NavHost.NONE
+        outerOverlayOpen || padCenterOpen || profilesOpen || gameListOpen -> NavHost.NONE
+        agentFullOpen -> NavHost.AGENT
         settingsOpen -> NavHost.SETTINGS
         faqOpen -> NavHost.FAQ
         lib.selected != null -> NavHost.PANEL
@@ -510,12 +575,21 @@ fun MainScreen(
     val updateViewModel: UpdateViewModel = hiltViewModel()
     val environmentCheckViewModel: EnvironmentCheckViewModel = hiltViewModel()
     val environmentCheckUiState by environmentCheckViewModel.uiState.collectAsStateWithLifecycle()
+    val agentSettingsViewModel: AgentSettingsViewModel = hiltViewModel()
     val installedDrivers by drivers.drivers.collectAsStateWithLifecycle()
+    // 助手准备好了才有入口：开关、引擎与模型都齐了才是
+    val agentReady = agentSetup.ready
+    // 引擎随环境来：环境换过（新装的、覆盖安装的），助手的事实要重读一遍，入口才跟着出现
+    LaunchedEffect(environmentCheckViewModel.checks.preparing) {
+        if (!environmentCheckViewModel.checks.preparing) agentSetup.refresh()
+    }
 
     // 选中游戏的背景铺满整块屏幕：顶栏透明画在图上，三个 tab 共用这层背景
+    // agent 抽屉的磨砂：页面这两层被抽屉捕获做背景模糊（hazeSource → hazeBlur）
+    val agentHaze = rememberHazeState()
     Box(Modifier.fillMaxSize()) {
-        HeroBackground(lib.visible().getOrNull(lib.heroIndex))
-        Column(Modifier.fillMaxSize()) {
+        HeroBackground(lib.visible().getOrNull(lib.heroIndex), Modifier.hazeSource(agentHaze))
+        Column(Modifier.fillMaxSize().hazeSource(agentHaze)) {
             TopBar(
                 selected = tab,
                 onSelect = { tab = it.ordinal },
@@ -530,6 +604,19 @@ fun MainScreen(
             )
             // 有新版本时的弹框：冷启动查到了新版本才出现
             UpdatePopup(updateViewModel)
+            // 助手的引导框：排在更新框之后（两个框不叠在一起），助手还没配好时每个版本问一次
+            val updateState by updateViewModel.uiState.collectAsStateWithLifecycle()
+            val updateShowing = updateState.phase == UpdatePhase.AVAILABLE && !updateState.later
+            if (!updateShowing && agentSetup.shouldIntroduce && prefs.bool(PrefsStore.OB_COMPLETED)) {
+                AgentIntroDialog(
+                    onOpenSettings = {
+                        agentSetup.markIntroduced()
+                        settingsSection = SettingsSection.AGENT
+                        settingsOpen = true
+                    },
+                    onDismiss = { agentSetup.markIntroduced() },
+                )
+            }
             Box(Modifier.weight(1f)) {
                 when (Tab.entries[tab]) {
                     Tab.LIBRARY -> LibraryRoute(
@@ -537,6 +624,9 @@ fun MainScreen(
                         onGoBuilds = {
                             buildsViewModel.setTarget(lib.buildsTarget); tab = Tab.BUILDS.ordinal
                         }, onRequest = onRequest,
+                        // 助手的入口由页面自己画（右下角，不拖）：这一层只报意图
+                        onOpenAgent = { agentPanelOpen = true },
+                        agentVisible = agentReady,
                         navActive = navHost == NavHost.LIBRARY
                     )
 
@@ -549,6 +639,10 @@ fun MainScreen(
                         onLog,
                         // 档案的弹框盖整屏，所以画在这一层：页面只报意图
                         onOpenProfiles = { profilesOpen = true },
+                        // The list of the games covers the whole screen too: it is drawn here, not in the page
+                        onOpenGameList = { gameListOpen = true },
+                        onOpenAgent = { agentPanelOpen = true },
+                        agentVisible = agentReady,
                     )
                 }
             }
@@ -573,6 +667,9 @@ fun MainScreen(
                     onGoBuilds = {
                         buildsViewModel.setTarget(lib.buildsTarget); tab = Tab.BUILDS.ordinal
                     }, onRequest = onRequest,
+                    // 面板盖住页面的右下角，所以入口由面板自己带
+                    onOpenAgent = { agentPanelOpen = true },
+                    agentVisible = agentReady,
                     onClose = { lib.selected = null },
                     navActive = navHost == NavHost.PANEL
                 )
@@ -609,8 +706,8 @@ fun MainScreen(
         // 设置页：盖住整屏（顶栏也在下面），关掉才回到底下的页面
         if (settingsOpen) {
             SettingsScreen(
-                onboarding, installedDrivers, drivers, updateViewModel,
-                storageViewModel, actions,
+                onboarding, envBuild, installedDrivers, drivers, updateViewModel,
+                storageViewModel, agentSettingsViewModel, actions,
                 onRequest, onDrivers,
                 section = settingsSection, onSelectSection = { settingsSection = it },
                         onClose = { settingsOpen = false },
@@ -623,6 +720,87 @@ fun MainScreen(
                 onClose = { faqOpen = false },
                 navActive = navHost == NavHost.FAQ
             )
+        }
+        // The assistant's chat page: also a full cover, and portrait while it is open (the activity turns
+        // the screen for it). It is the assistant's "read and type" room — the quick surface is the side
+        // panel with the floating ball, drawn further down
+        if (agentFullOpen) {
+            AgentScreen(
+                conversation = agentState,
+                onClose = { onAgentFull(false) },
+                onOpenSettings = {
+                    onAgentFull(false)
+                    settingsSection = SettingsSection.AGENT
+                    settingsOpen = true
+                },
+                navActive = navHost == NavHost.AGENT,
+                // 修好了之后「去跑一下」：按 title ID 回到游戏页
+                onRunGame = { titleId -> actions.onRunByTitleId(titleId) },
+            )
+        }        // The assistant's side panel: it docks on the right edge over the page's own content and takes
+        // taps — the page beneath keeps its gamepad keys. The entry that opens it is the page's own button
+        // (bottom right, pinned — the pages draw it, so it never floats over another page's content). The
+        // rail's quick questions follow the page the player is on (the light version of the context-aware
+        // chips — the assistant reads the page state snapshot itself, so the chips need nothing extra)
+        val agentChips = when (Tab.entries[tab]) {
+            Tab.LIBRARY -> listOf(R.string.agent_chip_crash, R.string.agent_chip_no_build, R.string.agent_chip_playable)
+            Tab.BUILDS -> listOf(R.string.agent_chip_build_fail, R.string.agent_chip_build_log, R.string.agent_chip_build_why)
+            else -> listOf(R.string.agent_chip_save_backup, R.string.agent_chip_env)
+        }
+        // 助手看得见的页面状态：写进一份快照文件，它自己读（不夹带在玩家的话里）。
+        // 最近一次构建与构建阶段是全局事实：「构建失败/无法构建」从哪一页都会问出来。
+        val hero = lib.visible().getOrNull(lib.heroIndex)
+        val buildGame = buildsViewModel.gameInfo.info
+        val lastRecord = port.history.firstOrNull()
+        LaunchedEffect(
+            tab, hero?.titleId, buildGame?.titleId,
+            port.phase, port.stageOf, port.stages, port.stageName,
+            lastRecord?.id, lastRecord?.phase,
+        ) {
+            val facts = PageFacts.builds(
+                stage = if (port.running) "${port.stageOf}/${port.stages} ${port.stageName}".trim() else null,
+                last = lastBuildOf(port, lastRecord, lib, AppPaths(padCtx).nxHome),
+            )
+            val state = when (Tab.entries[tab]) {
+                Tab.LIBRARY -> PageState("library", hero?.titleId.orEmpty(), hero?.label.orEmpty(), facts)
+                Tab.BUILDS -> PageState("builds", buildGame?.titleId.orEmpty(), buildGame?.name.orEmpty(), facts)
+            }
+            pageState.setMain(state)
+        }
+        // The drawer stays in the tree and slides out of the screen when it closes: the scroll
+        // position, the laid-out markdown and the half-typed words are still there when it comes back.
+        // Before the first open there is nothing to keep, so it is not composed at all — the cold
+        // start does not pay for a 700dp sheet nobody has opened yet.
+        LaunchedEffect(agentPanelOpen) { if (agentPanelOpen) agentEverOpened = true }
+        if (agentEverOpened) {
+            AgentDrawerHost(
+                open = agentPanelOpen && !agentFullOpen,
+                conversation = agentState,
+                chips = agentChips,
+                haze = agentHaze,
+                onCollapse = { agentPanelOpen = false },
+                onExpand = {
+                    agentPanelOpen = false
+                    onAgentFull(true)
+                },
+                onOpenSettings = {
+                    agentPanelOpen = false
+                    settingsSection = SettingsSection.AGENT
+                    settingsOpen = true
+                },
+                // 导出选中的那局的档案：那一局是页面状态里写着的那一局
+                onExportGamespec = onExportGamespec?.let { export ->
+                    { val tid = pageState.current().titleId; if (tid.isNotBlank()) export(tid) }
+                },
+                // 修好了之后「去跑一下」：按 title ID 回到游戏页
+                onRunGame = { titleId -> actions.onRunByTitleId(titleId) },
+            )
+        }
+        // The list of the games the porter knows: a full cover, drawn above the page and the top bar
+        // (the builds page reports the intent, a cover drawn in the page reaches only the strip under
+        // the top bar). Closed with the system back key, the pad's back key, or the close button.
+        if (gameListOpen) {
+            SupportedGamesOverlay(onClose = { gameListOpen = false })
         }
         // 导入的说明框：顶栏那个加号先进这里，框里的按钮再去选文件夹
         if (importPackHelp) {
@@ -761,6 +939,7 @@ private fun TopBar(
         TopIcon(Icons.Filled.Settings, stringResource(R.string.app_tab_settings), onSettings)
         // 常见问题：也是一整页，紧挨着设置图标
         TopIcon(Icons.Filled.HelpOutline, stringResource(R.string.app_faq), onFaq)
+        // The assistant: its chat page, also a full cover (the screen turns portrait for it)
         // 按钮簇到这里结束：环境状态胶囊是状态不是按钮，隔开一点
         Spacer(Modifier.width(6.dp))
         EnvChip(chip, onChip)

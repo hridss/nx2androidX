@@ -200,6 +200,23 @@ class DataPack(unittest.TestCase):
         finally:
             shutil.rmtree(t, ignore_errors=True)
 
+    def test_the_pack_reports_the_bytes_it_writes(self):   # the app's bar during the data pack: (what, done, total) over the pack's own bytes
+        t = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_'))
+        try:
+            (t / 'patched').mkdir(); (t / 'patched/main.patched.bin').write_bytes(b'x' * 10)
+            (t / 'romfs').mkdir(); (t / 'romfs/a.bin').write_bytes(b'y' * 20)
+            (t / 'shaders.dmsv').write_bytes(b'DMSV')
+            seen = []
+            man = datapack.build(t / 'out-data', profile=profiles.load(NEO), version='v196608', display='1.03',
+                                 patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv',
+                                 progress=lambda what, done, total: seen.append((what, done, total)))
+            self.assertTrue(all(total == man['bytes'] for _, _, total in seen))   # one total for the whole pack
+            self.assertEqual([d for _, d, _ in seen], sorted(d for _, d, _ in seen))   # never backwards
+            self.assertEqual(seen[-1][1], man['bytes'])   # the last report is the whole pack
+            self.assertLess(seen[0][1], man['bytes'])     # it starts before the bytes are all there
+        finally:
+            shutil.rmtree(t, ignore_errors=True)
+
     def test_the_manifest_records_player_api_revision(self):
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_'))
         try:
@@ -819,11 +836,11 @@ class Dumps(unittest.TestCase):   # porter/dumps.py: NSZ / XCZ → NSP; an NCZ m
 
     def nsz(self, ncz, name='g.nsz'):
         files = [(self.name + '.ncz', ncz), ('0100000000aaa0000000000000000000.tik', b't' * 0x2c0)]
-        hdr = self.dumps._pfs0_header([n for n, _ in files], [len(d) for _, d in files])
+        hdr = self.dumps.pfs0_header([n for n, _ in files], [len(d) for _, d in files])
         (self.d / name).write_bytes(hdr + b''.join(d for _, d in files)); return self.d / name
 
     def check(self, src):
-        self.assertEqual(self.dumps.size(src), len(self.dumps._pfs0_header([self.name + '.nca', 'x' * 36], [0, 0])) + len(self.nca) + 0x2c0)
+        self.assertEqual(self.dumps.size(src), len(self.dumps.pfs0_header([self.name + '.nca', 'x' * 36], [0, 0])) + len(self.nca) + 0x2c0)
         out = self.dumps.decompress(src, self.d / self.dumps.unpacked_name(src))
         self.assertEqual(out.stat().st_size, self.dumps.size(src)); self.assertEqual(out.stat().st_mtime_ns, src.stat().st_mtime_ns)
         with open(out, 'rb') as f: got = {n: (f.seek(o), f.read(s))[1] for n, o, s in self.dumps.entries(out)}
@@ -1147,7 +1164,7 @@ class SubfolderScan(unittest.TestCase):   # the updates and the DLC in a subfold
             string += len(n) + 1
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(dumps._pfs0_header([n for n, _ in files], [len(d) for _, d in files]) + b''.join(d for _, d in files))
+        path.write_bytes(dumps.pfs0_header([n for n, _ in files], [len(d) for _, d in files]) + b''.join(d for _, d in files))
         return path
 
     def test_the_dlc_in_a_subfolder_is_taken(self):

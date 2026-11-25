@@ -20,4 +20,17 @@ class AppPaths @Inject constructor(
     val ports = File(files, "ports")
     val work = File(files, "work")
     val runtimes = File(files, "runtimes")   // the games' runtimes, one folder per title ID (the launch loads it in place)
+
+    /**
+     * The assistant's own folder, inside the player's nx2android folder ([nxHome]): the engine, its own
+     * home, the models and the conversations.
+     *
+     * It lives there because the environment's rebuild throws away [rootfs], [tool] and the engine's own
+     * folder ([agentRuntime]) and nothing else: what the player has (the imported profiles, the build
+     * products, the NuGet cache) stays, and the assistant's data belongs beside it.
+     */
+    val agent = AgentLayout.agentDir(nxHome)
+    val agentRuntime = AgentLayout.runtimeDir(agent)   // the engine binary and the manifest that says which one it is
+    val agentWorkspace = AgentLayout.workspaceDir(agent) // the rendered conversations, the memory
+    val agentModels = AgentLayout.modelsFile(agent) // the model profiles (the keys are encrypted)
 }

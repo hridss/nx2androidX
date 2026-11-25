@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""The parts of README.md and docs/PORT_CHECKLIST.md that come from the game profiles, made from them (pull requests that add a game edit only its profile):
-  README.md, Games: the table of games, one cell for each profile whose android.tsv has readme_* rows (readme_image, readme_tag, readme_note; readme_name when
-                    the table names the game otherwise than game.tsv), in name order, two to a row.
+"""The parts of the READMEs and docs/PORT_CHECKLIST.md that come from the game profiles, made from them (pull requests that add a game edit only its profile):
+  README.md / README.zh.md, the games gallery: the table of games, one cell for each profile whose android.tsv has readme_* rows (readme_image, readme_tag,
+                    readme_note; readme_name when the table names the game otherwise than game.tsv), in name order, two to a row. A cell shows the name and
+                    its facts; the picture is not shown (the screenshot still decides which games the gallery lists).
+  README.md / README.zh.md, the counts: the numbers in the table at the top of the page (the ports and their states, the games in the gallery). Each one is a slot
+                    (<!-- count:ported --> … <!-- /count -->) in the page's own table; the words around it are the page's own, the numbers are made here.
   docs/PORT_CHECKLIST.md: the list of the games the porter knows: a row for every profile in the tree, checked when the profile has an android.tsv, and the count with it.
                     The list was written by hand and drifted from the tree (the profiles grew: upstream's synced in bulk, ports added), so it is made from the profiles now.
-    python docs/gen_tables.py           write both files
+    python docs/gen_tables.py           write the files
     python docs/gen_tables.py --check   exit 1 when a file is not what the profiles make (tests/test_docs_tables.py runs it)
 """
 import json, re, subprocess, sys, textwrap
@@ -16,6 +19,9 @@ import android_profile   # noqa: E402
 
 BEGIN = '<!-- games table: made by docs/gen_tables.py from the readme_* rows of each android.tsv; edit those, not this table -->'
 END = '<!-- end of the games table -->'
+
+# The counts in the READMEs' own tables: the number is made from the profiles, the words around it are the page's own.
+COUNT_SLOT = re.compile(r'(<!-- count:([a-z_]+) -->)(.*?)(<!-- /count -->)', re.S)
 
 GH_REPO = 'zFitness/nx2androidX'
 CREDITS_CACHE = REPO / '.cache' / 'gen_tables_credits.json'
@@ -32,11 +38,15 @@ ON_ANDROID_LOWER = {name.strip().lower() for name in ON_ANDROID}
 
 
 def cells():
+    """The gallery's cells: one per profile that has a screenshot in the repository, in name order. The cell shows
+    the name and its facts only — the page carries no game pictures; the screenshot still decides who is listed."""
     out = []
     for g, p in android_profile.all_profiles():
         if not p or not p.get('readme_tag'): continue
+        img = p.get('readme_image')
+        if not img or not (REPO / img).is_file(): continue   # membership: the gallery lists the games a screenshot exists for, though the page shows none
         name = p.get('readme_name') or g.get('name', g.id)
-        out.append((name, f"![{name}]({p.get('readme_image')})<br>{name}<br><sub>`{p.get('readme_tag')}` · {p.get('readme_note')}</sub>"))
+        out.append((name, f"{name}<br><sub>`{p.get('readme_tag')}` · {p.get('readme_note')}</sub>"))
     out.sort(key=lambda c: c[0].casefold())
     return [c for _, c in out]
 
@@ -49,12 +59,40 @@ def readme_table():
     return '\n'.join(rows)
 
 
+def counts():
+    """The numbers the READMEs show: the ports and their states, and the games with a screenshot."""
+    rs = rows()
+    ported = [r for r in rs if r['status']]
+    states = {}
+    for r in ported:
+        states[r['status']] = states.get(r['status'], 0) + 1
+    out = {'ported': f"{len(ported)} / {len(rs)}", 'gallery': str(len(cells()))}
+    out.update({s: str(n) for s, n in sorted(states.items())})
+    return out
+
+
+def fill_counts(text, values):
+    """The numbers in the slots: the ones the profiles make, the rest left as they are."""
+    return COUNT_SLOT.sub(lambda m: m.group(1) + values.get(m.group(2), m.group(3)) + m.group(4), text)
+
+
+def readme_gaps(text, values):
+    """What a README still lacks: the gallery's markers and a slot for every number."""
+    gaps = []
+    if BEGIN not in text or END not in text: gaps.append('the games table markers')
+    names = set(re.findall(r'<!-- count:([a-z_]+) -->', text))
+    for name in values:
+        if name not in names: gaps.append(f'the count:{name} slot')
+    return gaps
+
+
 def readme(text, resolve=False):
-    # this line's README keeps no games table (the list lives upstream, docs/DEVELOPMENT_GUIDE.md "Adding a game"):
-    # without the markers there is nothing to write here; with them (upstream's README shape) the table is made as there
-    if BEGIN not in text or END not in text: return None
-    a = text.index(BEGIN) + len(BEGIN); b = text.index(END)
-    return text[:a] + '\n' + readme_table() + '\n' + text[b:]
+    """The README's own generated parts: the games gallery and the counts."""
+    out = text
+    if BEGIN in out and END in out:
+        a = out.index(BEGIN) + len(BEGIN); b = out.index(END)
+        out = out[:a] + '\n' + readme_table() + '\n' + out[b:]
+    return fill_counts(out, counts())
 
 
 # ---- docs/PORT_CHECKLIST.md: the list of the games, made from the profiles ----
@@ -192,12 +230,16 @@ def checklist(text, resolve=False):
 
 def main(argv):
     check = '--check' in argv; bad = []
-    for path, make in ((REPO / 'README.md', readme), (REPO / 'docs/PORT_CHECKLIST.md', checklist)):
+    values = counts()
+    for path, make in ((REPO / 'README.md', readme), (REPO / 'README.zh.md', readme), (REPO / 'docs/PORT_CHECKLIST.md', checklist)):
         old = path.read_text(encoding='utf-8'); new = make(old, not check)
+        if path.name.startswith('README'):
+            gaps = readme_gaps(old, values)
+            if gaps: bad.append(f"{path.relative_to(REPO)} (missing {', '.join(gaps)})")
         if new is None or new == old: continue
         if check: bad.append(str(path.relative_to(REPO)))
         else: path.write_text(new, encoding='utf-8', newline='\n'); print(f'wrote {path.relative_to(REPO)}')
-    if bad: print('not what the profiles make: ' + ', '.join(bad) + ' (run python docs/gen_tables.py)'); return 1
+    if bad: print('not what the profiles make: ' + '; '.join(bad) + ' (run python docs/gen_tables.py)'); return 1
     return 0
 
 

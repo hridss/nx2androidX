@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="980" viewBox="0 0 1800 980" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L10,3.5 z" fill="#8b939f"/>
+    </marker>
+    <style>
+      .bg { fill: #14161a; }
+      .box { fill: #1d2027; stroke: #3d434c; stroke-width: 1.6; }
+      .kb  { fill: #2a2318; stroke: #c89b4a; stroke-width: 1.8; }
+      .q   { fill: #1a2333; stroke: #4c7bd6; stroke-width: 1.8; }
+      .t  { fill: #e9ecf2; font-size: 20px; }
+      .tb { fill: #e9ecf2; font-size: 21px; font-weight: 600; }
+      .ts { fill: #a9b2bf; font-size: 16px; }
+      .tk { fill: #e3bd78; font-size: 16px; }
+      .tm { fill: #93b7f2; font-size: 16px; }
+      .arrow { stroke: #8b939f; stroke-width: 2; fill: none; marker-end: url(#arw); }
+      .label { fill: #99a2ae; font-size: 15px; }
+      .mono { fill: #8fd6a4; font-family: Menlo, Consolas, monospace; font-size: 15px; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="980"/>
+
+  <text class="tb" x="60" y="58">The knowledge base: 387 upstream pull requests, distilled by hand</text>
+  <text class="ts" x="60" y="88">It ships inside the app, so the phone can search it with no network at all — which is the point: the phone usually cannot reach GitHub.</text>
+
+  <!-- left: the source -->
+  <rect class="box" x="60" y="150" width="420" height="200" rx="12"/>
+  <text class="tb" x="84" y="188">the source</text>
+  <text class="ts" x="84" y="220">387 pull requests across the two</text>
+  <text class="ts" x="84" y="244">upstream projects: the failures they</text>
+  <text class="ts" x="84" y="268">fixed, the evidence that named them,</text>
+  <text class="ts" x="84" y="292">and the layer each fix belongs to</text>
+  <text class="ts" x="84" y="326">read, sorted and written down by hand</text>
+
+  <path class="arrow" d="M480,250 L540,250"/>
+
+  <!-- middle: the documents -->
+  <rect class="kb" x="540" y="150" width="560" height="560" rx="12"/>
+  <text class="tb" x="564" y="188">five documents and an index</text>
+  <text class="ts" x="564" y="222">build-failures.md — the build that stops at a stage</text>
+  <text class="ts" x="564" y="262">shader-split.md — the split that finds too few shaders</text>
+  <text class="ts" x="564" y="302">runtime-symptoms.md — crash, black screen, garble, freeze</text>
+  <text class="ts" x="564" y="342">device-findings.md — what it looks like on a phone, the first</text>
+  <text class="ts" x="580" y="364">move, and the dead ends that were ruled out</text>
+  <text class="ts" x="564" y="404">porting-method.md — how to measure a title, read a crash</text>
+  <text class="ts" x="580" y="426">report, and where a fix belongs</text>
+  <text class="ts" x="564" y="466">case-index.tsv — every case, one row, searchable</text>
+  <text class="ts" x="564" y="506">scripts/kb_search.py — the search itself</text>
+  <text class="tk" x="564" y="556">each case says: the symptom, the causes in order, what</text>
+  <text class="tk" x="564" y="578">tells them apart, which layer owns the fix, and whether</text>
+  <text class="tk" x="564" y="600">this fork already has it</text>
+  <text class="ts" x="564" y="644">The knowledge base is written by a person, on a computer.</text>
+  <text class="ts" x="564" y="668">The player's own cases are the other half: they live on the</text>
+  <text class="ts" x="564" y="692">phone, and they are found by the same search.</text>
+
+  <path class="arrow" d="M1100,430 L1160,430"/>
+
+  <!-- right: a question -->
+  <rect class="q" x="1160" y="150" width="600" height="330" rx="12"/>
+  <text class="tb" x="1184" y="188">a question, answered offline</text>
+  <text class="tm" x="1184" y="226">"the screen stays black after the intro movie"</text>
+  <text class="ts" x="1184" y="262">→ the host drives one audio renderer, and this game opens</text>
+  <text class="ts" x="1200" y="284">a second one for its movies: its event never fires, the</text>
+  <text class="ts" x="1200" y="306">game waits inside the movie, the scene stops drawing</text>
+  <text class="ts" x="1184" y="340">→ the evidence: 131 draws per frame became 2, and the log</text>
+  <text class="ts" x="1200" y="362">says a second renderer was refused</text>
+  <text class="ts" x="1184" y="396">→ the fix belongs to the engine, not to this game's profile</text>
+  <text class="ts" x="1184" y="430">→ the case is in the index; the upstream has one too</text>
+  <text class="ts" x="1184" y="464">no network was used for any of it</text>
+
+  <rect class="box" x="1160" y="510" width="600" height="200" rx="12"/>
+  <text class="tb" x="1184" y="548">why this is the interesting part</text>
+  <text class="ts" x="1184" y="584">This knowledge was never rare — it was scattered across</text>
+  <text class="ts" x="1184" y="608">hundreds of pull requests, and it stayed there.</text>
+  <text class="ts" x="1184" y="632">Bringing a game up meant reading the crash, finding the</text>
+  <text class="ts" x="1184" y="656">layer and writing the fix: an evening per game, per</text>
+  <text class="ts" x="1184" y="680">person, and only for the people who could do that.</text>
+  <text class="tk" x="1184" y="700">Now it is on every phone that installs the app.</text>
+
+  <!-- bottom band -->
+  <rect class="box" x="60" y="740" width="1700" height="190" rx="12"/>
+  <text class="tb" x="84" y="780">what it costs, and what it asks of you</text>
+  <text class="ts" x="84" y="816">The knowledge base is a set of text files in the app. It is not a model, it does not run on your phone, and it costs nothing.</text>
+  <text class="ts" x="84" y="846">The model is yours: the app asks for a provider, a model and a key, and the key stays on the phone. A cheap model is enough for most cases.</text>
+  <text class="ts" x="84" y="876">Adding to it is a normal pull request: one document, one case row, one sentence about the evidence. The maintainer reads it the way every other fix is read.</text>
+  <text class="ts" x="84" y="906">The upstream's pull requests are the source; a case that is not in the index yet is a case the next phone cannot find. That is the whole contribution loop.</text>
+</svg>

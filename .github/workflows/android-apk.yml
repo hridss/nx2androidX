@@ -58,6 +58,7 @@ jobs:
             packaging/android-apk/.cache/toolchain
             packaging/android-apk/.cache/debs
             packaging/android-apk/.cache/nuget
+            packaging/android-apk/.cache/pi-respack
           key: nx2a-android-payload-v1
       - name: the app's signing key
         run: |

@@ -1,0 +1,109 @@
+# The chooser has no blank issue entry (ISSUE_TEMPLATE/config.yml), so the web form cannot produce one. The API
+# can: an issue with nothing in it is not a report — the device, the app version and what happens are all missing.
+# Such an issue is closed with a pointer to the form that fits.
+#
+# A report that arrives with words in it is left alone, however it was written. A report that was closed here and
+# then filled in is reopened: the words are the report, not the way it was filed. The zip the app exports is a case
+# file: it stays, and it carries the label that queue is worked by.
+name: Blank issues
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  reject:
+    name: Close a blank issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = (issue.body || '').trim();
+            // A form submission carries the headings of the fields it was filled in.
+            const fromForm = body.startsWith('### ');
+            // The zip the app exports is the substance of a case file: it stays, and it is labelled.
+            const caseFile = /[0-9A-Fa-f]{16}-gamespec\.zip/.test(body);
+            // A link on its own is not a report: the attachment is a file, not a description.
+            const prose = body.replace(/\[[^\]]*\]\([^)]*\)/g, '').trim();
+            const hasWords = prose.length > 0;
+
+            if (caseFile) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['case file'],
+              });
+              return;
+            }
+
+            if (fromForm || hasWords) {
+              // It is a report. If it was closed here and now carries words, it is open again. The label is the
+              // mark this workflow leaves, so an issue closed for another reason stays closed.
+              const marked = (issue.labels || []).some((l) => l.name === 'invalid');
+              if (marked && issue.state === 'closed' && context.payload.action === 'edited') {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  state: 'open',
+                });
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  name: 'invalid',
+                });
+              }
+              return;
+            }
+
+            const forms = [
+              ['Case file', 'case_file.yml', 'a port exported from the app, with the case file zip'],
+              ['Bug report', 'bug_report.yml', 'something in the app, the tool or the runtime misbehaves'],
+              ['Game report', 'game_report.yml', 'a game runs on your device'],
+              ['Port request', 'port_request.yml', 'a game does not run yet'],
+              ['Documentation', 'docs_issue.yml', 'a document is wrong, missing or out of date'],
+            ];
+            const lines = forms.map(
+              ([name, file, what]) => `- [${name}](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/new?template=${file}) — ${what}`
+            );
+            const body_text = [
+              'This issue was closed: it carries no words, and a report needs more than a file.',
+              '',
+              'Every report starts from a form:',
+              '',
+              ...lines,
+              '',
+              'The zip is welcome — the *Case file* form takes it, and asks for the device, the app version and what',
+              'happens, which are the parts the zip cannot carry.',
+              '',
+              'Open the form, file the report, and close this one. Filling this issue in also works: it opens again on',
+              'its own.',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: body_text,
+            });
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              labels: ['invalid'],
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              state: 'closed',
+              state_reason: 'not_planned',
+            });

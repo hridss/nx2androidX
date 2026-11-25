@@ -1,0 +1,39 @@
+name: Question
+description: A question that fits no other form.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A question of your own. It is answered here, and the answer stays for the next person who asks it.
+
+        If the answer belongs in the repository, it goes into a document — the Documentation form is the way in.
+
+  - type: input
+    id: topic
+    attributes:
+      label: Topic
+      description: What the question is about, in one line.
+      placeholder: "the pause menu's gamepad tab on a tablet"
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: What you want to know, and what you have already tried.
+      placeholder: "The gamepad's buttons do not match the external controller. Is the layout editable, and where?"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before sending
+      options:
+        - label: I searched the existing issues for this one.
+          required: true
+        - label: No game file, key or data pack is attached here.
+          required: true

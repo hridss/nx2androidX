@@ -7,7 +7,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.nx.android.R
 import com.nx.android.data.AppLocale
-import com.nx.android.data.AppLog
 import com.nx.android.data.PortRunner
 import com.nx.android.data.PrefsStore
 import com.nx.android.domain.environment.EnvironmentSetup
@@ -26,7 +25,7 @@ import javax.inject.Singleton
 /**
  * The guided setup's state: the step the player is on, what each step gathered, and where "later" lands next
  * launch. The gates' rules are OnboardingLogic's (pure, tested); this class wires them to the machine — the
- * storage permission, the environment's unpack, the doctor's keys check — and remembers everything across
+ * storage permission, the environment's build, the doctor's keys check — and remembers everything across
  * restarts in the PrefsStore (its own ob.* keys; the tool's older keys stay untouched).
  */
 @Singleton
@@ -36,6 +35,7 @@ class OnboardingState @Inject constructor(
     private val guestLauncher: GuestProcessLauncher,
     private val locale: AppLocale,
     private val envCheck: EnvCheckState,
+    private val envBuild: EnvBuildState,
 ) {
     @Volatile var storageOk: Boolean = false
 
@@ -47,7 +47,7 @@ class OnboardingState @Inject constructor(
     var batteryOk by mutableStateOf(false)
 
     companion object {
-        /** The unpack writes about 700 MB (the rootfs, the build tools and the .NET runtime); a little headroom for the check */
+        /** The environment takes about 700 MB (the rootfs, the build tools and the .NET runtime); a little headroom for the check */
         const val NEEDED_GB = 1L
         /** The folder prod.keys usually lies in, on the phone's own storage (/sdcard/switch) */
         const val USUAL_KEYS_FOLDER = "switch"
@@ -66,14 +66,9 @@ class OnboardingState @Inject constructor(
     var keysDetail by mutableStateOf(""); private set
     var keysSkipped by mutableStateOf(false); private set
 
-    var unpacking by mutableStateOf(false); private set
-    var unpackStep by mutableStateOf(""); private set
-    var unpackError by mutableStateOf(""); private set
-
     /** Opens the flow: first run lands on Welcome; a setup that was cut short resumes at its saved step */
     fun open() {
         val saved = prefs.str(OB_STEP)
-        refreshEnv()
         keysPath = prefs.keys      // the settings page may have set a keys file since the last time
         step = OnboardingLogic.resume(saved, prefs.bool(OB_LATER), facts())
         active = true
@@ -109,7 +104,6 @@ class OnboardingState @Inject constructor(
 
     /** Arriving at a step sets it up (the keys prefill) */
     private fun enter() {
-        refreshEnv()
         when (step) {
             ObStep.KEYS -> prefillKeys()
             else -> {}
@@ -117,21 +111,18 @@ class OnboardingState @Inject constructor(
     }
 
     /**
-     * Whether the environment is ready: a copy the screens can watch. The environment is the truth (it asks
-     * the filesystem every time it is read), but a plain read cannot make a screen redraw itself, so the copy
-     * is refreshed wherever the environment can have changed.
+     * Whether the environment is ready. The environment is the truth (it asks the filesystem every time it is
+     * read), and the build's states are Compose states: when a build ends, they flip and every screen that
+     * reads this recomposes — and reads the filesystem again. A copy kept apart would go stale instead: the
+     * build's end does not know about this class, so nobody would refresh the copy.
      */
-    var envReady by mutableStateOf(env.ready); private set
+    val envReady: Boolean
+        get() = when {
+            envBuild.running -> false
+            envBuild.error.isNotEmpty() -> false
+            else -> env.ready
+        }
     val lastCheck: String get() = env.lastCheck
-
-    /** Throws the unpacked environment away: the next prepare does everything again */
-    fun resetEnv() {
-        Thread {
-            env.reset()
-            refreshEnv()
-            envCheck.refresh()
-        }.start()
-    }
 
     fun facts(): ObFacts = ObFacts(
         storageOk = storageOk, freeGB = freeGB(), neededGB = NEEDED_GB,
@@ -139,12 +130,7 @@ class OnboardingState @Inject constructor(
         batteryOk = batteryOk,
     )
 
-    /** The environment's readiness, read again: the screens watch the copy, not the filesystem */
-    private fun refreshEnv() {
-        envReady = env.ready
-    }
-
-    /** The free space where the environment is unpacked (the app's own, internal storage) */
+    /** The free space where the environment is built (the app's own, internal storage) */
     fun freeGB(): Long = try {
         Environment.getDataDirectory().let { StatFs(it.path).availableBytes } / (1024L * 1024L * 1024L)
     } catch (e: Exception) {
@@ -153,22 +139,12 @@ class OnboardingState @Inject constructor(
 
     // ---- the environment ---------------------------------------------------------------------------------------
 
+    /**
+     * The environment is built: the same build the app does when it brings another one. The progress and the
+     * failure are shown by the build's own dialog, over whatever screen is on.
+     */
     fun unpack() {
-        if (unpacking) return
-        unpacking = true
-        unpackError = ""
-        Thread {
-            try {
-                env.unpack { s -> unpackStep = s }
-                unpacking = false
-            } catch (e: Exception) {
-                unpacking = false
-                unpackError = "${e.javaClass.simpleName}: ${e.message}"
-                AppLog.line(locale.str(R.string.onb_prepare_failed, e.message))
-            }
-            refreshEnv()
-            envCheck.refresh()
-        }.start()
+        envBuild.start("the player asked for it")
     }
 
     // ---- the keys -----------------------------------------------------------------------------------------------
@@ -234,7 +210,7 @@ class OnboardingState @Inject constructor(
         keysChecking = true
         keysDetail = ""
         val buf = StringBuilder()
-        PortRunner(env, guestLauncher, locale) { line -> buf.appendLine(line) }.doctor(p, json = true) {
+        PortRunner(env, guestLauncher, locale::str) { line -> buf.appendLine(line) }.doctor(p, json = true) {
             keysChecking = false
             // the port reads the file: a file that cannot be read is not good keys
             if (!readable(p)) {

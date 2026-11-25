@@ -8,11 +8,19 @@
 [![Release](https://img.shields.io/github/v/release/zFitness/nx2androidX?style=flat&label=release)](https://github.com/zFitness/nx2androidX/releases/latest)
 [![License](https://img.shields.io/github/license/zFitness/nx2androidX?style=flat&label=license)](LICENSE)
 
+| 🎮 **Games ported** | 🗂️ **Games gallery** | 🤖 **AI assistant** | 📚 **Porting docs** |
+|:---:|:---:|:---:|:---:|
+| **<!-- count:ported -->80 / 194<!-- /count -->**<br><!-- count:playable -->65<!-- /count --> playable · <!-- count:experimental -->8<!-- /count --> experimental · <!-- count:wip -->4<!-- /count --> in progress · <!-- count:boots -->3<!-- /count --> boots<br>[the list](docs/PORT_CHECKLIST.md) | **<!-- count:gallery -->72<!-- /count -->** games shown<br>[the gallery](#games) | Runs on the phone itself<br>[the assistant](#the-assistant-is-in-the-app) | From the dump to the pull request<br>[the guide](docs/PORTING_GUIDE.md) |
+
 Port your own Switch games to Android, natively: the game's own arm64 code runs on the device, with the Switch's system services stood in for by a host and NVN graphics replayed on Vulkan. Pick the game's file, click **Port**, and get the game's data pack, which the nx2androidX app on the phone runs. Bring your own game files and keys; this repository holds no game content and no keys.
 
-This repository is nx2androidX, built on nx2android — the PC tool that ports a Switch game and packages the APK. nx2androidX moves that to the phone: give it the game's files and it compiles and runs them on the device itself, with no computer in the loop. The games that play on Android are listed upstream: [Games](#games).
+This repository is nx2androidX, built on nx2android — the PC tool that ports a Switch game and packages the APK. nx2androidX moves that to the phone: give it the game's files and it compiles and runs them on the device itself, with no computer in the loop.
 
 The app is the whole tool on the phone: it ports the game on the device and plays the pack it makes. The game files it shows are the player's own.
+
+![Four screens of the app: starting a port on the Builds tab, the assistant answering beside the game library, the in-game drawer's frame generation, and the Settings tab](docs/images/app-screens.png)
+
+*Top left: starting a port on the Builds tab; top right: the assistant answering beside the library — Red Dead Redemption, the game it fixed, is in it; bottom left: the in-game drawer's frame generation; bottom right: the Settings tab (language, environment, keys, Vulkan drivers).*
 
 **This repository's releases hold the phone app itself** (the APK, its file named after the version). The PC tool is released upstream, by nx2android; both routes are in [For players](#for-players-port-a-game-without-programming).
 
@@ -26,13 +34,12 @@ This branch closed the loop on "playing it on the phone": the app went from a pl
 
 Porting used to happen on the computer: install the tools, pick the file, click Port, copy the data pack back to the phone. Now the phone starts the port itself — pick a game file on the **Builds** tab, tap **Start a port**, the port runs in the background (the notification bar shows "Port progress"), the data pack lands in the app's own folder, and the game is playable from the library.
 
-![Four screens of the app: starting a port on the Builds tab, a game entry in the library, the in-game drawer's frame generation, and the Settings tab](docs/images/app-screens.png)
-
-*Top left: starting a port on the Builds tab; top right: a game entry in the library; bottom left: the in-game drawer's frame generation; bottom right: the Settings tab (language, environment, keys, Vulkan drivers).*
-
 The library got simpler too: it used to take a folder to be the library, and the scan behind it was recursive — one root directory was a long freeze. Now **the library only holds the games registered on the Builds tab**, the whole folder scan is gone, and an empty library shows one line of guidance instead of buttons.
 
 ### What the current release added
+
+<details>
+<summary>The features this release added</summary>
 
 | Feature | What it is |
 |---|---|
@@ -50,6 +57,8 @@ The library got simpler too: it used to take a folder to be the library, and the
 | **Update check on start** | The release page is checked quietly; a newer version says so on the home page, and the Settings tab can check again on demand |
 | **Shareable logs** | The library's drawer shares the game's runtime log; the Settings tab clears it |
 | **APK 460 MB → 272 MB** | The .NET on the phone went from the SDK to the runtime: the two C# tools are pre-built, so the phone only runs them, never builds them |
+
+</details>
 
 ### Onboarding
 
@@ -81,6 +90,59 @@ The driver a game runs with is picked in the library's drawer (**Vulkan driver**
 
 ---
 
+## The assistant is in the app
+
+The app carries an assistant. It runs on the phone itself, inside the same Linux environment the porting tools run in: it reads the game's log, the build's output and the library's state by itself, and it answers in the language the app is set to. It comes with the app — the only thing it needs from you is a model (the Settings tab takes a provider, a model and a key, and the key stays on the phone).
+
+Ask it why a game crashed, why a port would not build, or what is in the library. It goes and looks; it does not ask you for a screenshot.
+
+### More than one agent
+
+The assistant is a main session with sub-agents under it. A game that misbehaves is handed to a case worker, which owns that game's case file: the symptom, the cause, the proposed fix, and the files the fix touched. The workers that explore only read; a code change waits until the player confirms the plan. The skills it loads are written down, and they ship with the app:
+
+![How the assistant is put together: the app talks to a long-lived pi process over JSONL inside the app's own Linux environment, the environment reaches the player's own model API through an in-app proxy, and the knowledge base is loaded into the agent](docs/images/agent-architecture.png)
+
+| Skill | What it is for |
+|---|---|
+| `port-failures` | the upstream's pull requests, read and sorted into a diagnosis |
+| `inspect-game` | what a game's own files say about it |
+| `card-unpack` | the game cards the ports carry |
+| `environment-check` | whether the phone's environment is ready |
+| `cheats`, `cheat-crash` | the cheats a game takes, and the ones that crash it |
+
+### The knowledge it carries
+
+`port-failures` is the one worth knowing about: **over 400 upstream pull requests**, sorted into a diagnosis — the build that stops at a stage, the shader split that finds too few shaders, the crash, the black screen, the garbled picture, the freeze. Each case carries the evidence that named it and the layer that owns the fix (a rule in the engine, or one game's profile). It is offline: the phone's network often cannot reach GitHub at all, so the knowledge is on the device.
+
+That knowledge was never rare — it was scattered across hundreds of pull requests, and it stayed there. Bringing a game up meant reading the crash, finding the layer and writing the fix: an evening of reverse engineering, per game, per person. The cases are written down now, searchable, and on every phone that installs the app.
+
+### Games the assistant fixed
+
+| Game | What it fixed | Evidence | State |
+|---|---|---|---|
+| Teenage Mutant Ninja Turtles: Shredder's Revenge (`0100BB8017F24000`) | the game calls Epic's online SDK at start-up, and the host refused every SDK module — it died with a null online object; the SDK is now loaded when the profile asks for it | [the case branch](https://github.com/zFitness/nx2androidX/tree/case/0100BB8017F24000-tmnt) | playable; the profile is still the survey's provisional one |
+| Trails in the Sky 2nd Chapter (`0100E8B028B54000`) | the texture builder did not answer which storage it was given, so the tone map read zeros, `fmod(colour, 0)` was NaN, and the whole scene was black | [the case branch](https://github.com/zFitness/nx2androidX/tree/case/0100E8B028B54000-sky2nd) | the scene is not black any more |
+| Red Dead Redemption (`01007820196A6000`) | the game keeps its shaders in Rockstar's encrypted RPF6 archives, which the shader split could not read (0 shaders); and the game's movies open a second audio renderer, which the host did not drive, so the screen stayed black after the intro | [the case branch](https://github.com/zFitness/nx2androidX/tree/case/01007820196A6000-rdr) | the shader split passes with 3,628 shaders and the title screen comes back |
+
+None of them is in the ported list yet: the profile and the fix live on a case branch, not in the main line. A game that graduates — profile, `android.tsv` and the row in the checklist — moves into the count at the top of this page.
+
+Your game too? The library's drawer → the assistant → **Contribute upstream** packs that game's case file into a zip. Attach it to a [case file issue](https://github.com/zFitness/nx2androidX/issues/new?template=case_file.yml) and the fix can be read, applied and landed.
+
+### The documents it points at
+
+The assistant reads this repository's own documents, and so can you:
+
+| Document | What it holds |
+|---|---|
+| [docs/PORTING_GUIDE.md](docs/PORTING_GUIDE.md) | the whole flow, on the phone or on a computer, in six steps |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how it is put together: the host, the shader chain, the profiles |
+| [docs/PORT_CHECKLIST.md](docs/PORT_CHECKLIST.md) | every profile the porter knows, with the state of each and the credit of whoever brought it up |
+| [the investigation manual](nxnative/docs/agents/README.md) | the upstream engine's manual: extract, survey, bring up, graphics, debugging |
+| [docs/NIER_AUTOMATA_ANDROID_PORT.md](docs/NIER_AUTOMATA_ANDROID_PORT.md) | one port written down, start to finish |
+| [docs/PICROSS_S_PLUS.md](docs/PICROSS_S_PLUS.md) | another one |
+
+---
+
 ## Requirements
 
 - **Android 8.0 (API 26) or newer**.
@@ -91,9 +153,48 @@ The driver a game runs with is picked in the library's drawer (**Vulkan driver**
 
 ## Games
 
-The games that play on Android are listed upstream, with the nx2android version each was tested on and the frame
-rate it runs at: [Games](https://github.com/shirai91/nx2android#games). The games ported so far, and the ones
-next, are in [docs/PORT_CHECKLIST.md](docs/PORT_CHECKLIST.md).
+<!-- games table: made by docs/gen_tables.py from the readme_* rows of each android.tsv; edit those, not this table -->
+| | |
+|:---:|:---:|
+| 13 Sentinels: Aegis Rim<br><sub>`v0.1.3` · update 1.10 · 60 fps</sub> | 13 Sentinels: Aegis Rim (Asia)<br><sub>`v0.4.0` · base game 1.00 · 60 fps · the Asian release (Japanese, Korean, Chinese) · tested on the Xiaomi 23117RK66C (Android 16)</sub> |
+| Advance Wars 1+2: Re-Boot Camp<br><sub>`v0.1.3` · base game 1.0.0 · 60 fps (30 in battle on Switch)</sub> | Animal Crossing: New Horizons<br><sub>`v0.4.0` · update 3.0.3 · 30 fps (as on Switch) · local play over Wi-Fi with Switches that run ldn_mitm (Atmosphère 1.11.2 needs ldn_mitm 1.21.2)</sub> |
+| Apollo Justice: Ace Attorney Trilogy<br><sub>`v0.4.0` · </sub> | Blasphemous 2<br><sub>`v0.1.3` · update 1.0.8 · 60 fps</sub> |
+| Captain Toad: Treasure Tracker<br><sub>`v0.1.3` · update 1.4.2 · 60 fps</sub> | Cardfight!! Vanguard Dear Days 2<br><sub>`v0.4.0` · update 1.7.2 · 30 fps, 60 with the 60 fps box · tested on the AYN Odin 2 with a Turnip driver</sub> |
+| Castlevania: Belmont's Curse<br><sub>`v0.2.0` · update 1.1.0 · 60 fps</sub> | Celeste<br><sub>`v0.1.3` · update 1.4.1.1 · 60 fps</sub> |
+| Dark Souls: Remastered<br><sub>`v0.4.0` · update 1.0.3 · 30 fps</sub> | Disco Elysium - The Final Cut<br><sub>`v0.4.0` · base game 1.0.7 · 30 fps (as on Switch) · tested on the Sony XQ-DQ72 and the OnePlus 15</sub> |
+| Divinity: Original Sin 2 - Definitive Edition<br><sub>`v0.5.0` · </sub> | Donkey Kong Country Returns HD<br><sub>`v0.1.3` · update 1.1.0 · 60 fps</sub> |
+| Final Fantasy Resonance<br><sub>`v0.4.0` · update 1.0.1 · 60 fps · Asian release: tested on the Legion Y700 TB321FU (Adreno 750) with a Turnip Vulkan driver</sub> | Fire Emblem Engage<br><sub>`v0.4.0` · update 2.0.0 · 60 fps (30 on Switch) · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver; Qualcomm's own driver mis-draws Engage Attacks (#122)</sub> |
+| Fire Emblem: Three Houses<br><sub>`v0.5.0` · </sub> | FM24 Touch<br><sub>`v0.4.0` · update 1.0.1 · 60 fps · OpenGL ES · touch or controller</sub> |
+| Football Manager 26 Touch<br><sub>`v0.4.0` · update 1.0.2 · 30 fps (as on Switch) · played by touch · port with a Turnip Vulkan driver (the crowd glitches on Qualcomm's driver)</sub> | Graveyard Keeper 2<br><sub>`v0.1.2` · update 1.0.4 · 60 fps (30 on Switch)</sub> |
+| Hades II<br><sub>`v0.1.2` · update 1.0 · 60 fps</sub> | Hollow Knight: Silksong<br><sub>`v0.1.3` · update 1.0.30000 · 60 fps</sub> |
+| Kirby and the Forgotten Land<br><sub>`v0.4.0` · update 1.1.0 · 30 fps (as on Switch) · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver</sub> | Kirby's Return to Dream Land Deluxe<br><sub>`v0.4.0` · 60 fps · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver · needs your console's firmware for its fonts (`--firmware`)</sub> |
+| Layton's Mystery Journey: Katrielle and the Millionaires' Conspiracy DX+<br><sub>`v0.4.0` · </sub> | Lonely Mountains: Downhill<br><sub>`v0.4.0` · base game 1.0.5 · 60 fps on Retroid Pocket 6 with PurpleVK · **work in progress**: brief transition glitch and occasional black/white flashes</sub> |
+| Mario vs. Donkey Kong<br><sub>`v0.1.3` · update 1.0.1 · 60 fps</sub> | Mega Man Battle Network Legacy Collection Vol. 1<br><sub>`v0.4.0` · update 1.0.2 · 60 fps, held · tested on the AYN Odin 2 (Adreno 740) with a Turnip Vulkan driver (Qualcomm's driver crashes or runs at 30) · Battle Network 1, 2 and 3 played: saves, battles, maps, gallery · the launcher's menus draw fully from the second port with the device connected after a first run (it builds some shaders at run time)</sub> |
+| Mega Man Battle Network Legacy Collection Vol. 2<br><sub>`v0.4.0` · update 1.0.3 · 60 fps, held · tested on the AYN Odin 2 (Adreno 740) with a Turnip Vulkan driver · Battle Network 4, 5 and 6 played: saving, loading, battles, gallery · the launcher's menus draw fully from the second port with the device connected after a first run (it builds some shaders at run time)</sub> | Metroid Dread<br><sub>`v0.3.0` · update 2.1.0 · 60 fps</sub> |
+| NEO: The World Ends with You<br><sub>`v0.1.2` · update 1.03</sub> | NOBUNAGA'S AMBITION: Shinsei<br><sub>`v0.5.0` · </sub> |
+| OCTOPATH TRAVELER 0<br><sub>`v0.4.0` · update 1.0.5 · 60 fps · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver</sub> | OCTOPATH TRAVELER 0 (Chinese release)<br><sub>`v0.4.0` · update 1.0.5 · 60 fps · the Chinese and Korean release · tested on the Xiaomi 23117RK66C (Android 16) · port with Game language: Chinese (Simplified) (`--language zh-Hans`)</sub> |
+| Paper Mario: The Origami King<br><sub>`v0.2.0` · update 1.0.1 · 60 fps (30 on Switch)</sub> | Paper Mario: The Thousand-Year Door<br><sub>`v0.2.0` · update 1.0.1 · 60 fps (30 on Switch) · **work in progress**: playable, but lighting flickers (walls go black for single frames after a fall)</sub> |
+| Picross S+<br><sub>`v0.4.0` · update 1.0.1 · Retroid Pocket 6 / PurpleVK · menu and puzzle verified; **Mali rendering issues**</sub> | Pokémon Brilliant Diamond<br><sub>`v0.4.0` · update 1.3.0 · 60 fps (30 on Switch) · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver</sub> |
+| Pokémon Legends: Arceus<br><sub>`v0.4.0` · update 1.1.1 · 30 fps (as on Switch) · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver</sub> | Pokémon Legends: Z-A<br><sub>`v0.3.0` · update 2.0.2 · 30 fps (as on Switch) · **tested to Lumiose station**: the city and battles not checked yet</sub> |
+| Pokémon Mystery Dungeon Rescue Team DX<br><sub>`v0.4.0` · update 1.0.2 · 30 fps (as on Switch), 60 with the 60 fps option · tested on the AYN Odin 2 (Adreno 740) with a Turnip Vulkan driver</sub> | Pokémon Scarlet<br><sub>`v0.4.0` · update 4.0.0 · 50–60 fps (30 on Switch) · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver · **work in progress**: tested in the opening and the South Province fields</sub> |
+| Pokémon Shield<br><sub>`v0.4.0` · update 1.3.2 · 30 fps (as on Switch; 60 runs the game twice as fast) · tested on the AYN Odin 2 (Adreno 740) with a Turnip Vulkan driver · **tested to Postwick** and in wild battles</sub> | Pokémon Sword<br><sub>`v0.4.0` · update 1.3.2 · 30 fps (as on Switch; 60 runs the game twice as fast) · tested on the AYN Odin 2 (Adreno 740) with a Turnip Vulkan driver · **tested to the Wild Area**, wild battles included; handheld mode draws blurred (docked is the default)</sub> |
+| Pokémon Violet<br><sub>`v0.4.0` · </sub> | Rhythm Heaven Groove<br><sub>`v0.4.0` · base game 1.0.0 · 60 fps · tested on the Xiaomi 15 (Adreno 830)</sub> |
+| ROMANCE OF THE THREE KINGDOMS XIV<br><sub>`v0.4.0` · </sub> | Rune Factory 3 Special<br><sub>`v0.5.0` · </sub> |
+| South Park: The Stick of Truth<br><sub>`v0.4.0` · base game 1.0.0 · 30 fps · a Vulkan 1.3 driver is needed (Turnip packed on the Adreno 640)</sub> | Super Mario 3D World + Bowser's Fury<br><sub>`v0.4.0` · update 1.2.2 · 60 fps · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver</sub> |
+| Super Mario Bros. Wonder<br><sub>`v0.1.3` · update 1.2.1 · 60 fps, dips to 40</sub> | Super Mario Odyssey<br><sub>`v0.2.0` · update 1.4.1 · 60 fps · shake the device to throw Cappy</sub> |
+| Super Robot Wars 30<br><sub>`v0.5.0` · </sub> | Tales of Berseria Remastered<br><sub>`v0.5.0` · </sub> |
+| Tales of Eternia Remastered<br><sub>`v0.1.2` · update 2.0.0 · 60 fps</sub> | Teenage Mutant Ninja Turtles: Shredder's Revenge<br><sub>`v0.4.1` · </sub> |
+| The Great Ace Attorney Chronicles<br><sub>`v0.4.0` · </sub> | The Legend of Zelda: Breath of the Wild<br><sub>`v0.4.0` · update 1.9.0 · 60 fps in the open world and shrines; about 30 in the busiest villages, which hold 60 while the phone is cool (30 on Switch) · the profile turns on `DM_GPU_TURBO=1` (the GPU at its highest clock: the phone runs hot, 67-76 °C; `DM_GPU_TURBO=0` in env.txt turns it off) · tested on the Galaxy S25 Ultra (Adreno 830) with Turnip (Stable Turnip v2, Mesa 26.2.3) · **work in progress**: tested on the Great Plateau, in shrines, villages and teleports</sub> |
+| The Legend of Zelda: Echoes of Wisdom<br><sub>`v0.4.0` · version 1.1.0 · playable on Retroid Pocket 6 with PurpleVK · **work in progress**: minor transparency artifacts around rifts</sub> | The Legend of Zelda: Link's Awakening<br><sub>`v0.4.0` · update 1.1.0 · 60 fps (drops to 30 on slow frames by default; uncomment the two NOPs in `patches.py` to hold 60 on fast chips — may cause judder and slow-motion on older devices) · tested on the Lenovo TB323FU (Snapdragon 8 Elite Gen 5, Adreno 840) · needs your console's firmware for its fonts (`--firmware`): without them the game crashes at startup because the fallback font lacks `U+25A1` · a new area can hitch while it loads</sub> |
+| The Legend of Zelda: Tears of the Kingdom<br><sub>`v0.3.0` · update 1.4.3 · 30 fps, 60 in caves and shrines · smoothest with a Turnip Vulkan driver · **work in progress**: 60 fps in the open world</sub> | The World Ends with You -Final Remix-<br><sub>`v0.4.0` · base game 1.0.0 · 60 fps · played by touch</sub> |
+| Tomodachi Life: Living the Dream<br><sub>`v0.4.0` · update 1.0.4 · 60 fps</sub> | Ultra Kaiju Monster Rancher<br><sub>`v0.4.0` · update 1.0.1 · 30 fps (60 runs the game twice as fast) · tested on the AYN Odin 2 (Adreno 740) with a Turnip Vulkan driver · handheld 3D resolution by default, docked in the app menu · tested through the tutorials and battles</sub> |
+| UNDER NIGHT IN-BIRTH Exe:Late[cl-r]<br><sub>`v0.2.0` · update 1.0.3 · 60 fps</sub> | UNDER NIGHT IN-BIRTH II Sys:Celes<br><sub>`v0.2.0` · update 1.42 · 60 fps</sub> |
+| Unicorn Overlord<br><sub>`v0.1.3` · update 1.05 · 60 fps · **boots**: saving and a full battle not tested yet</sub> | Unpacking<br><sub>`v0.1.2` · update 2.01 · 60 fps · played by touch</sub> |
+| Untitled Goose Game<br><sub>`v0.4.0` · update 1.1.2 · 60 fps</sub> | Viractal: Will You Trust Your Party?<br><sub>`v0.1.0` · update 1.4.5</sub> |
+| Xenoblade Chronicles 3<br><sub>`v0.1.0` · update 2.2.0 · 30 fps · **work in progress**: some effects and models don't draw yet</sub> | Xenoblade Chronicles: Definitive Edition<br><sub>`v0.4.0` · update 2.0.0 · 30 fps · tested on the AYN Odin 2 with a Turnip driver · **tested to Colony 9**, the pause menu and saving: later maps not checked yet · the scene drops to 896x504 in heavy fights · rarely crashes at boot (restart)</sub> |
+<!-- end of the games table -->
+
+Every game the porter knows — the ones ported, the ones still in progress, and the ones with a profile only — is in [docs/PORT_CHECKLIST.md](docs/PORT_CHECKLIST.md), with the state of each, the device it was tested on and the credit of whoever brought it up. The games that play on Android are listed upstream as well, with the nx2android version each was tested on: [Games](https://github.com/shirai91/nx2android#games).
 
 ## For players: port a game without programming
 
@@ -154,7 +255,9 @@ Contributions are welcome, and the first one does not have to be code.
 - **A game to port?** [docs/PORTING_GUIDE.md](docs/PORTING_GUIDE.md) — the whole flow, on the phone or on a computer, and no computer is needed at all.
 - **Code, docs or translations?** [CONTRIBUTING.md](CONTRIBUTING.md) — the rules, the repository map, the tests and the commit messages.
 
-A question that fits no template is welcome too: open an issue and label it `question`. A game that runs goes through the **Game report** form, a game that does not through the **Port request** form.
+A question that fits no template is welcome too: the **Question** form is the way in. A game that runs goes through the **Game report** form, a game that does not through the **Port request** form.
+
+Every issue starts from a form: an issue with nothing in it is closed by a bot, and the comment on it points back at the forms.
 
 ## Keys and game files
 
@@ -177,6 +280,7 @@ Everyone who is in this repository's history, and everyone who comes with a pull
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/shirai91"><img src="https://avatars.githubusercontent.com/u/8848513?v=4&size=100" width="100px" height="100px" alt="Tung Pham"/><br /><sub><b>Tung Pham</b></sub></a><br /><a href="https://github.com/zFitness/nx2androidX/commits?author=shirai91" title="Code">💻</a> <a href="https://github.com/zFitness/nx2androidX/commits?author=shirai91" title="Documentation">📖</a> <a href="https://github.com/zFitness/nx2androidX/commits?author=shirai91" title="Tests">⚠️</a> <a href="https://github.com/zFitness/nx2androidX/pulls?q=is%3Apr+reviewed-by%3Ashirai91" title="Reviewed Pull Requests">👀</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/zFitness"><img src="https://avatars.githubusercontent.com/u/41500499?v=4&size=100" width="100px" height="100px" alt="zfitness"/><br /><sub><b>zfitness</b></sub></a><br /><a href="https://github.com/zFitness/nx2androidX/commits?author=zFitness" title="Code">💻</a> <a href="https://github.com/zFitness/nx2androidX/commits?author=zFitness" title="Documentation">📖</a> <a href="https://github.com/zFitness/nx2androidX/commits?author=zFitness" title="Tests">⚠️</a> <a href="https://github.com/zFitness/nx2androidX/pulls?q=is%3Apr+reviewed-by%3AzFitness" title="Reviewed Pull Requests">👀</a></td>
       <td align="center" valign="top" width="14.28%"><a href="https://github.com/15622162922"><img src="https://avatars.githubusercontent.com/u/49612681?v=4&size=100" width="100px" height="100px" alt="15622162922"/><br /><sub><b>15622162922</b></sub></a><br /><a href="https://github.com/zFitness/nx2androidX/commits?author=15622162922" title="Code">💻</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/mijuu"><img src="https://avatars.githubusercontent.com/u/3092175?v=4&size=100" width="100px" height="100px" alt="Raymond"/><br /><sub><b>Raymond</b></sub></a><br /><a href="https://github.com/zFitness/nx2androidX/commits?author=mijuu" title="Code">💻</a> <a href="https://github.com/zFitness/nx2androidX/commits?author=mijuu" title="Tests">⚠️</a></td>
     </tr>
   </tbody>
 </table>
@@ -196,9 +300,10 @@ The phone app's frame generation ([nxnative/dm/android/lsfg/](nxnative/dm/androi
 
 This project is one branch of a family, and it stands on other people's work:
 
-- **[nx2android](https://github.com/shirai91/nx2android)** — the project this repository is built on: it ports a game on the PC and packages the APK; this repository is its phone side.
+- **[nx2android](https://github.com/shirai91/nx2android)** — the project this repository is built on: it ports a game on the PC and packages the APK; this repository is its phone side. Its maintainers and contributors are where the assistant's knowledge base comes from: several hundred of their pull requests, distilled into a diagnosis that ships with the app.
 - **[seedds/nxnative](https://github.com/seedds/nxnative)** — the engine underneath it: the host that stands in for the console's services, the NVN-on-Vulkan replay, the shader translator, and the game profiles that many of these ports were brought up against. MIT licensed upstream; our fork of it, which lives in `nxnative/`, is GPL-3.0-or-later like the rest of this repository.
 - **The nxnative contributors** — for the engine, the tooling and the profiles.
+- **The maintainers of both upstreams** — for reviewing pull requests from strangers and keeping the door open for a branch like this one.
 - **[NX2Apple](https://github.com/LNPANDY/NX2Apple)** — the Apple route of the same engine: the macOS builder and the shared iPhone/iPad library. Thanks for keeping the line alive on Apple devices.
 - **[BananaNative](https://github.com/Raphix91/BananaNative)** — the branch that takes the engine to Android and runs a few Switch 2 games natively on a phone. Thanks for taking it further than we did.
 - **[Mesa](https://www.mesa3d.org/)** — for Turnip, the Vulkan driver the app can download for Adreno GPUs.

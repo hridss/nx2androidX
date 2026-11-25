@@ -60,7 +60,8 @@ echo ">> the app's assets"
 if [[ -n $payload_flag ]]; then
     echo "   skipped (--no-payload): the phone must already have the environment"
 else
-    python3 "$here/build_assets.py" --out "$cache/assets" --payload "$cache/payload-arm64.tar.gz" --toolchain "$cache/toolchain"
+    python3 "$here/build_assets.py" --out "$cache/assets" --apk-out "$cache/apk-assets" \
+        --payload "$cache/payload-arm64.tar.gz" --toolchain "$cache/toolchain"
     # nx_extract for the phone, built here (the phone's .NET SDK cannot): after the assets, which it joins
     python3 "$here/build_nx_extract.py" || echo "   (no nx_extract for the phone: the .NET SDK is missing)"
     # The phone runs the C# tools but cannot build them: without them it would try to build the shader
@@ -79,13 +80,16 @@ python3 "$here/build_adrenotools.py" --out "$cache/assets/tool/tools/adrenotools
     || die "the driver loader did not build: a Vulkan driver the player picks would not load"
 [[ -f "$cache/jniLibs/arm64-v8a/libadrenotools.so" ]] || die "the driver loader is not in the app's native library folder"
 
-# Finalize after the C# tools and hooks have joined the tree, so same-size changes are included.
+# Finalize after the C# tools and hooks have joined the tree: the archive is packed again, so it holds them.
 if [[ -z $payload_flag ]]; then
-    python3 "$here/build_assets.py" --out "$cache/assets" --finalize
+    python3 "$here/build_assets.py" --out "$cache/assets" --apk-out "$cache/apk-assets" --finalize
 fi
 
 # 4. the APK
 echo ">> the APK"
+# The old APK goes first: the packaging task writes the new zip over the old file, and a smaller build
+# would leave the old bytes in it (a 380 MB APK that holds 215 MB of content).
+rm -f "$root/android/app/build/outputs/apk/$variant/"*.apk
 cd "$root/android"
 ./gradlew ":app:assemble$(python3 -c "print('Debug' if '$variant' == 'debug' else 'Release')")" $payload_flag --console=plain
 apk=$(ls -t "$root/android/app/build/outputs/apk/$variant"/*.apk | head -1)

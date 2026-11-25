@@ -10,9 +10,10 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
-// The payload (rootfs, toolchain, the tool's tree) is built by packaging/android-apk/build_assets.py and staged
-// outside the source tree: it is a few hundred megabytes and not committed.
-val assetsDir = rootProject.layout.projectDirectory.dir("../packaging/android-apk/.cache/assets")
+// The payload (the environment in one archive, the driver) is built by packaging/android-apk/build_assets.py and
+// staged outside the source tree: it is a few hundred megabytes and not committed. The working tree the build
+// stages the tool's tree in is .cache/assets; what goes into the APK is .cache/apk-assets.
+val assetsDir = rootProject.layout.projectDirectory.dir("../packaging/android-apk/.cache/apk-assets")
 
 // The Vulkan driver loader (libadrenotools.so), built by packaging/android-apk/build_adrenotools.py and staged
 // outside the source tree as well. It is the app's own native library: the host dlopens it by name, and the
@@ -48,7 +49,18 @@ val generatePlayerApiRevision by tasks.registering {
         target.writeText("package com.nx.android.domain;\n\npublic final class PlayerApiRevision { public static final int CURRENT = $playerApiRevision; private PlayerApiRevision() {} }\n")
     }
 }
-tasks.named("preBuild").configure { dependsOn(generatePlayerApiRevision) }
+// The list of the games the porter knows (docs/PORT_CHECKLIST.md): the build page shows it, so the
+// doc goes into the app's assets. The doc is made from the profiles (docs/gen_tables.py) and copied
+// here at build time: the app shows the list of the commit it was built from, and the repo keeps one
+// copy of the list, not two.
+val gameListAssets = layout.buildDirectory.dir("generated/gameList")
+val copyGameList by tasks.registering(Copy::class) {
+    from(rootProject.file("../docs/PORT_CHECKLIST.md"))
+    into(gameListAssets.get().asFile.resolve("docs"))
+    rename { "port_checklist.md" }
+}
+
+tasks.named("preBuild").configure { dependsOn(generatePlayerApiRevision, copyGameList) }
 
 android {
     namespace = "com.nx.android"
@@ -73,8 +85,8 @@ android {
         targetSdk = 28
         // The version the release's tag carries, without the "v": v0.3.0-alpha02 -> 0.3.0-alpha02. The update
         // check compares the two, so the app can tell which release is newer than the one running.
-        versionCode = 19
-        versionName = "0.4.0-alpha03"
+        versionCode = 22
+        versionName = "0.4.1-alpha02"
         ndk { abiFilters += listOf("arm64-v8a") }
         // -PnxLsfg=false: the host the app builds is built without the frame generation (the lsfg/ folder): the host
         // is then smaller and the frame generation reports that it is not in this build. The default is the current
@@ -85,7 +97,9 @@ android {
     sourceSets {
         getByName("main") {
             java.srcDir(revisionSources.get().asFile)
-            // The payload (rootfs, toolchain, the tool's tree): built by packaging/android-apk/build_assets.py.
+            // The list of the games the porter knows: copied into the assets by the task above
+            assets.srcDir(gameListAssets.get().asFile)
+            // The payload (the environment in one archive, the driver): built by packaging/android-apk/build_assets.py.
             // -PnoPayload leaves it out: a quick build of the app itself, for a phone that already has the
             // environment unpacked (the unpacked tree is in the app's own folder, so it survives the update).
             if (!project.hasProperty("noPayload") && assetsDir.asFile.exists()) {
@@ -99,10 +113,10 @@ android {
         }
     }
 
-    // The payload is big: no compression of the assets that are already compressed (the rootfs tarball), and
-    // the whole thing is a single big blob the app unpacks on the first start.
+    // The payload is big: no compression of the assets that are already compressed (the environment's archive),
+    // and the whole thing is a single big blob the app unpacks on the first start.
     androidResources {
-        noCompress += listOf("gz", "so", "zip")
+        noCompress += listOf("gz", "so", "zip", "pkg")
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -134,6 +148,14 @@ android {
         }
     }
 
+    // the app's own network stack is the platform's (HttpURLConnection): the agent's engine runs in
+    // the guest, not in this process, so there is no HTTP client here
+    configurations.all {
+        // The MCP SDK 0.17.x ships the io.modelcontextprotocol.json package in both mcp-core and mcp-json;
+        // the assistant never speaks MCP on the phone, so one of the twins simply goes.
+        exclude(group = "io.modelcontextprotocol.sdk", module = "mcp-json")
+    }
+
     dependencies {
         implementation(platform("androidx.compose:compose-bom:2026.09.00"))
         implementation("androidx.compose.ui:ui")
@@ -143,10 +165,21 @@ android {
         debugImplementation("androidx.compose.ui:ui-tooling")
         implementation("androidx.compose.material3:material3")
         implementation("androidx.compose.material:material-icons-extended")
+        // the assistant's answers are markdown (ADR-009): full renderer — tables, links, nested lists
+        implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.46.0")
+        implementation("com.mikepenz:multiplatform-markdown-renderer-coil3:0.46.0")
+        // the agent drawer's frosted glass (磨砂): the page behind is captured and blurred (API 31+,
+        // older devices fall back to the solid tint)
+        implementation("dev.chrisbanes.haze:haze:2.1.0")
+        implementation("dev.chrisbanes.haze:haze-blur:2.1.0")
         implementation("androidx.activity:activity-compose:1.13.0")
-        implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
-        implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
-        implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
+        // keep these at the version the runtime graph resolves anyway: androidx.core 1.19 brings
+        // lifecycle 2.11 in through the family's atomic group constraint, and the compile classpath
+        // has to follow. It has to: 2.11 turned ViewModelStore.put's key from String into Object, so
+        // a test compiled against 2.9 died with NoSuchMethodError against the 2.11 runtime
+        implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+        implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+        implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
         implementation("androidx.hilt:hilt-lifecycle-viewmodel-compose:1.3.0")
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
         implementation("com.google.dagger:hilt-android:2.60.1")
@@ -165,6 +198,17 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    packaging {
+        // AgentScope rides on OkHttp 5, whose -jvm and -android modules both carry the same native-image
+        // descriptors (and the framework's server-side jars carry more desktop-only metadata): none of it
+        // belongs in an APK.
+        resources {
+            excludes += "META-INF/native-image/**"
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 }
 
@@ -197,3 +241,9 @@ val checkArchitectureBoundaries by tasks.registering {
 }
 
 tasks.named("check") { dependsOn(checkArchitectureBoundaries) }
+
+// The assets are merged before the preBuild runs when the build is only asked for the assets: the
+// merge task waits for the copy itself, so the list is in the APK whatever the task graph looks like.
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
+    dependsOn(copyGameList)
+}

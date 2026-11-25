@@ -17,12 +17,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,9 +39,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nx.android.R
+import com.nx.android.appstate.EnvBuildState
 import com.nx.android.appstate.OnboardingState
 import com.nx.android.feature.storage.StorageViewModel
 import com.nx.android.feature.storage.StorageSection
+import com.nx.android.agent.ui.AgentSettingsSection
+import com.nx.android.agent.ui.AgentSettingsViewModel
 import com.nx.android.feature.updates.UpdateViewModel
 import com.nx.android.data.AppLocale
 import com.nx.android.domain.drivers.Driver
@@ -101,12 +102,13 @@ enum class SettingsSection(@StringRes val title: Int) {
     STORAGE(R.string.set_section_storage),
     DRIVERS(R.string.driver_section),
     DISPLAY(R.string.set_section_display),
+    AGENT(R.string.set_section_agent),
     ABOUT(R.string.set_section_about),
 }
 
 @Composable
-fun SettingsScreen(ob: OnboardingState, drivers: List<Driver>, driverRepository: DriverRepository, update: UpdateViewModel,
-                   storageViewModel: StorageViewModel,
+fun SettingsScreen(ob: OnboardingState, build: EnvBuildState, drivers: List<Driver>, driverRepository: DriverRepository, update: UpdateViewModel,
+                   storageViewModel: StorageViewModel, agentViewModel: AgentSettingsViewModel,
                    actions: AppActions, onRequest: (PickerRequest) -> Unit,
                    onDrivers: () -> Unit,
                    section: SettingsSection, onSelectSection: (SettingsSection) -> Unit,
@@ -151,10 +153,11 @@ fun SettingsScreen(ob: OnboardingState, drivers: List<Driver>, driverRepository:
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     when (section) {
-                        SettingsSection.ENVIRONMENT -> EnvironmentSection(ob, actions, onRequest)
+                        SettingsSection.ENVIRONMENT -> EnvironmentSection(ob, build, actions, onRequest)
                         SettingsSection.STORAGE -> StorageSection(storageViewModel)
                         SettingsSection.DRIVERS -> DriversSection(drivers, driverRepository, actions, onRequest, onDrivers)
                         SettingsSection.DISPLAY -> DisplaySection(actions, onRequest)
+                        SettingsSection.AGENT -> AgentSettingsSection(agentViewModel)
                         SettingsSection.ABOUT -> AboutSection(ob, update, actions)
                     }
                 }
@@ -187,20 +190,19 @@ private fun RailItem(label: String, selected: Boolean, onClick: () -> Unit) {
  * 环境检查的入口是顶栏的胶囊（另有一处），这一行是设置页里改路径的地方。
  */
 @Composable
-private fun EnvironmentSection(ob: OnboardingState, actions: AppActions, onRequest: (PickerRequest) -> Unit) {
+private fun EnvironmentSection(ob: OnboardingState, build: EnvBuildState, actions: AppActions, onRequest: (PickerRequest) -> Unit) {
     val locale = LocalAppLocale.current
-    var confirmReset by remember { mutableStateOf(false) }
 
     InfoRow(
         title = stringResource(R.string.env_check_env),
         note = when {
-            ob.unpacking -> stringResource(R.string.onb_unpacking, ob.unpackStep)
+            build.running -> stringResource(R.string.onb_building, build.progress)
             ob.envReady -> if (ob.lastCheck.isEmpty()) stringResource(R.string.env_ready)
                            else stringResource(R.string.env_ready_detail, ob.lastCheck)
             else -> stringResource(R.string.env_not_ready)
         },
         leading = {
-            if (ob.unpacking) {
+            if (build.running) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = NxPalette.Cream)
             } else {
                 StatusDot(if (ob.envReady) NxPalette.Ready else NxPalette.Danger)
@@ -210,13 +212,8 @@ private fun EnvironmentSection(ob: OnboardingState, actions: AppActions, onReque
     ActionRow(
         title = stringResource(R.string.onb_prepare_env),
         label = stringResource(R.string.common_prepare),
-        enabled = !ob.unpacking,
+        enabled = !build.running,
     ) { ob.unpack() }
-    ActionRow(
-        title = stringResource(R.string.env_reset),
-        label = stringResource(R.string.env_reset_action),
-        enabled = !ob.unpacking,
-    ) { confirmReset = true }
     KeysRow(actions, onRequest)
     // 固件：整机级的一份（可选）。导入 zip 解到 App 的私有目录，移植时统一带给移植器
     FirmwareRow(
@@ -239,22 +236,6 @@ private fun EnvironmentSection(ob: OnboardingState, actions: AppActions, onReque
         onClear = { actions.onClearCheats() },
     )
     CheatsHint()
-
-    if (confirmReset) {
-        AlertDialog(
-            onDismissRequest = { confirmReset = false },
-            title = { Text(locale.str(R.string.env_reset_confirm)) },
-            text = { Text(locale.str(R.string.env_reset_what)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmReset = false
-                    ob.resetEnv()
-                    actions.onToast(locale.str(R.string.env_reset_done))
-                }) { Text(locale.str(R.string.env_reset_action), color = NxPalette.Danger) }
-            },
-            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(locale.str(R.string.common_cancel)) } },
-        )
-    }
 }
 
 /** prod.keys 的路径行：状态点 + 路径 + 修改 */

@@ -68,6 +68,7 @@ static _Atomic int g_external_active;
 ANativeWindow *dm_front_window(void) { pthread_mutex_lock(&g_win_mu); ANativeWindow *w = g_external_win ? g_external_win : g_win; pthread_mutex_unlock(&g_win_mu); return w; }
 static ANativeWindow *phone_window(void) { pthread_mutex_lock(&g_win_mu); ANativeWindow *w = g_win; pthread_mutex_unlock(&g_win_mu); return w; }
 int dm_external_active(void) { return atomic_load(&g_external_active); }
+int dm_overlay_dpi(void) { return g_dpi; }   // the display's density for overlay_layout.h (ov_band's 8 mm band check): the start call's argument, 0 = unknown. The backend's copy is a weak fallback; without this strong one the headless host (--gfx null, the GLSLC capture) has no definition at all and does not link
 __attribute__((weak)) void vk_window_lost(void) {}   // the backend lets go of the window's swapchain before the window goes
 static ANativeWindow *g_jwin;
 void dm_java_window_take(ANativeWindow *w) {

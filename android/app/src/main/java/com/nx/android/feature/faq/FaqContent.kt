@@ -13,18 +13,22 @@ data class FaqGroup(val key: String, val title: String, val entries: List<FaqEnt
 /**
  * 常见问题的内容。
  *
- * 内容是数据：`assets/faq/faq_zh.json` 与 `assets/faq/faq_en.json`，问答成对放着，
- * 改内容只改 JSON，不动代码。页面按 App 的界面语言挑一份。
+ * 内容是数据：`assets/nx2a/agent/workspace/knowledge/faq_zh.json` 与
+ * `faq_en.json`，问答成对放着，改内容只改 JSON，不动代码。页面按 App 的界面语言挑一份。
+ *
+ * 这两份文件在 agent 的素材树里，因为助手读的是同一份：它替玩家回答 how-to 问题，
+ * 材料只有一份，就不会两边说法不一致（帮助页改了，助手还是旧的）。
  */
 object FaqContent {
 
     /** 内容文件：玩家选的语言；跟着系统时看手机自己的语言 */
     fun fileFor(mode: AppLocale.Mode, deviceLanguage: String): String =
         when (mode) {
-            AppLocale.Mode.ZH -> "faq/faq_zh.json"
-            AppLocale.Mode.EN -> "faq/faq_en.json"
+            AppLocale.Mode.ZH -> "nx2a/agent/workspace/knowledge/faq_zh.json"
+            AppLocale.Mode.EN -> "nx2a/agent/workspace/knowledge/faq_en.json"
             AppLocale.Mode.SYSTEM ->
-                if (deviceLanguage == "zh") "faq/faq_zh.json" else "faq/faq_en.json"
+                if (deviceLanguage == "zh") "nx2a/agent/workspace/knowledge/faq_zh.json"
+                else "nx2a/agent/workspace/knowledge/faq_en.json"
         }
 
     /**

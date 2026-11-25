@@ -67,6 +67,8 @@ class PrefsStore @Inject constructor(@ApplicationContext ctx: Context) {
         const val EXTERNAL_DISPLAY = "display.external"
         // the file provider: the app's own folders are handed to the file managers (on by default)
         const val FILE_PROVIDER = "file.provider"
+        // the assistant's in-game entry: the slim handle on the game screen's right edge (on by default)
+        const val AGENT_BADGE = "agent.badge"
     }
 
     val prefs: SharedPreferences = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)

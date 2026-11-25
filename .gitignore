@@ -30,6 +30,9 @@ title.keys
 # The player bundle (python packaging/build_bundle.py)
 /dist/
 
+# The tools' local caches (the credits the checklist generator resolved, and the like)
+/.cache/
+
 # The phone app: the payload it ships (the rootfs, the build tools) and the Gradle build
 /packaging/android-apk/.cache/
 /android/build/

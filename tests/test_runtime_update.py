@@ -58,7 +58,7 @@ args = sys.argv
 assert '--play' in args and '--release' in args
 assert os.environ['DM_GAMES_FIRST'] == '1'
 profile = pathlib.Path(os.environ['DM_GAMES_DIR']) / os.environ['DM_GAME']
-assert (profile / 'game.tsv').read_text() == 'effective game profile with adjusted memory'
+assert (profile / 'game.tsv').read_text().startswith('effective game profile')
 assert (profile / 'android.tsv').read_text() == 'effective android profile'
 assert not list(profile.glob('*.h'))
 out = pathlib.Path(args[args.index('--out')+1]); out.mkdir()
@@ -74,6 +74,7 @@ for name in ('libhook_impl.so', 'libmain_hook.so', 'libfile_redirect_hook.so', '
         patch.object(runtime_update.config, 'load', return_value={}).start()
         patch.object(runtime_update.toolchain, 'find_ndk', return_value=(self.root / 'ndk', 'test')).start()
         patch.dict(os.environ, {'NX2A_WORK': str(self.root / 'work'),
+                   'NX2A_HOME': str(self.root / 'home'),
                    'NX2A_PLAYER_API_REVISION': str(PLAYER_API_REVISION)}).start()
 
     def profile(self, where, text='effective game profile with adjusted memory'):
@@ -290,6 +291,89 @@ for name in ('libhook_impl.so', 'libmain_hook.so', 'libfile_redirect_hook.so', '
         with self.assertRaisesRegex(ValueError, 'ARM64'):
             self.rebuild()
         self.assert_preserved()
+
+
+    def test_staging_carries_the_whole_profile_into_the_build_and_back(self):
+        # a profile copy that holds the per-build table: the build compiles with it, and the table
+        # is written back into the pack's own copy with the rest of the staged profile
+        d = self.pack / 'profile' / self.title
+        d.mkdir(parents=True)
+        (d / 'game.tsv').write_text('effective game profile with adjusted memory')
+        (d / 'android.tsv').write_text('effective android profile')
+        (d / 'ue_malloc.tsv').write_text('ue allocator rows')
+        self.record(hashlib.sha256('effective game profile with adjusted memory'.encode()).hexdigest())
+        self.build.write_text(self.build.read_text()
+                              + "\nassert (profile / 'ue_malloc.tsv').read_text() == 'ue allocator rows'\n")
+        self.rebuild()
+        self.assert_runtime_installed()
+        self.assertEqual((self.pack / 'profile' / self.title / 'ue_malloc.tsv').read_text(), 'ue allocator rows')
+        self.assert_preserved(manifest=False)
+
+    def test_an_old_pack_without_the_tables_gets_them_from_the_profiles_layer(self):
+        # an old pack: its profile copy holds the two tsv files only. The imported profiles layer
+        # holds the per-build tables, and the fill puts them into the build and back into the pack.
+        fingerprint = self.profile(self.pack / 'profile')
+        self.record(fingerprint)
+        layer = self.root / 'home' / 'profiles' / self.title
+        layer.mkdir(parents=True)
+        (layer / 'ue_malloc.tsv').write_text('ue allocator rows')
+        (layer / 'fps_locks.tsv').write_text('fps locks rows')
+        said = []
+        self.build.write_text(self.build.read_text()
+                              + "\nassert (profile / 'ue_malloc.tsv').read_text() == 'ue allocator rows'\n"
+                              + "assert (profile / 'fps_locks.tsv').read_text() == 'fps locks rows'\n")
+        runtime_update.rebuild(self.pack, no_lsfg=True, jobs=1, allow_profile_drift=True, emit=said.append)
+        self.assertTrue(any('Filled ue_malloc.tsv' in line for line in said), said)
+        self.assertTrue(any('Filled fps_locks.tsv' in line for line in said), said)
+        self.assertEqual((self.pack / 'profile' / self.title / 'ue_malloc.tsv').read_text(), 'ue allocator rows')
+        self.assertEqual((self.pack / 'profile' / self.title / 'fps_locks.tsv').read_text(), 'fps locks rows')
+        self.assert_preserved(manifest=False)
+
+    def test_a_ue_game_missing_the_table_everywhere_is_reported_and_still_rebuilds(self):
+        d = self.pack / 'profile' / self.title
+        d.mkdir(parents=True)
+        (d / 'game.tsv').write_text('effective game profile (Unreal Engine 5.6.1)')
+        (d / 'android.tsv').write_text('effective android profile')
+        self.record(hashlib.sha256(b'effective game profile (Unreal Engine 5.6.1)').hexdigest())
+        said = []
+        runtime_update.rebuild(self.pack, no_lsfg=True, jobs=1, emit=said.append)
+        self.assertTrue(any('[RED]' in line and 'ue_malloc.tsv' in line for line in said), said)
+        self.assertTrue(any(line.startswith('Profile staged:') and 'game.tsv' in line for line in said), said)
+        self.assert_runtime_installed()
+        self.assert_preserved(manifest=False)
+
+    def test_a_missing_table_a_game_never_had_is_only_a_note(self):
+        # a game whose engine never uses ue_malloc.tsv: the absence is business as usual, a note,
+        # not a [RED]
+        fingerprint = self.profile(self.pack / 'profile')
+        self.record(fingerprint)
+        said = []
+        self.rebuild_with(said)
+        self.assertTrue(any(line.startswith('Profile staged:') for line in said), said)
+        self.assertTrue(any('no ue_malloc.tsv' in line and not line.startswith('[RED]') for line in said), said)
+        self.assertFalse(any('[RED]' in line for line in said), said)
+        self.assert_runtime_installed()
+
+    def test_the_runtimes_layout_embeds_the_staged_profile_not_the_runtime(self):
+        # the app's layout: the runtime goes to the app's private runtimes folder, and the pack's
+        # profile copy gets the staged profile — never the runtime binaries beside it
+        runtime_dir = self.root / 'runtimes' / self.title.lower()
+        fingerprint = self.profile(self.pack / 'profile')
+        self.record(fingerprint)
+        said = []
+        with patch.dict(os.environ, {'NX2A_RUNTIMES': str(self.root / 'runtimes')}):
+            runtime_update.rebuild(self.pack, no_lsfg=True, jobs=1, emit=said.append)
+        self.assertEqual((runtime_dir / 'libdmplay.so').read_bytes(), built_component())
+        self.assertTrue((runtime_dir / 'build.json').is_file())
+        embedded = self.pack / 'profile' / self.title
+        self.assertEqual((embedded / 'game.tsv').read_text(), 'effective game profile with adjusted memory')
+        self.assertEqual((embedded / 'android.tsv').read_text(), 'effective android profile')
+        self.assertFalse((embedded / 'libdmplay.so').exists())
+        self.assertFalse((embedded / 'build.json').exists())
+        self.assertTrue(any(line.startswith('Profile staged:') for line in said), said)
+
+    def rebuild_with(self, said):
+        return runtime_update.rebuild(self.pack, no_lsfg=True, jobs=1, emit=said.append)
 
 
 if __name__ == '__main__':

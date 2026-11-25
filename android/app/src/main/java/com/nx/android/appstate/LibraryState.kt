@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.nx.android.data.library.GameProfile
+import com.nx.android.data.library.LibrarySnapshot
 import com.nx.android.data.library.ProfileReader
 import com.nx.android.domain.GameCleanup
 import com.nx.android.domain.GameConfig
@@ -48,7 +49,8 @@ class LibraryState @Inject constructor(private val port: PortState,
                    private val libraryRepository: GameLibraryRepository,
                    private val configRepository: GameConfigRepository,
                    private val operations: LibraryOperationCoordinator,
-                   private val profiles: ProfileReader) {
+                   private val profiles: ProfileReader,
+                   private val snapshot: LibrarySnapshot) {
 
     /** 库里的卡：一个游戏一张 */
     var games by mutableStateOf(listOf<GameEntry>()); private set
@@ -71,6 +73,9 @@ class LibraryState @Inject constructor(private val port: PortState,
             libraryRepository.scan().also { result ->
                 runCatching { configRepository.migrateLegacyConfigs(result) }
                     .onFailure { AppLog.line("Library config migration failed: ${it.message}") }
+                // the snapshot the assistant and the phone's tools read: the whole list, not ten of them
+                runCatching { snapshot.write(result) { statusOf(it) } }
+                    .onFailure { AppLog.line("Library snapshot failed: ${it.message}") }
             }
         },
         publish = { games = it },

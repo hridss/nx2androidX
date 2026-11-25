@@ -92,7 +92,7 @@ It refuses when the game's code on the device was rewritten with other rewriter 
 
 ## Adding a game
 
-Each game is a profile in `nxnative/dm/games/<title ID>/` with an `android.tsv`: [ARCHITECTURE.md](ARCHITECTURE.md#adding-a-game). A finished port updates, in the profile's commit, [PORT_CHECKLIST.md](PORT_CHECKLIST.md): the list of the games is made from the profiles (`python docs/gen_tables.py` — every profile is a row, an `android.tsv` ticks it, the count follows, and the credit comes from the commit that added the profile; tests/test_docs_tables.py checks the file is what the profiles make). The README keeps no table of the games: the list of the games that play on Android lives upstream, in [the games table](https://github.com/shirai91/nx2android#games). The porter's options: a field of `porter/pipeline.py` `Options` and a `porter port` argument of the same name (`Options.from_args`).
+Each game is a profile in `nxnative/dm/games/<title ID>/` with an `android.tsv`: [ARCHITECTURE.md](ARCHITECTURE.md#adding-a-game). A finished port updates, in the profile's commit, [PORT_CHECKLIST.md](PORT_CHECKLIST.md): the list of the games is made from the profiles (`python docs/gen_tables.py` — every profile is a row, an `android.tsv` ticks it, the count follows, and the credit comes from the commit that added the profile; tests/test_docs_tables.py checks the file is what the profiles make). The READMEs keep a gallery of the games that have a screenshot and the counts at the top of the page — the same script writes them from the profiles. The porter's options: a field of `porter/pipeline.py` `Options` and a `porter port` argument of the same name (`Options.from_args`).
 
 ## Releases and version numbers
 

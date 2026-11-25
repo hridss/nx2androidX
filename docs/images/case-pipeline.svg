@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1120" viewBox="0 0 1800 1120" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="11" markerHeight="11" refX="9" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L10,3.5 z" fill="#8b939f"/>
+    </marker>
+    <style>
+      .bg { fill: #14161a; }
+      .box { fill: #1d2027; stroke: #3d434c; stroke-width: 1.6; }
+      .step { fill: #1a2333; stroke: #4c7bd6; stroke-width: 1.8; }
+      .step2 { fill: #1c2822; stroke: #4a9d6e; stroke-width: 1.8; }
+      .out { fill: #2a2318; stroke: #c89b4a; stroke-width: 1.8; }
+      .t  { fill: #e9ecf2; font-size: 20px; }
+      .tb { fill: #e9ecf2; font-size: 21px; font-weight: 600; }
+      .ts { fill: #a9b2bf; font-size: 16px; }
+      .tk { fill: #e3bd78; font-size: 16px; }
+      .tm { fill: #93b7f2; font-size: 15px; }
+      .arrow { stroke: #8b939f; stroke-width: 2; fill: none; marker-end: url(#arw); }
+      .label { fill: #99a2ae; font-size: 15px; }
+      .num { fill: #6f8fd6; font-size: 17px; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1120"/>
+
+  <text class="tb" x="60" y="58">From "my game is broken" to "the fix is in the repository"</text>
+  <text class="ts" x="60" y="88">The assistant never changes anything on its own: it writes the plan, the player says yes, the fix is verified on the device.</text>
+
+  <!-- stage 1 -->
+  <rect class="step" x="60" y="140" width="300" height="150" rx="12"/>
+  <text class="num" x="84" y="172">1</text>
+  <text class="tb" x="84" y="204">the game breaks</text>
+  <text class="ts" x="84" y="232">"RDR is black after the intro"</text>
+  <text class="ts" x="84" y="256">the player says what they see;</text>
+  <text class="ts" x="84" y="278">the assistant goes and looks</text>
+
+  <!-- stage 2 -->
+  <rect class="step" x="410" y="140" width="300" height="150" rx="12"/>
+  <text class="num" x="434" y="172">2</text>
+  <text class="tb" x="434" y="204">the case opens</text>
+  <text class="ts" x="434" y="232">one file per game, on the phone:</text>
+  <text class="ts" x="434" y="256">symptom, cause, plan, evidence,</text>
+  <text class="ts" x="434" y="278">and a timeline the player can read</text>
+
+  <!-- stage 3 -->
+  <rect class="step" x="760" y="140" width="300" height="150" rx="12"/>
+  <text class="num" x="784" y="172">3</text>
+  <text class="tb" x="784" y="204">the diagnosis</text>
+  <text class="ts" x="784" y="232">the game's own logs, the knowledge</text>
+  <text class="ts" x="784" y="256">base (offline), then the upstream's</text>
+  <text class="ts" x="784" y="278">pull requests if the network allows</text>
+
+  <!-- stage 4 -->
+  <rect class="step2" x="1110" y="140" width="300" height="150" rx="12"/>
+  <text class="num" x="1134" y="172">4</text>
+  <text class="tb" x="1134" y="204">the plan</text>
+  <text class="ts" x="1134" y="232">symptom → cause → proposed fix,</text>
+  <text class="ts" x="1134" y="256">with the evidence that named it, in</text>
+  <text class="ts" x="1134" y="278">the player's own language</text>
+
+  <!-- stage 5 -->
+  <rect class="step2" x="1460" y="140" width="300" height="150" rx="12"/>
+  <text class="num" x="1484" y="172">5</text>
+  <text class="tb" x="1484" y="204">the player says yes</text>
+  <text class="ts" x="1484" y="232">only now does the assistant touch</text>
+  <text class="ts" x="1484" y="256">code — the originals are kept, the</text>
+  <text class="ts" x="1484" y="278">diff is computed from them</text>
+
+  <path class="arrow" d="M360,215 L406,215"/>
+  <path class="arrow" d="M710,215 L756,215"/>
+  <path class="arrow" d="M1060,215 L1106,215"/>
+  <path class="arrow" d="M1410,215 L1456,215"/>
+
+  <!-- down to the outcome row -->
+  <path class="arrow" d="M1610,290 L1610,340 L330,340 L330,396"/>
+  <path class="arrow" d="M1610,340 L900,340 L900,396"/>
+
+  <!-- outcome -->
+  <rect class="out" x="60" y="400" width="500" height="190" rx="12"/>
+  <text class="num" x="84" y="432">6</text>
+  <text class="tb" x="84" y="464">verified on the device</text>
+  <text class="ts" x="84" y="492">the runtime is rebuilt, the game runs again,</text>
+  <text class="ts" x="84" y="516">and the numbers are written down: shaders found,</text>
+  <text class="ts" x="84" y="540">draws per frame, frames per second, the log lines</text>
+  <text class="ts" x="84" y="564">"the second renderer driven by a host thread"</text>
+
+  <rect class="out" x="600" y="400" width="500" height="190" rx="12"/>
+  <text class="num" x="624" y="432">7</text>
+  <text class="tb" x="624" y="464">contribute upstream</text>
+  <text class="ts" x="624" y="492">one button packs the case into a zip:</text>
+  <text class="ts" x="624" y="516">the case document, the files that changed,</text>
+  <text class="ts" x="624" y="540">the manifest and the diff — no game files,</text>
+  <text class="ts" x="624" y="564">no keys; the packer refuses them</text>
+
+  <rect class="out" x="1140" y="400" width="620" height="190" rx="12"/>
+  <text class="num" x="1164" y="432">8</text>
+  <text class="tb" x="1164" y="464">the game graduates</text>
+  <text class="ts" x="1164" y="492">the case lands as a pull request, the maintainer reads</text>
+  <text class="ts" x="1164" y="516">the diff, the profile and the android.tsv follow, and the</text>
+  <text class="ts" x="1164" y="540">game is counted in the list of the games that run.</text>
+  <text class="tk" x="1164" y="566">the credit goes to whoever opened the case</text>
+
+  <!-- the games -->
+  <text class="tb" x="60" y="672">seven games came out of this pipe</text>
+  <text class="ts" x="60" y="700">Every row is a real case file on a player's phone, with the fix on a branch in the repository and the numbers in the commit message.</text>
+
+  <rect class="box" x="60" y="726" width="820" height="360" rx="12"/>
+  <text class="tm" x="84" y="758">Red Dead Redemption</text>
+  <text class="ts" x="84" y="784">the shader split found 0 shaders (Rockstar's encrypted RPF6 archives) → 3,628;</text>
+  <text class="ts" x="84" y="806">the screen stayed black after the intro (a second audio renderer) → the title screen</text>
+  <text class="tm" x="84" y="840">Fire Emblem: Three Houses</text>
+  <text class="ts" x="84" y="866">the game died silently 1.8 s after launch → it renders the class demo</text>
+  <text class="tm" x="84" y="900">STAR OCEAN THE SECOND STORY R</text>
+  <text class="ts" x="84" y="926">the GPU was lost 4 minutes into the menu (one huge submission) → the fix is in;</text>
+  <text class="ts" x="84" y="948">the player's own ten-minute run decides</text>
+  <text class="tm" x="84" y="986">Trails in the Sky 2nd Chapter</text>
+  <text class="ts" x="84" y="1012">the whole scene was black (a texture builder that answered nothing) → the world draws</text>
+  <text class="tm" x="84" y="1048">TMNT: Shredder's Revenge</text>
+  <text class="ts" x="84" y="1074">it died at start-up (the online SDK was refused) → it boots to the menu</text>
+
+  <rect class="box" x="920" y="726" width="840" height="360" rx="12"/>
+  <text class="tm" x="944" y="758">Octopath Traveler II</text>
+  <text class="ts" x="944" y="784">the Unreal allocator asked for blocks the host could not give → the fix is in;</text>
+  <text class="ts" x="944" y="806">the device run is the player's next step</text>
+  <text class="tm" x="944" y="840">Bayonetta 3</text>
+  <text class="ts" x="944" y="866">the shaders live in PKZ archives (Oodle, one entry at a time) → it runs on the phone</text>
+  <text class="tm" x="944" y="900">Super Smash Bros. Ultimate</text>
+  <text class="ts" x="944" y="926">the DLC and the shared CJK font were missing from the pack → a case is open</text>
+  <text class="ts" x="944" y="966">The player's part is small: press yes, or say no.</text>
+  <text class="ts" x="944" y="990">The assistant's part is the diagnosis, the patch and the verification.</text>
+  <text class="ts" x="944" y="1014">Neither of them needed to know how a shader is built —</text>
+  <text class="ts" x="944" y="1038">the knowledge was already written down, and it ships</text>
+  <text class="ts" x="944" y="1062">with the app.</text>
+</svg>

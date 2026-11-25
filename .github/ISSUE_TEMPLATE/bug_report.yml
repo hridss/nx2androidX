@@ -11,7 +11,7 @@ body:
         - The phone app (library, settings, onboarding, save manager)
         - The phone app's in-game overlay (gamepad, pause menu, frame generation)
         - The port (the tool that makes the data pack)
-        - The runtime (the game itself: rendering, input, audio, saves)
+        - "The runtime (the game itself: rendering, input, audio, saves)"
         - A game profile (one game's own data)
         - The build or the release
         - The documentation

@@ -62,17 +62,8 @@ def main():
         props = d.setdefault('runtimeOptions', {}).setdefault('configProperties', {})
         props['System.Globalization.Invariant'] = True
         rc.write_text(json.dumps(d, indent=2))
-    # The APK's assets carry no permissions: the app restores them from modes.json, and a file that is not in it
-    # lands as 0644 (not executable). The assets are built before these tools, so their modes are added here.
-    modes_path = Path(a.out).parents[2] / 'modes.json'
-    if modes_path.is_file():
-        modes = json.loads(modes_path.read_text())
-        for d in sorted(Path(a.out).parent.iterdir()):
-            if not d.is_dir(): continue
-            for f in sorted(d.rglob('*')):
-                if f.is_file(): modes[f'tool/tools/{d.name}/{f.relative_to(d)}'] = f.stat().st_mode & 0o777
-        modes_path.write_text(json.dumps(modes))
-        print(f'>> the modes of the tools are in {modes_path}')
+    # The environment travels in one archive, and a tar carries the permissions with the files: the tools keep
+    # the mode they have here (the executable one above).
     return 0
 
 

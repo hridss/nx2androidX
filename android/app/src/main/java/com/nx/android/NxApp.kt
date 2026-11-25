@@ -20,6 +20,7 @@ class NxApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppProcess.markStarted()
         if (isMainProcess) PhantomFix.attach(this, locale)
     }
 }

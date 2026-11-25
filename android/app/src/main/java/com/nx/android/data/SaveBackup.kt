@@ -222,6 +222,20 @@ object SaveBackup {
     }
 
     /**
+     * 删除一个游戏的存档：活存档与设备存档一起删掉。
+     *
+     * 返回删到了没有：游戏还没存过盘时目录是空的或不存在，这时返回 false，界面据此告诉玩家
+     * 「尚未生成存档」而不是谎报删除成功。
+     */
+    fun erase(live: File, device: File?): Boolean {
+        val had = (live.isDirectory && live.listFiles()?.isNotEmpty() == true) ||
+            (device != null && device.isDirectory && device.listFiles()?.isNotEmpty() == true)
+        live.deleteRecursively()
+        device?.deleteRecursively()
+        return had
+    }
+
+    /**
      * The package of the live save, written into `dest` (the name it gets there is free); null when the game
      * has not saved yet. The tree in the package is named after the package.
      */

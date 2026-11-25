@@ -54,7 +54,7 @@ with them.
 |---|---|---|---|
 | The shader translation tool `dmsh_xlate` and its .NET dependencies (Humanizer, MessagePack, Gommon, Microsoft.IO.RecyclableMemoryStream, System.CodeDom) | MIT | `nxnative/dm/gfx/tools/dmsh_xlate_bin/` | `nxnative/dm/gfx/tools/dmsh_xlate_bin/NOTICE.md` and `LICENSES/` beside it |
 | `nx_extract` (the NSP reader) and LibHac 0.19.0 | GPL-3.0-or-later (its own code); LibHac is MIT | built from `nxnative/dm/tools/nx_extract/`, restored from NuGet | the repository's [LICENSE](LICENSE); the LibHac package is MIT |
-| The .NET runtime the phone app ships | MIT | the app's payload (`dotnet.pkg`) | the .NET SDK's own terms, fetched from Microsoft |
+| The .NET runtime the phone app ships | MIT | the app's environment archive (`payload.pkg`, at `tool/toolchain/dotnet`) | the .NET runtime's own terms, fetched from Microsoft |
 
 ## Fetched at run time or imported by the player, never shipped
 

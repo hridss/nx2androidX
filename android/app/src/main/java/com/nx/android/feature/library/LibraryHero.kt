@@ -53,11 +53,11 @@ import com.nx.android.domain.GameStatus
 
 /** 选中游戏的全屏呈现：已完成的游戏用产物 APK 里的图标实图，其余用名字的渐变与首字母水印 */
 @Composable
-internal fun HeroBackground(sel: GameEntry?) {
+internal fun HeroBackground(sel: GameEntry?, modifier: Modifier = Modifier) {
     if (sel == null) return
     val icon by rememberGameIcon(sel.pack?.icon?.absolutePath, 1280)
 
-    Box(Modifier.fillMaxSize()) {
+    Box(modifier.fillMaxSize()) {
         val bitmap = icon
         if (bitmap != null) {
             // 磨砂玻璃：小图标拉满全屏（放大裁掉模糊暗角）+ 高斯模糊，压暗层保持文字可读

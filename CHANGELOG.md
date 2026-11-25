@@ -8,6 +8,217 @@ players on the released version are not pushed onto an alpha.
 
 The release page has the APK and the full notes: <https://github.com/zFitness/nx2androidX/releases>.
 
+## v0.4.1-alpha02 - 2026-11-24
+
+### The app (the APK)
+
+#### Before you update · 更新之前(必读)
+
+- (EN) Your games keep the runtime they have and play exactly as before.
+  The fixes below take effect when you port a game again or press "Update
+  runtime" on a game's page. Nothing has to be imported for this.
+- (中文) 你的游戏继续用现在的运行库,体验和之前完全一样。下面的修复在你重新
+  移植游戏、或在游戏页面点"Update runtime"时生效。这一项不需要导入任何东西。
+- (EN) If a game of yours crashes at startup after you pressed "Update
+  runtime" on its page - the Unreal-engine games were the ones hit (FINAL
+  FANTASY RESONANCE, Octopath Traveler 0, DRAGON QUEST VII Reimagined) -
+  press it once more after updating: the rebuild carries the game's full
+  build data now, and the game starts. Your saves were never at risk.
+- (中文) 如果你之前在某游戏页面点过"Update runtime"之后游戏一启动就闪退
+  (中招的是虚幻引擎游戏:FF RESONANCE、勇气默示录 0、勇者斗恶龙 VII
+  Reimagined),更新后再点一次即可:重建现在会带上游戏的完整构建数据,游戏
+  就能启动。存档一直是安全的。
+
+#### Fixed
+
+- Porting some games stopped at the "GLSLC capture" stage with a build
+  error and produced nothing. Eastward and Tokyo Xanadu eX+ were reported;
+  every game that compiles its shaders at run time hit the same wall. The
+  capture builds again (a small piece of the engine was missing from the
+  headless host whenever the graphics backend was left out).
+- Pressing "Update runtime" on a game's page rebuilt the runtime without
+  the game's per-build tables, and Unreal-engine games crashed at startup
+  afterwards. The rebuild stages the game's whole profile now, so the
+  tables survive.
+- The build page's progress reads correctly, and installing a game no
+  longer retranslates every shader.
+
+### The game profiles (the package the player imports)
+
+No game changed in this release's package, so a re-import buys nothing:
+keep the one you have.
+
+### Community ports
+
+- **@mijuu** - the build page's progress, and no shader retranslation
+  after an install (#79).
+
+## v0.4.1-alpha01 - 2026-11-24
+
+### The app (the APK)
+
+#### Before you update · 更新之前(必读)
+
+- (EN) Nothing is rebuilt after this update: your games keep the runtime they
+  have and play exactly as before. Nothing has to be imported for this.
+- (中文) 本次更新不会重建任何运行库:你的游戏继续用现在的运行库,体验和之前
+  完全一样。这一项不需要导入任何东西。
+- (EN) The engine got a lot of fixes (see "Fixed" below). They are in a
+  runtime built with this version: a game you port now gets them, and for a
+  game you already have, the game's page has a "rebuild" button - press it
+  and the runtime is built again with this version (a few minutes per game).
+- (中文) 这次的引擎修了不少东西(见下面"修复")。这些修复在用本版构建的运行库
+  里:现在新移植的游戏自带;已经有的游戏,到那个游戏的页面点"重新构建"即可
+  (每个游戏几分钟)。
+- (EN) The app now carries an AI assistant. To talk to a model it needs one
+  of your own: the Settings tab takes a provider, a model and a key, and the
+  key stays on the phone. Without a key, everything else in the app works
+  exactly as before.
+- (中文) App 现在内置了一个 AI 助手。要连模型需要你自己的 API Key:在"设置"
+  页选服务商、选模型、填 Key,Key 只存在手机里。不填 Key,App 其它功能和以前
+  完全一样。
+- (EN) The nine new games below are in the profiles package of this release.
+  Import it in the environment check (the "manage" box) to get them.
+- (中文) 下面九款新游戏在本次的档案包里。到环境检查里(那个"管理"按钮)导入
+  即可。
+
+#### New
+
+**The assistant is in the app.** It runs on the phone itself, in the same
+Linux environment the porting tools run in - no computer in between. Ask it
+in your own words: why a game crashed, why a port would not build, what is
+in the library. It reads the game's log, the build's output and the
+library's state by itself; it does not ask you for a screenshot. It answers
+in the language you write to it.
+
+- A game that misbehaves goes to a case worker: it opens a case file for
+  that game - the symptom, the cause, the fix it proposes - and its steps
+  are visible while it works. A code change waits until you say yes; the
+  workers that only look around never write anything.
+- The knowledge it diagnoses with ships inside the app: over 400 upstream
+  porting cases, sorted by what you see - the build that stops at a stage,
+  the shader split that finds too few shaders, the crash, the black screen,
+  the garbled picture, the freeze. It is searchable and it is offline: no
+  network needed.
+- The help page's FAQ and the assistant read the same answers, so what the
+  page says is what the assistant knows.
+- The panel's head shows what the conversation cost and how much of the
+  context it used; the model picker asks the engine which models there are;
+  Stop ends the turn without killing the app, and a running turn is kept on
+  disk; the assistant's drawer survives being closed, and it opens from
+  inside a game.
+- A case can be exported as a file that carries the log, the cause and the
+  code diff.
+
+**Porting, on the phone:**
+
+- A merged dump - one file holding the base game, its update and the DLC
+  together - now ports as its own version. It could pick the wrong patch or
+  the wrong DLC before.
+- The Builds tab lists the games the phone can port, so you can see what is
+  known to work before you pick a file.
+- A game card (the cartridge dump some ports carry) can be cut into one NSP
+  per title, on the phone.
+- The Linux environment the tools run in is one archive with one stamp now:
+  importing and upgrading it is one step that either lands whole or does
+  not happen at all.
+
+#### Fixed
+
+- The engine fixes below are in a runtime built with this version: a game
+  you port now gets them, and an existing game gets them when you press
+  "rebuild" on its page.
+- Some games froze on a loading screen and never came back: the frame step
+  recovers now when a load clears.
+- Motion aiming feels like the console: the six-axis sensor fuses the
+  phone's own gravity, so gyro aiming holds its angle instead of drifting.
+- Some games' intro movies had the wrong colours (washed out or tinted):
+  the picture's colour matrix and range survive the decoder now.
+- The pause menu redraws at a steadier rate while it is open, and its panel
+  is drawn in cacheable memory - less stutter when it opens mid-game.
+- Phones with less free memory: the engine asks the device how big a
+  memory pool chunk it allows instead of assuming 256 MB, which kept some
+  ports from starting on 6 to 8 GB phones.
+- Two engine timing fixes: the replay thread's call counter no longer needs
+  atomic instructions some phones lack, and a game waiting on the GPU under
+  asynchronous replay no longer stalls.
+- The porting tools print readable text on a Windows console (UTF-8)
+  instead of mojibake.
+- The app imports the profiles package even when it comes from another
+  build - the import used to refuse it.
+- The assistant: the first open lands at the newest message again, the
+  usage ring does not flicker, a session you come back to resumes its own
+  context, and the model chip shows one name.
+
+### The game profiles (the package the player imports)
+
+Nine new games this release - five playable, two works in progress, two
+experimental - and five games got better.
+
+#### New games
+
+- Tales of Berseria Remastered - playable (the Asian release, update 1.0.5).
+  Ported upstream and tested on the Sony Xperia XQ-DQ72 (Adreno 740) and
+  the OnePlus 15.
+- Fire Emblem: Three Houses - playable. Ported upstream and tested on the
+  Lenovo Legion Y700 (Snapdragon 8 Elite, Adreno 830).
+- NOBUNAGA'S AMBITION: Shinsei - playable. Ported upstream and tested on the
+  Lenovo Legion Y700 (Snapdragon 8 Gen 3, Adreno 750).
+- Super Robot Wars 30 - playable. Ported upstream and tested on the Lenovo
+  Legion Y700 (Snapdragon 8 Gen 3, Adreno 750).
+- Layton's Mystery Journey: Katrielle and the Millionaires' Conspiracy DX+ -
+  playable. Ported upstream and tested on the iQOO 9 (Snapdragon 8 Gen 1,
+  Adreno 730).
+- Apollo Justice: Ace Attorney Trilogy - work in progress: it boots and
+  plays, the bring-up continues. Ported upstream and tested on the OnePlus 8
+  (Snapdragon 865).
+- The Great Ace Attorney Chronicles (the Chinese release) - work in progress.
+  Ported upstream and tested on the OPPO Pad (Snapdragon 870).
+- FIFA 21 Legacy Edition - experimental: try it with the experimental toggle.
+  Ported upstream and tested on the Xiaomi 17 (Adreno 840).
+- Rune Factory 3 Special - experimental. Ported upstream.
+
+#### Changed games
+
+- MEGAMAN BATTLE NETWORK LEGACY COLLECTION Vol. 1 and Vol. 2 - the
+  launcher's background video runs at 60 fps now instead of 30. The packs
+  are much smaller when you port them again (Vol. 1 about 1 GB less, Vol. 2
+  about 2.7 GB less): the game reads the packed files in place.
+- The Legend of Zelda: Breath of the Wild - the busiest villages hold 60
+  fps instead of dropping to 30 (the GPU's command buffers are cut less
+  often). Rebuild the runtime with the new profile to get it.
+- Pokemon Violet - the profile is playable now (it was an upstream
+  experiment): tested on the AYN Odin 2 (Adreno 740) with a Turnip driver.
+  Rebuild the runtime, or port the game again.
+- Fire Emblem Engage - the Somniel and the scenes after it do not crash any
+  more: the game's address space was the limit, and it has room to spare
+  now. 60 fps there.
+
+#### The two experimental games
+
+FIFA 21 Legacy Edition and Rune Factory 3 Special are ports from upstream
+that were brought up elsewhere; they are not verified on this line's devices
+yet. They are in the package so you can try them - turn on the experimental
+toggle in the environment check - but expect rough edges.
+
+### Community ports
+
+- **@C1oudust** - Tales of Berseria Remastered (through the upstream #465).
+- **@shirai91** - Fire Emblem: Three Houses (through the upstream #365).
+- **@mijuu** - NOBUNAGA'S AMBITION: Shinsei (through the upstream #521) and
+  Super Robot Wars 30 (through the upstream #517).
+- **@Bokyer** - Layton's Mystery Journey DX+ (through the upstream #413).
+- **@armyja** - Apollo Justice: Ace Attorney Trilogy (through the upstream
+  #295).
+- **@qzj112223** - The Great Ace Attorney Chronicles, the Chinese release
+  (through the upstream #531).
+- **@yidefu2012-cloud** - FIFA 21 Legacy Edition (through the upstream
+  #444).
+- **@rospec14** - Rune Factory 3 Special (through the upstream #535),
+  Pokemon Violet (through the upstream #451) and the Mega Man Battle Network
+  fixes (through the upstream #376, #441).
+- **@zFitness** - the AI assistant lives in the app (#99).
+
 ## v0.4.0-alpha03 - 2026-11-21
 
 ### The app (the APK)

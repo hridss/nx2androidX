@@ -75,15 +75,15 @@ class FaqContentTest {
 
     @Test
     fun theFileFollowsTheAppsLanguage() {
-        assertEquals("faq/faq_zh.json", FaqContent.fileFor(AppLocale.Mode.ZH, "en"))
-        assertEquals("faq/faq_en.json", FaqContent.fileFor(AppLocale.Mode.EN, "zh"))
-        assertEquals("faq/faq_zh.json", FaqContent.fileFor(AppLocale.Mode.SYSTEM, "zh"))
-        assertEquals("faq/faq_en.json", FaqContent.fileFor(AppLocale.Mode.SYSTEM, "en"))
-        assertEquals("faq/faq_en.json", FaqContent.fileFor(AppLocale.Mode.SYSTEM, "fr"))
+        assertEquals("nx2a/agent/workspace/knowledge/faq_zh.json", FaqContent.fileFor(AppLocale.Mode.ZH, "en"))
+        assertEquals("nx2a/agent/workspace/knowledge/faq_en.json", FaqContent.fileFor(AppLocale.Mode.EN, "zh"))
+        assertEquals("nx2a/agent/workspace/knowledge/faq_zh.json", FaqContent.fileFor(AppLocale.Mode.SYSTEM, "zh"))
+        assertEquals("nx2a/agent/workspace/knowledge/faq_en.json", FaqContent.fileFor(AppLocale.Mode.SYSTEM, "en"))
+        assertEquals("nx2a/agent/workspace/knowledge/faq_en.json", FaqContent.fileFor(AppLocale.Mode.SYSTEM, "fr"))
     }
 
-    private fun zhJson(): String = asset("faq/faq_zh.json")
-    private fun enJson(): String = asset("faq/faq_en.json")
+    private fun zhJson(): String = asset("nx2a/agent/workspace/knowledge/faq_zh.json")
+    private fun enJson(): String = asset("nx2a/agent/workspace/knowledge/faq_en.json")
 
     /** 内容文件的位置：模块目录（android/app）下就是它，往上两级也能找到 */
     private fun asset(relative: String): String {

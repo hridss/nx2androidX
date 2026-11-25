@@ -4,12 +4,13 @@ title: "[Game]: "
 labels: ["game report"]
 body:
   - type: markdown
-    value: |
-      A game runs for you. This is the report that puts a game on the list and tells the next person
-      whether it is worth their evening.
+    attributes:
+      value: |
+        A game runs for you. This is the report that puts a game on the list and tells the next person
+        whether it is worth their evening.
 
-      **A report is a contribution.** The game's checklist line gets your name on it, and the numbers you
-      give here are what the project measures with.
+        **A report is a contribution.** The game's checklist line gets your name on it, and the numbers you
+        give here are what the project measures with.
 
   - type: input
     id: game

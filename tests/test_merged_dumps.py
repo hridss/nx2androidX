@@ -40,7 +40,7 @@ class MergedDumps(unittest.TestCase):
             struct.pack_into('<Q', header, 0x130, 0x200)
             data = header + fs([('secure', fs(files))])
         else:
-            data = (dumps._pfs0_header([n for n, _ in files], [len(d) for _, d in files])
+            data = (dumps.pfs0_header([n for n, _ in files], [len(d) for _, d in files])
                     + b''.join(d for _, d in files))
         path = self.root / name
         path.write_bytes(data)

@@ -22,6 +22,7 @@
 | `nxnative/dm/android/` | Android 运行时（Vulkan 后端、Horizon 宿主、输入、覆盖层、暂停菜单） | **产品本体** |
 | `nxnative/dm/games/<title ID>/` | 游戏档案；Android 侧的关键是 `android.tsv` | **产品本体** |
 | `porter/` | 移植流水线本体（Python） | 活跃代码：玩家桌面工具与手机 app 共用同一套 pipeline |
+| `phone_tools/` | 手机上的小工具（Python） | 随 payload 进手机（`tool/tools/`）：助手与玩家按名字调用，与流水线同版本 |
 | `gui/` | 桌面壳（PySide/Tk） | 玩家向工具，不是开发重心 |
 | `packaging/` | 玩家桌面 zip + `android-apk/` 出 APK | 桌面 zip 是玩家分发物；**APK 才是本 fork 的产物** |
 | `nxnative/`（其余） | 上游引擎 fork | 运行时在 `dm/android/`；`nxnative/AGENTS.md` 与 `nxnative/docs/` 讲的是上游的 Apple/iOS 路线，不是本 fork 的方向 |
@@ -63,7 +64,7 @@ README 的 "For players" 一节讲桌面工具，那仍是真实存在的玩家�
   之后的预发布不会自动抢走这个位置。**只改标记可能不会让 "Latest" 指过去**：GitHub 的 "Latest" 在创建时
   就定了（`make_latest`），事后去标记要另外显式点名：
   `gh api -X PATCH repos/zFitness/nx2androidX/releases/<id> -F make_latest=true`。
-  现状：`v0.3.0-alpha14` 是 Latest
+  现状：`v0.4.1-alpha01` 是 Latest（已去掉预发布标记，所有玩家的更新检查都会看到这一版）
 - **构建只由 tag 触发**：推分支什么都不构建。tag 一推，构建就开始（产物从那个 tag 的提交来），
   它会等 release 建好后把 APK 附上去（`gh release create` 紧跟着 tag 就行）。**要重新构建就把 tag 重推一次**
   （`git tag -f` + `git push --force`），构建跟着新 tag 走
@@ -76,8 +77,9 @@ README 的 "For players" 一节讲桌面工具，那仍是真实存在的玩家�
   `gh release create v<base>-alphaNN --verify-tag --prerelease --notes-file <notes> --repo zFitness/nx2androidX`，**不带 zip**
 - **notes 里要有一段 `Community ports`**，点名本版本涉及的社区贡献（谁移植了哪个游戏、谁修了什么）。
   名单用 `python3 devtools/release_contributors.py` 取（上个 tag 之后合并的 PR 与作者），粘进 notes；
-  游戏级别的署名同时落在 `docs/PORT_CHECKLIST.md` 的那一行（`ported by @handle`）
-- app 的 `versionName` 在 `android/app/build.gradle.kts`（当前 `0.3.0-alpha12`），与 tag 去掉 `v` 一致
+  游戏级别的署名同时落在 `docs/PORT_CHECKLIST.md` 的那一行（`ported by @handle`）——
+  名单由 `python3 docs/gen_tables.py` 从档案生成，署名取自加入该档案的那次提交的 GitHub 账号
+- app 的 `versionName` 在 `android/app/build.gradle.kts`（当前 `0.4.1-alpha01`），与 tag 去掉 `v` 一致
 - **一次发布带手机的 APK 和游戏档案包，别无其它**。App 不带游戏档案（几百 MB 的着色器表），玩家自己导入：
   release 的第二个附件 `nx2a-profiles-r<版本>-<commit>.zip`（CI 切，`devtools/profiles_zip.py`），夸克网盘里
   同样放一份。桌面 workflow（`release-windows.yml` / `release-macos.yml`）不发版，
@@ -102,6 +104,11 @@ README 的 "For players" 一节讲桌面工具，那仍是真实存在的玩家�
   删 worktree 前先列出里面的链接，逐个单独删链接本身（**不要带 `-r` / `/s`**），再删 worktree。
 - **分支合并后**清理 worktree 并删掉已合并的分支（`git branch -d`）。
 - **一个核心改动只影响它真正修的游戏**；通用规则优先于游戏专属规则。
+- **手机上的引擎树不是版本库**：`files/tool/nxnative` 是一份会被整体刷新的复制件——上游同步会把它换掉，
+  里面的本地改动悄无声息地丢（2026-11-23 晚上就丢了三个修复：MGFX v10 读取器、在线 SDK opt-in、
+  compute warm-up）。改在手机上的引擎代码要**同时落到本仓库的分支上**，一个 case 一条
+  （`case/<title ID>-<slug>`）；子代理在手机上做的修复，至少要把 diff 写进该局的案例档案
+  （`gamespec/<title ID>/files/`）——那是玩家自己的数据，活过每一次更新。
 - **移植类改动必须有真机验证**（真机上的实况 / 截图 / 帧率数据），推理和推断不算验证。
 - **提交只在被要求时做**，用 checkout 自己的 git 身份；提交信息走 Conventional Commits（英文、小写），
   由 `.githooks/commit-msg` 校验。

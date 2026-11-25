@@ -135,6 +135,8 @@ class PortService : Service() {
             port.cancel()
             cancelled?.cancel()
             port.history.firstOrNull { it.id == cancelledId }?.let(completionCoordinator::complete)
+            // 通知也要跟着状态走：停止前的通知是「进行中」（不可划掉），停掉后还留着一条假的在进行
+            nm.notify(1, notification())
             stopShown()
             stopSelf(startId)
             return START_NOT_STICKY
@@ -160,13 +162,14 @@ class PortService : Service() {
         if (!began) {
             startForeground(1, notification())
             stopShown()
+            nm.cancel(1)   // no build began: nothing to report, and the detached notification would never go by itself
             return stop()
         }
         val taskId = port.buildId
         startForeground(1, notification())
         val handler = Handler(mainLooper)
         lateinit var taskRunner: PortRunner
-        taskRunner = PortRunner(environmentSetup, guestLauncher, locale, File(paths.files, "nx2a/port_exit.txt")) { line ->
+        taskRunner = PortRunner(environmentSetup, guestLauncher, locale::str, File(paths.files, "nx2a/port_exit.txt")) { line ->
             handler.post {
                 if (runner === taskRunner && port.running && port.buildId == taskId) {
                     port.onLine(line)
@@ -201,6 +204,7 @@ class PortService : Service() {
             port.history.firstOrNull { it.id == taskId }?.let(completionCoordinator::complete)
             Toast.makeText(this, locale.str(R.string.build_executor_unavailable), Toast.LENGTH_LONG).show()
             stopShown()
+            nm.cancel(1)   // the build is over before it began: the detached notification would stay as it was
             stopSelf(startId)
         }
         return START_NOT_STICKY

@@ -24,7 +24,7 @@ object EnvCheck {
     enum class Level { OK, HINT, BAD }
 
     /** The chip's state */
-    enum class Chip { CHECKING, READY, HINT, NOT_READY }
+    enum class Chip { CHECKING, READY, HINT, NOT_READY, PREPARING }
 
     /** One line of the checklist */
     data class Row(val name: String, val level: Level, val detail: String, val fix: String = "")
@@ -53,7 +53,9 @@ object EnvCheck {
         phantom: PhantomCheck.Status? = null,
         firmwareImported: Boolean = true,
         profilesImported: Boolean = true,
+        preparing: Boolean = false,
     ): Chip = when {
+        preparing -> Chip.PREPARING
         !envReady || !keysOk -> Chip.NOT_READY
         !firmwareImported -> Chip.HINT
         !profilesImported -> Chip.HINT

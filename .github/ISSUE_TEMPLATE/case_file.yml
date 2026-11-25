@@ -1,0 +1,80 @@
+name: Case file
+description: The case file zip from the app's "Contribute upstream" — the material a port is made from.
+title: "[Case]: "
+labels: ["case file"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The app's assistant worked a game over and the export button packed that work into a zip.
+        This is where the zip lands: the diff in it can be read, applied and landed in the repository,
+        and the case's author gets the credit.
+
+        The zip is on the phone in Download/nx2android/gamespec/ — drag it into the attachment field
+        below. It holds the case document (spec.md), the files that were changed, the manifest
+        (fix.md) and the diff (diff.patch). It cannot hold game files or keys: the packer refuses
+        them.
+
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: The game's name as it appears on the Switch.
+      placeholder: "AI: THE SOMNIUM FILES"
+    validations:
+      required: true
+
+  - type: input
+    id: title-id
+    attributes:
+      label: Title ID
+      description: "The base game's title ID, in the form 0100000000010000. It is in the file name of the exported zip and in the app's library entry."
+      placeholder: "010089B00D09C000"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: The phone or tablet, with the GPU. Adreno (Snapdragon) and Xclipse (Exynos 2200+) run the games; Mali and PowerVR do not.
+      placeholder: "Lenovo Legion Y700 (Snapdragon 8 Elite, Adreno 830, Android 16)"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: The nx2androidX version you are running (the app's Settings tab, or the release you downloaded).
+      placeholder: "0.4.0-alpha03"
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: What happens
+      description: "The symptom and where it stops: black screen, crash, low fps, a build that fails. What you tried, and what the case file already found, are in the zip."
+      placeholder: "The game builds and starts, then the screen goes black at the first shader load."
+    validations:
+      required: true
+
+  - type: textarea
+    id: case-file
+    attributes:
+      label: The case file
+      description: "Drag the exported zip in: Download/nx2android/gamespec/<title ID>-gamespec.zip. It holds the case document, the changed files, the manifest and the diff."
+      placeholder: "Drag <title ID>-gamespec.zip here"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before sending
+      options:
+        - label: I own this game's files and my own `prod.keys`, and neither is attached here.
+          required: true
+        - label: I searched the existing case-file issues for this game.
+          required: true

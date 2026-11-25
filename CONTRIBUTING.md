@@ -86,7 +86,7 @@ What a finished port contains:
 | `nxnative/dm/games/<title ID>/game.tsv` | the game's constants (upstream's format, documented in [nxnative/dm/games/README.md](nxnative/dm/games/README.md)) |
 | `nxnative/dm/games/<title ID>/shader_*.tsv`, `pso_manifest.tsv`, `bf_want.tsv` | the shader tables the translator reads |
 | `nxnative/dm/games/<title ID>/android.tsv` | the Android side: the status, the version and device it was tested on, the package name, the orientation, the device features it needs ([docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#game-profiles-on-android)) |
-| `docs/PORT_CHECKLIST.md` | the game's line, ticked, with your handle |
+| `docs/PORT_CHECKLIST.md` | the list of the games, made from the profiles: `python3 docs/gen_tables.py` (your handle lands in the game's line) |
 
 **Some games cannot be ported**, and it is better to know early: a game that renders with Vulkan or OpenGL
 of its own, or one whose shaders can only be produced by running the game on a computer, is refused by the

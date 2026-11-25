@@ -3,6 +3,7 @@ package com.nx.android.feature.onboarding
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nx.android.appstate.EnvBuildState
 import com.nx.android.appstate.OnboardingState
 import com.nx.android.domain.ObFacts
 import com.nx.android.domain.ObStep
@@ -19,7 +20,7 @@ data class OnboardingUiState(
     val facts: ObFacts = ObFacts(false, 0, OnboardingState.NEEDED_GB, false, "", false, false),
     val envReady: Boolean = false,
     val unpacking: Boolean = false,
-    val unpackStep: String = "",
+    val unpackProgress: Int = 0,
     val unpackError: String = "",
     val keysOk: Boolean = false,
     val keysChecking: Boolean = false,
@@ -32,6 +33,7 @@ data class OnboardingUiState(
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
     val onboarding: OnboardingState,
+    val build: EnvBuildState,
 ) : ViewModel() {
     val uiState: StateFlow<OnboardingUiState> = snapshotFlow {
         OnboardingUiState(
@@ -39,9 +41,9 @@ class OnboardingViewModel @Inject constructor(
             step = onboarding.step,
             facts = onboarding.facts(),
             envReady = onboarding.envReady,
-            unpacking = onboarding.unpacking,
-            unpackStep = onboarding.unpackStep,
-            unpackError = onboarding.unpackError,
+            unpacking = build.running,
+            unpackProgress = build.progress,
+            unpackError = build.error,
             keysOk = onboarding.keysOk,
             keysChecking = onboarding.keysChecking,
             keysPath = onboarding.keysPath,

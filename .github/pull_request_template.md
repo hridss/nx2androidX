@@ -31,8 +31,8 @@
 
 ## The paperwork
 
-- [ ] `docs/PORT_CHECKLIST.md` is updated in this commit (the game's line ticked, the `N / M ported` line
-      recounted).
+- [ ] `docs/PORT_CHECKLIST.md` is what the profiles make: run `python3 docs/gen_tables.py` (the list of
+      the games is made from the profiles; a profile with an `android.tsv` is a game that plays on Android).
 - [ ] The profile's `android.tsv` carries the status, the version and the device it was tested on, and its
       comment header says what was tested.
 - [ ] The commit message follows [Conventional Commits](https://www.conventionalcommits.org), in English,

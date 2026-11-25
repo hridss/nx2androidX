@@ -119,11 +119,11 @@ fun EnvChecklistDialog(
                         stringResource(R.string.env_check_env),
                         if (state.envReady) EnvCheck.Level.OK else EnvCheck.Level.BAD,
                         when {
-                            onboardingState.unpacking -> stringResource(R.string.onb_unpacking, onboardingState.unpackStep)
+                            onboarding.build.running -> stringResource(R.string.onb_building, onboarding.build.progress)
                             state.envReady -> stringResource(R.string.env_ready)
                             else -> stringResource(R.string.env_not_ready)
                         },
-                        action = if (state.envReady || onboardingState.unpacking) null else stringResource(R.string.onb_prepare_env),
+                        action = if (state.envReady || onboarding.build.running) null else stringResource(R.string.onb_prepare_env),
                         onAction = onPrepareEnv,
                     )
                     CheckLine(

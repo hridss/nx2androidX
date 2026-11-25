@@ -44,6 +44,13 @@ interface SaveRepository {
 
     /** replaces the live save with the package from the source */
     suspend fun import(titleId: String, source: SaveSource): Result<Unit>
+
+    /**
+     * 删除这个游戏的存档（活存档与设备存档）。
+     *
+     * 返回删掉了没有：游戏尚未生成存档时返回 false，界面据此给玩家一句实话。
+     */
+    suspend fun erase(titleId: String): Result<Boolean>
 }
 
 const val SAVE_PACKAGE_EXTENSION = "zip"

@@ -187,4 +187,30 @@ class SaveBackupTest {
         assertFalse(File(internal, "save/0100000000010000.old").exists())
         assertFalse(File(internal, "save/0100000000010000.import").exists())
     }
+
+    @Test
+    fun erasing_takes_the_save_and_the_device_save_away() {
+        val internal = tmp("internal")
+        val live = liveSave(internal, "0100000000010000", "slot0.dat", "progress")
+        val device = SaveBackup.deviceDir(internal, "0100000000010000")
+        device.mkdirs()
+        File(device, "island.dat").writeText("device")
+
+        val erased = SaveBackup.erase(live, device)
+
+        assertTrue("the save was there, so it is gone", erased)
+        assertFalse("the live save is gone", live.exists())
+        assertFalse("the device save is gone", device.exists())
+    }
+
+    @Test
+    fun erasing_a_game_that_never_saved_says_so() {
+        val internal = tmp("internal")
+        val live = SaveBackup.liveDir(internal, "0100000000010000")
+        live.mkdirs()
+
+        val erased = SaveBackup.erase(live, SaveBackup.deviceDir(internal, "0100000000010000"))
+
+        assertFalse("there was no save to delete", erased)
+    }
 }

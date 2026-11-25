@@ -40,6 +40,7 @@ fun EnvChip(chip: EnvCheck.Chip, onClick: () -> Unit) {
         EnvCheck.Chip.READY -> stringResource(R.string.env_chip_ready) to NxPalette.Ready
         EnvCheck.Chip.HINT -> stringResource(R.string.env_chip_not_ready) to NxPalette.Building
         EnvCheck.Chip.NOT_READY -> stringResource(R.string.env_chip_not_ready) to NxPalette.Danger
+        EnvCheck.Chip.PREPARING -> stringResource(R.string.env_chip_preparing) to NxPalette.Building
     }
     Row(
         Modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(50)).clickable(onClick = onClick)

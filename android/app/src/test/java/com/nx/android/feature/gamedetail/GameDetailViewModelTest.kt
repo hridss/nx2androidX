@@ -78,6 +78,8 @@ class GameDetailViewModelTest {
             Result.failure(UnsupportedOperationException())
         override suspend fun import(titleId: String, source: SaveSource): Result<Unit> =
             Result.failure(UnsupportedOperationException())
+        override suspend fun erase(titleId: String): Result<Boolean> =
+            Result.failure(UnsupportedOperationException())
     }
 
     private class FakeSaveIo : SaveIo {

@@ -139,6 +139,51 @@ def find_profile(pack, title_id, expected, allow_drift=False):
     return None, None, found
 
 
+# The per-build tables a profile header reads (the source of truth is BUILD_TABLES in
+# nxnative/dm/games/game.py). Packs ported before those rows moved out of the host's hardcoded
+# table (aa063adb, 2026-11-19) carry none of them in any copy of their profile: a rebuild has to
+# fill them from the build workspace or the player's imported profiles layer, or the rebuilt UE
+# runtime would install no allocator and the game would crash at boot.
+BUILD_TABLE_FILES = ('ue_malloc.tsv', 'fps_locks.tsv')
+
+
+def stage_profile(profile: Path, staged: Path, title_id: str, pack: Path, emit) -> list[str]:
+    """Copy the whole profile into the build's scratch folder — the fingerprint then hashes exactly
+    what the build compiles — and fill any per-build table the profile copy lacks from the other
+    candidates: the pack's copy, the build workspace, the player's imported profiles layer. Emits
+    the staged file list and returns it; a table that exists nowhere is reported and the rebuild
+    carries on (the wide existing semantics: no new hard failure)."""
+    staged.mkdir(parents=True)
+    names = []
+    for src in sorted(profile.iterdir()):
+        if not src.is_file(): continue
+        shutil.copyfile(src, staged / src.name)
+        names.append(src.name)
+    missing = []
+    for name in BUILD_TABLE_FILES:
+        if (staged / name).is_file(): continue
+        source = next((c for c in profile_candidates(pack, title_id)
+                       if c.resolve() != profile.resolve() and (c / name).is_file()), None)
+        if source is None:
+            missing.append(name); continue
+        shutil.copyfile(source / name, staged / name)
+        names.append(name)
+        emit(f'Filled {name} into the staged profile from {source}.')
+    if missing:
+        # A UE game without ue_malloc.tsv loses its allocator in the rebuild (the crash this fixes);
+        # a game that never had the table compiles fine without it, so only the UE case is [RED].
+        unreal = 'unreal' in (staged / 'game.tsv').read_text(encoding='utf-8', errors='replace').lower()
+        what = ' or '.join(missing)
+        if 'ue_malloc.tsv' in missing and unreal:
+            emit(f'[RED] The profile has no {what} anywhere (pack copy, build workspace, imported profiles): '
+                 f'a rebuilt UE runtime would run without its allocator and crash at boot. Import a current profiles pack or port the game again.')
+        else:
+            emit(f'Note: the staged profile has no {what} (no pack copy, workspace or imported profile has it); '
+                 f'the runtime compiles without those rows.')
+    emit('Profile staged: ' + ', '.join(names))
+    return names
+
+
 def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=print):
     pack = Path(pack).resolve()
     expected = os.environ.get('NX2A_PLAYER_API_REVISION')
@@ -151,13 +196,11 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
         raise ValueError('Invalid game identity. Port the game again from its original files.')
     fingerprint = manifest.get('profile_h')
     if not isinstance(fingerprint, str) or not fingerprint: fingerprint = None   # an old pack: trusted, not checked
-    profile, chosen, found = find_profile(pack, title_id, fingerprint, allow_drift=allow_profile_drift)
+    profile, _, found = find_profile(pack, title_id, fingerprint, allow_drift=allow_profile_drift)
     if profile is None:
         if not found:
             raise ValueError('No game profile for this game. Port the game again from its original files.')
         raise ProfileDrift('The game profile changed since this pack was built.')
-    if fingerprint is not None and chosen != fingerprint:
-        emit('The game profile changed since this pack was built. Rebuilding the runtime with the current profile.')
     ndk, _ = toolchain.find_ndk(config.load())
     if ndk is None:
         raise ValueError('The Android compiler is unavailable. Prepare the environment and retry.')
@@ -168,12 +211,18 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
     try:
         with tempfile.TemporaryDirectory(prefix=title_id + '-', dir=root) as scratch:
             scratch = Path(scratch)
-            # Snapshot the two non-executable inputs; do not reuse generated headers or old objects.
+            # Snapshot the whole profile (game.tsv, android.tsv and every table the header reads,
+            # such as ue_malloc.tsv): the fingerprint then hashes exactly what the build compiles.
+            # A two-file snapshot dropped the per-build rows and every rebuilt UE game lost its
+            # allocator (the game crashed in nninitStartup on the zeroed FMallocBinned3 its cut
+            # constructor had left). Old packs carry the tables in no copy of their own:
+            # stage_profile fills them from the build workspace or the imported profiles layer.
             profile_root = scratch / 'profile'
-            target = profile_root / title_id
-            target.mkdir(parents=True)
-            for name in ('game.tsv', 'android.tsv'):
-                shutil.copyfile(profile / name, target / name)
+            staged_profile = profile_root / title_id
+            stage_profile(profile, staged_profile, title_id, pack, emit)
+            chosen = profile_fingerprint(staged_profile)
+            if fingerprint is not None and chosen != fingerprint:
+                emit('The game profile changed since this pack was built. Rebuilding the runtime with the current profile.')
             output = scratch / 'host'
             prebuilt = DM.parent.parent / 'tools' / 'adrenotools'
             use_prebuilt = all((prebuilt / name).is_file() for name in HOOKS)
@@ -183,8 +232,8 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
             if no_lsfg: args.append('--no-lsfg')
             if not use_prebuilt: args.append('--adrenotools')
             env = dict(os.environ, DM_GAME=title_id, DM_GAMES_DIR=str(profile_root), DM_GAMES_FIRST='1')
-            tc_lib = DM.parent.parent / 'toolchain' / 'lib'
-            if tc_lib.is_dir(): env['LD_LIBRARY_PATH'] = str(tc_lib) + os.pathsep + env.get('LD_LIBRARY_PATH', '')
+            tc_lib = toolchain.toolchain_lib_dirs()
+            if tc_lib: env['LD_LIBRARY_PATH'] = str(tc_lib[0]) + os.pathsep + env.get('LD_LIBRARY_PATH', '')
             emit('Building the player runtime')
             with subprocess.Popen(args, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace') as process:
                 for line in process.stdout: emit(line.rstrip())
@@ -219,7 +268,7 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
                 manifest.pop('host_front', None)
                 manifest['player_api_revision'] = PLAYER_API_REVISION
                 manifest['profile_h'] = chosen
-                embed_profile(pack, title_id, profile)
+                embed_profile(pack, title_id, staged_profile)
             else:
                 # No runtimes folder given (the desktop tool, the upstream engine): the runtime lives in
                 # the pack's own places, the way it always has. The hooks go in first and the host last
@@ -232,7 +281,7 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
                 manifest['player_api_revision'] = PLAYER_API_REVISION
                 manifest['profile_h'] = chosen   # the profile this runtime was built from (a pack without one gets it now)
                 manifest.pop('host_front', None)
-                embed_profile(pack, title_id, profile)
+                embed_profile(pack, title_id, staged_profile)
             pending = stage / 'manifest.json'
             with pending.open('w', encoding='utf-8') as stream:
                 json.dump(manifest, stream, indent=2)

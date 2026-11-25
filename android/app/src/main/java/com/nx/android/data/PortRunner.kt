@@ -18,7 +18,7 @@ import java.util.Locale
 class PortRunner(
     private val environmentSetup: EnvironmentSetup,
     private val guestLauncher: GuestProcessLauncher,
-    private val locale: AppLocale,
+    private val str: (Int, Array<out Any?>) -> String,
     private val statusFile: File? = null,
     private val onLine: (String) -> Unit,
 ) {
@@ -37,8 +37,8 @@ class PortRunner(
         val args = portArgs(gameFile, keys, touch, fps60, experimental, aliasHeadroom, !BuildConfig.NX_LSFG,
             sharedFont, firmware, mtReplay, deviceLanguage())
         // A file in a netdisk's folder is not there yet in its middle: the port would read it as a broken dump
-        GameSource.cloudFolder(gameFile)?.let { onLine(locale.str(R.string.runner_cloud_folder, it)) }
-        return start(args, onEnd, if (packDir.isNullOrBlank()) emptyMap() else mapOf("NX2A_PACK_DIR" to packDir))
+        GameSource.cloudFolder(gameFile)?.let { onLine(s(R.string.runner_cloud_folder, it)) }
+        return start(args, { onEnd() }, if (packDir.isNullOrBlank()) emptyMap() else mapOf("NX2A_PACK_DIR" to packDir))
     }
 
     /**
@@ -91,13 +91,13 @@ class PortRunner(
         if (keys.isNotBlank()) args += listOf("-k", keys.trim())
         val t = Thread {
             try {
-                onLine(locale.str(R.string.runner_checking_tools))
+                onLine(s(R.string.runner_checking_tools))
                 environmentSetup.patchInterpreters()
-                onLine(locale.str(R.string.runner_interpreter_patched))
+                onLine(s(R.string.runner_interpreter_patched))
             } catch (e: Exception) {
-                onLine(locale.str(R.string.runner_interpreter_patch_failed, e.message))
+                onLine(s(R.string.runner_interpreter_patch_failed, e.message))
             }
-            start(args, onEnd)
+            start(args, { onEnd() })
         }
         t.start()
         return t
@@ -112,12 +112,19 @@ class PortRunner(
      */
     fun importProfiles(packageFile: String, onEnd: (Int) -> Unit): Thread {
         val args = mutableListOf("-m", "porter", "profiles", "import", packageFile)
-        return start(args, { onEnd(0) }, onExit = onEnd)
+        return start(args, onEnd)
     }
 
-    private fun start(args: List<String>, onEnd: () -> Unit, extra: Map<String, String> = emptyMap(),
-                      onExit: ((Int) -> Unit)? = null): Thread {
+    /**
+     * One run of a guest program.
+     *
+     * The caller hears about the end exactly once: [onEnd] is called with the exit code (the program's own
+     * code; -1 when the run did not get that far - it failed, or it never started). The end is told in the
+     * finally, so it is told on every path: a run that failed is told as a failure, not as a success.
+     */
+    private fun start(args: List<String>, onEnd: (Int) -> Unit, extra: Map<String, String> = emptyMap()): Thread {
         val t = Thread {
+            var code = -1
             try {
                 if (cancelled) return@Thread
                 val p = guestLauncher.guest(args, extra = extra)
@@ -127,15 +134,14 @@ class PortRunner(
                     return@Thread
                 }
                 p.inputStream.bufferedReader().forEachLine { onLine(it) }
-                val code = runCatching { p.waitFor() }.getOrDefault(-1)
+                code = runCatching { p.waitFor() }.getOrDefault(-1)
                 if (code != 0) onLine(exitLine(code))
                 statusFile?.let { writeStatus(it, code) }
-                onExit?.invoke(code)
             } catch (e: Exception) {
                 onLine("[RED] ${e.message}")
             } finally {
                 proc = null
-                onEnd()
+                onEnd(code)
             }
         }
         t.start()
@@ -148,8 +154,11 @@ class PortRunner(
      */
     private fun exitLine(code: Int): String {
         val sig = signal(code)
-        return if (sig != 0) locale.str(R.string.runner_killed, sig) else locale.str(R.string.runner_exit_code, code)
+        return if (sig != 0) s(R.string.runner_killed, sig) else s(R.string.runner_exit_code, code)
     }
+
+    /** One of the app's own strings: its id and the arguments it takes */
+    private fun s(id: Int, vararg args: Any?): String = str(id, args)
 
     /** The signal that killed the process, 0 when it ended on its own */
     private fun signal(code: Int): Int = if (code in 129..255) code - 128 else 0

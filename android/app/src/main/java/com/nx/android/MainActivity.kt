@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.hardware.input.InputManager
@@ -21,6 +22,8 @@ import com.nx.android.appstate.LibraryOperationCoordinator
 import com.nx.android.appstate.UpdateState
 import com.nx.android.appstate.porting.PortCompletionCoordinator
 import com.nx.android.data.firmware.FirmwareRepository
+import com.nx.android.agent.runtime.GamespecExporter
+import com.nx.android.agent.runtime.openGamespecIssue
 import com.nx.android.domain.drivers.DriverRepository
 import com.nx.android.domain.environment.EnvironmentSetup
 import com.nx.android.game.GameActivity
@@ -38,15 +41,21 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.nx.android.R
+import com.nx.android.agent.runtime.AgentEngineStore
+import com.nx.android.agent.runtime.AgentSetup
+import com.nx.android.agent.ui.AgentConversationState
 import com.nx.android.appstate.LibraryState
+import com.nx.android.appstate.EnvBuildState
 import com.nx.android.appstate.EnvCheckState
 import com.nx.android.appstate.OnboardingState
+import com.nx.android.appstate.PageStateStore
 import com.nx.android.appstate.PlayerState
 import com.nx.android.appstate.PortState
 import com.nx.android.data.AppLocale
 import com.nx.android.data.AppLog
 import com.nx.android.data.AppVersion
 import com.nx.android.data.CheatRepo
+import com.nx.android.data.Gamespec
 import com.nx.android.data.LogBundle
 import com.nx.android.data.Player
 import com.nx.android.data.PrefsStore
@@ -120,7 +129,16 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var drivers: DriverRepository
     @Inject lateinit var firmwareRepo: FirmwareRepository
     @Inject lateinit var envCheck: EnvCheckState
+    @Inject lateinit var envBuild: EnvBuildState
     @Inject lateinit var update: UpdateState
+    @Inject lateinit var agentEngine: AgentEngineStore
+    @Inject lateinit var agentSetup: AgentSetup
+    /** 攻关档案的导出：打包器在环境里跑 */
+    @Inject lateinit var exporter: GamespecExporter
+    /** 助手的会话：整个 App 一份——首页的抽屉、竖屏的聊天页与游戏里的抽屉看的都是它 */
+    @Inject lateinit var agentConversation: AgentConversationState
+    /** 页面状态快照：助手想知道玩家此刻在哪一局，就读它 */
+    @Inject lateinit var pageState: PageStateStore
 
     /** 界面语言：toast 与分享面板的标题从这里取词 */
     /** Which tab the screen opens on (the notification's tap says the builds page) */
@@ -136,6 +154,10 @@ class MainActivity : ComponentActivity() {
     /** 首页的手柄中心开着吗（开着的时候手柄的键不进库页，只进示波与抓键）。
      *  这一份是**唯一**的那份：分发层（dispatchKeyEvent）与页面读的都是它。 */
     var padCenterOpen by mutableStateOf(false)
+
+    /** The assistant's full chat page is open (the portrait one)? The one copy: AppRoot's entry writes it,
+     *  the orientation collector in onCreate reads it. The side panel does not count — it is landscape. */
+    private var agentFullOpen by mutableStateOf(false)
 
     /** 摇杆与十字键帽各自的边沿状态：推到底发一次，回中才复位。 */
     private val hatEdge = NavEdge(HAT_THRESHOLD)
@@ -173,15 +195,29 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             AppRoot(prefs, locale, port, library, onboarding, drivers, environmentSetup, actions,
-                launchTab, launchBuildId, padController,
+                launchTab, launchBuildId, padController, agentSetup, agentConversation, pageState,
                 padCenterOpen = padCenterOpen, onPadCenter = { padCenterOpen = it },
-                crash = crash, onCrashHandled = { crash = null })
+                agentFullOpen = agentFullOpen, onAgentFull = { agentFullOpen = it },
+                crash = crash, onCrashHandled = { crash = null },
+                onExportGamespec = { titleId -> exportGamespec(titleId) })
         }
-        // the small tools come with the app: an update brings new ones, and the phone has to get them
-        // (the app's own Vulkan driver too: it is unpacked into the app's folder, ready to be picked)
+        // The chat page is portrait: while it is open the screen turns; closed, the sensor landscape lock
+        // returns. orientation sits in the manifest's configChanges, so this only re-lays the tree out —
+        // no page is rebuilt, nothing restarts.
+        lifecycleScope.launch {
+            snapshotFlow { agentFullOpen }.collect { open ->
+                requestedOrientation =
+                    if (open) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+        }
+        // the assistant's own facts (the engine that is installed, the models that are configured)
         Thread {
-            environmentSetup.refreshTools()
+            agentSetup.refresh()
         }.start()
+        // The app brought another environment: it is built again, with a progress the player can see.
+        // It happens here, at the app's start, before any port: a port that is running is never interrupted.
+        envBuild.startIfNeeded()
         lifecycleScope.launch {
             drivers.ensureShipped()
             drivers.refresh()
@@ -214,6 +250,12 @@ class MainActivity : ComponentActivity() {
         },
         onCancelPort = { PortService.cancel(this) },
         onRun = { pack, name -> runGate(pack, name) },
+        // 攻关修好了之后「去跑一下」：按 title ID 找到那一局，走同一扇门
+        onRunByTitleId = { titleId ->
+            val ported = library.games.firstOrNull { it.titleId.equals(titleId, ignoreCase = true) }?.pack
+            if (ported == null) toast(locale.str(R.string.lib_artifact_missing))
+            else runGate(ported.pack, ported.name)
+        },
         // 闪退之后的「重新构建」：重建运行库再进一次游戏（门还是那一扇）
         onRunRebuild = { pack, name -> runGate(pack, name, rebuild = true) },
         onSendToDesktop = { e ->
@@ -433,16 +475,23 @@ class MainActivity : ComponentActivity() {
             // 崩溃检测也问账本：processAlive() 是账本给全 app 的同步出口（账本之外没有第二处进程判断）
             if (started > 0 && !player.processAlive(this)) {
                 val manager = getSystemService(ActivityManager::class.java)
-                val crashed = runCatching {
-                    manager.getHistoricalProcessExitReasons(packageName, 0, 16).any {
+                val exits = runCatching {
+                    manager.getHistoricalProcessExitReasons(packageName, 0, 16).filter {
                         it.processName.endsWith(Player.PROCESS_SUFFIX) && it.timestamp >= started &&
                             isCrash(it.reason, it.status)
                     }
-                }.getOrDefault(false)
-                if (crashed) {
+                }.getOrDefault(emptyList())
+                if (exits.isNotEmpty()) {
                     prefs.put(PrefsStore.PLAYER_LAST_START, null)
                     // 闪退的不是 toast 能说清的：弹框把三条路摆出来——重新构建、重新移植、反馈
                     crash = CrashReport(player.currentTitleId(), player.currentName())
+                    // 这局的档案记一笔：出事时只有 app 在场，玩家的「它又崩了」得有地方落
+                    Gamespec.appendEvent(
+                        paths.nxHome,
+                        player.currentTitleId(),
+                        Gamespec.EXIT,
+                        "process exited abnormally (${exits.first().reason})",
+                    )
                 }
             }
         }
@@ -646,6 +695,24 @@ class MainActivity : ComponentActivity() {
     fun versionName(): String = AppVersion.of(this).ifEmpty { "?" }
 
     fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_LONG).show()
+
+    /**
+     * 导出一局的攻关档案：打包器在环境里跑，zip 放进下载目录，再把玩家送到提 issue 的页面。
+     *
+     * 档案本身不动——导出是快照，导出完了还能继续往里记。
+     */
+    private fun exportGamespec(titleId: String) {
+        lifecycleScope.launch {
+            exporter.export(this@MainActivity, titleId)
+                .onSuccess { target ->
+                    toast(locale.str(R.string.agent_gamespec_exported, target.name))
+                    openGamespecIssue(this@MainActivity)
+                }
+                .onFailure {
+                    toast(locale.str(R.string.agent_gamespec_export_failed, it.message.orEmpty()))
+                }
+        }
+    }
 
     /**
      * The log bundle's folder in the cache: the FileProvider serves it (res/xml/file_paths.xml), and the

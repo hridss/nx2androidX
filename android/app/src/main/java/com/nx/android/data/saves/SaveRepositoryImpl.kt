@@ -83,6 +83,20 @@ class SaveRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * 删除这个游戏的存档。活存档与设备存档一起删，删掉了没有由存档备份层说了算。
+     */
+    override suspend fun erase(titleId: String): Result<Boolean> = runResult {
+        withTitleLock(titleId) {
+            checkTitle(titleId)
+            withContext(io) {
+                SaveBackup.erase(
+                    SaveBackup.liveDir(platform.filesDir, titleId),
+                    SaveBackup.deviceDir(platform.filesDir, titleId))
+            }
+        }
+    }
+
     private suspend fun <T> withTitleLock(titleId: String, block: suspend () -> T): T =
         locks.computeIfAbsent(titleId) { Mutex() }.withLock { block() }
 

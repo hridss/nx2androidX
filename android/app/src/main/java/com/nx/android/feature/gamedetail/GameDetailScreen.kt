@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
@@ -83,6 +84,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nx.android.R
+import com.nx.android.agent.ui.AgentEntry
 import com.nx.android.app.GameShortcuts
 import com.nx.android.appstate.LibraryState
 import com.nx.android.appstate.PortState
@@ -155,7 +157,8 @@ private data class RemovalRequest(val kind: Removal, val plan: GameCleanup.Plan,
 @Composable
 fun GameDetailRoute(lib: LibraryState, port: PortState,
                     e: GameEntry, installedDrivers: List<Driver>, actions: AppActions, onGoBuilds: () -> Unit,
-                    onRequest: (PickerRequest) -> Unit, onClose: () -> Unit, navActive: Boolean = false) {
+                    onRequest: (PickerRequest) -> Unit, onClose: () -> Unit, navActive: Boolean = false,
+                    onOpenAgent: () -> Unit = {}, agentVisible: Boolean = true) {
     val viewModel: GameDetailViewModel = hiltViewModel(key = "game-detail-${e.key}")
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(e.titleId, e.pack?.pack) { viewModel.open(e.titleId, e.pack?.pack) }
@@ -164,7 +167,7 @@ fun GameDetailRoute(lib: LibraryState, port: PortState,
     }
     GameDetailScreen(lib, port, e, installedDrivers, viewModel.saveRepository, viewModel.saveIo,
         uiState, viewModel::selectLanguage, viewModel::selectDriver, actions, onGoBuilds, onRequest, onClose,
-        navActive = navActive)
+        navActive = navActive, onOpenAgent = onOpenAgent, agentVisible = agentVisible)
 }
 
 @Composable
@@ -174,7 +177,8 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
                         onSelectLanguage: (String?) -> Unit, onSelectDriver: (String?) -> Unit,
                         actions: AppActions, onGoBuilds: () -> Unit,
                         onRequest: (PickerRequest) -> Unit, onClose: () -> Unit,
-                        navActive: Boolean = false) {
+                        navActive: Boolean = false, onOpenAgent: () -> Unit = {},
+                        agentVisible: Boolean = true) {
     val locale = LocalAppLocale.current
     val status = lib.statusOf(e)
     // Title ID：游戏的身份（还没构建过的还没有）
@@ -183,6 +187,8 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
     val scope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
     var removal by remember { mutableStateOf<RemovalRequest?>(null) }
+    // 删除存档：等玩家确认（删的是游戏自己的进度，不可恢复）
+    var pendingDelete by remember { mutableStateOf(false) }
     // 可移动卡（SD 卡）上 App 自己的端口目录：插着才有
     val cardDirs = remember { StorageVolumes.removablePortsDirs(context) }
     // 搬移：等玩家确认的目标目录（null = 没有要搬的）
@@ -354,6 +360,21 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
         }
     }
 
+    /** 确认之后真的删存档：删掉活存档与设备存档（删掉了没有由存档那边说了算） */
+    fun doDeleteSave() {
+        // 存档按数据包清单里的 title id 分着（导出、导入用的是同一个）
+        val id = ported?.titleId ?: titleId
+        scope.launch {
+            val r = saveRepository.erase(id)
+            r.onSuccess { removed ->
+                actions.onToast(
+                    if (removed) locale.str(R.string.lib_deleted) else locale.str(R.string.lib_no_saves))
+            }.onFailure {
+                actions.onToast(locale.str(R.string.lib_delete_failed, failureText(locale, it)))
+            }
+        }
+    }
+
     /** 真的导出（后台线程：卡上写入很慢） */
     fun doExport(target: File) {
         exporting = true
@@ -423,14 +444,19 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
             .clickable { onClose() },
         contentAlignment = Alignment.CenterEnd,
     ) {
-        Column(
+        Box(
             Modifier
                 .width(460.dp)
                 .fillMaxHeight()
-                .background(NxPalette.Surface)
+                .background(NxPalette.Surface),
+        ) {
+        Column(
+            Modifier
+                .fillMaxSize()
                 .clickable(enabled = false) {}
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                // 底部多留一截：右下角那个入口占着的地方，滚到最后一项时不被它压住
+                .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 76.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -500,6 +526,12 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
                                     onClick = { menuOpen = false; askRemoval(Removal.CACHE) },
                                 )
                             }
+                            // 删除存档：只删游戏自己的进度，数据包与游戏文件不动
+                            DropdownMenuItem(
+                                text = { Text(locale.str(R.string.lib_delete_saves), color = NxPalette.Danger) },
+                                leadingIcon = { Icon(Icons.Filled.DeleteForever, null, Modifier.size(18.dp), tint = NxPalette.Danger) },
+                                onClick = { menuOpen = false; pendingDelete = true },
+                            )
                             if (e.isImported) {
                                 // 移出：只忘路径，那个文件夹里的文件原地不动（那是玩家的文件）
                                 DropdownMenuItem(
@@ -608,6 +640,30 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
                 }
             }
         }
+        // 助手的入口：贴在面板自己的右下角，不拖（面板盖住了页面的那一角，入口得由面板带）
+        Box(Modifier.align(Alignment.BottomEnd).padding(24.dp)) {
+            if (agentVisible) {
+                AgentEntry(onClick = onOpenAgent)
+            }
+        }
+        }
+    }
+
+    // 删除存档的确认框：写明后果（不可恢复），并指向导出入口
+    if (pendingDelete) {
+        AlertDialog(
+            onDismissRequest = { pendingDelete = false },
+            title = { Text(locale.str(R.string.lib_delete_confirm)) },
+            text = { Text(locale.str(R.string.lib_delete_confirm_body), style = MaterialTheme.typography.bodyMedium) },
+            confirmButton = {
+                TextButton(onClick = { pendingDelete = false; doDeleteSave() }) {
+                    Text(locale.str(R.string.lib_delete_saves), color = NxPalette.Danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = false }) { Text(locale.str(R.string.common_cancel)) }
+            },
+        )
     }
 
     // 搬移的确认框：写明后果（拔卡后不能玩、卸载会连同删掉它）

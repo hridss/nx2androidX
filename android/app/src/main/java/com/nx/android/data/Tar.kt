@@ -12,7 +12,7 @@ import java.util.EnumSet
 
 /**
  * A tar reader: the files, the folders, the links (symbolic and hard), with the long names and the pax headers
- * the archives use. The rootfs tarball and the .NET SDK's are read with it on the first start.
+ * the archives use. The environment's archive and the .NET SDK's are read with it.
  *
  * It is its own class (no Android in it) so that it can be tested on the JVM: TarTest.
  */
@@ -20,10 +20,33 @@ object Tar {
 
     /** Unpacks an archive into [dest] */
     fun unpack(input: InputStream, dest: File) {
+        unpack(input, mapOf("" to dest), null)
+    }
+
+    /**
+     * Unpacks an archive whose entries live under a few roots: the first segment of an entry's path says which
+     * root it belongs to ([roots]), the rest of the path is its name in that root. An entry under a root that is
+     * not there is skipped, with its data.
+     *
+     * [onBytes] gets the number of bytes written so far: the progress of a big archive.
+     */
+    fun unpack(input: InputStream, roots: Map<String, File>, onBytes: ((Long) -> Unit)? = null) {
         val header = ByteArray(512)
         var longName: String? = null
         var paxPath: String? = null
         var paxSize: Long? = null
+        var written = 0L
+        // where a path of the archive lands on the phone
+        fun resolve(path: String): File? {
+            val clean = path.removePrefix("./")
+            // one folder for everything: the archive has no roots of its own
+            val flat = roots[""]
+            if (flat != null) return File(flat, clean)
+            val slash = clean.indexOf('/')
+            if (slash < 0) return null
+            val root = roots[clean.substring(0, slash)] ?: return null
+            return File(root, clean.substring(slash + 1))
+        }
         while (true) {
             if (!readFully(input, header)) break
             if (header.all { it == 0.toByte() }) continue
@@ -50,32 +73,48 @@ object Tar {
                     skip(input, padding(size)); continue
                 }
             }
-            val target = File(dest, name)
+            val target = resolve(name)
             when (type) {
-                '5' -> { target.mkdirs(); skip(input, padding(size)) }
+                '5' -> {
+                    // a folder with no name under a root is the root itself
+                    if (target == null) roots[clean(name)]?.mkdirs() else target.mkdirs()
+                    skip(input, padding(size))
+                }
                 '2' -> {
-                    target.parentFile?.mkdirs(); target.delete()
-                    // the link is stored as it is: a relative one points into the link's own folder
-                    Files.createSymbolicLink(target.toPath(), Paths.get(link))
+                    if (target != null) {
+                        target.parentFile?.mkdirs(); target.delete()
+                        // the link is stored as it is: a relative one points into the link's own folder
+                        Files.createSymbolicLink(target.toPath(), Paths.get(link))
+                    }
                     skip(input, padding(size))
                 }
                 '1' -> {
-                    target.parentFile?.mkdirs()
-                    val from = File(dest, link)
-                    if (from.exists()) from.copyTo(target, overwrite = true)
+                    val from = resolve(link)
+                    if (target != null && from != null && from.exists()) {
+                        target.parentFile?.mkdirs()
+                        from.copyTo(target, overwrite = true)
+                    }
                     skip(input, padding(size))
                 }
                 '0', '\u0000' -> {
-                    target.parentFile?.mkdirs()
-                    target.outputStream().use { out -> copyBlock(input, out, size) }
-                    // the permissions of the archive: the guest's programs have to be executable
-                    applyMode(target, mode)
+                    if (target != null) {
+                        target.parentFile?.mkdirs()
+                        target.outputStream().use { out -> written += copyBlock(input, out, size) }
+                        // the permissions of the archive: the guest's programs have to be executable
+                        applyMode(target, mode)
+                    } else {
+                        skip(input, size)
+                    }
+                    onBytes?.invoke(written)
                     skip(input, padding(size))
                 }
                 else -> skip(input, padding(size))
             }
         }
     }
+
+    /** The name of an entry, without the "./" the archives start with */
+    private fun clean(name: String): String = name.removePrefix("./")
 
     /**
      * The permissions the archive gives a file. Android's File.setExecutable does nothing, so the mode is set
@@ -120,15 +159,17 @@ object Tar {
     }
 
     /** Copies a file's bytes; a file that gets fewer than the archive says was cut short (the app was killed) */
-    private fun copyBlock(input: InputStream, out: OutputStream, size: Long) {
+    private fun copyBlock(input: InputStream, out: OutputStream, size: Long): Long {
         val buf = ByteArray(1 shl 16)
         var left = size
+        var done = 0L
         while (left > 0) {
             val n = input.read(buf, 0, minOf(buf.size.toLong(), left).toInt())
             if (n < 0) break
-            out.write(buf, 0, n); left -= n
+            out.write(buf, 0, n); left -= n; done += n
         }
         if (left > 0) throw IOException("the archive ended $left bytes early: a file was cut short")
+        return done
     }
 
     private fun skip(input: InputStream, size: Long) {
