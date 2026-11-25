@@ -67,6 +67,8 @@ class Fake:
         script = self.dir / 'kuake'
         script.write_text(FAKE)
         script.chmod(0o755)
+        # Windows runs no script by its path, whatever its mode bits say: there the CLI is the interpreter and the script
+        self.binary = str(script) if os.name != 'nt' else [sys.executable, str(script)]
         self.write(answers or {})
 
     def write(self, answers):
@@ -79,7 +81,7 @@ class Fake:
         return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
     def target(self, cookie='COOKIE', **kw):
-        return quark.QuarkTarget(binary=str(self.dir / 'kuake'), cookie=cookie,
+        return quark.QuarkTarget(binary=self.binary, cookie=cookie,
                                  folder='/我的/nx2AndroidX', archive='/我的/旧版本',
                                  workdir=self.dir / 'work', **kw)
 

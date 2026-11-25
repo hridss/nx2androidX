@@ -160,11 +160,17 @@ class QuarkTarget(Target):
         self.workdir = Path(workdir) if workdir else None
         self._own_workdir = False
 
+    def _argv(self):
+        """The CLI's command: its path, or the interpreter and the script when the CLI is one (a script no
+        Windows can run by its path alone)."""
+        return list(self.binary) if isinstance(self.binary, (list, tuple)) else [self.binary]
+
     def prepare(self):
         if not self.binary:
             raise TargetError('the kuake CLI is not there: python3 -m devtools.netdisk install')
-        if not Path(self.binary).exists() and not shutil.which(self.binary):
-            raise TargetError(f'the kuake CLI is not there ({self.binary}): python3 -m devtools.netdisk install')
+        cli = self._argv()[0]
+        if not Path(cli).exists() and not shutil.which(cli):
+            raise TargetError(f'the kuake CLI is not there ({" ".join(self._argv())}): python3 -m devtools.netdisk install')
         if not self.cookie:
             raise TargetUnavailable(f'the cookie is missing ({COOKIE})')
         if self.workdir is None:
@@ -256,7 +262,7 @@ class QuarkTarget(Target):
 
     def _call(self, *args, timeout=TIMEOUT):
         """One CLI call: (code, out, err). The CLI's answer is on stdout, its progress on stderr."""
-        p = subprocess.run([self.binary, *args], capture_output=True, text=True,
+        p = subprocess.run([*self._argv(), *args], capture_output=True, text=True,
                            env=self._env(), cwd=str(self.workdir), timeout=timeout)
         return p.returncode, p.stdout, p.stderr
 
