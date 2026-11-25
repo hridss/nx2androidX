@@ -22,6 +22,8 @@ def fork_map(fn, items, jobs=8, init=None):
     """fn over items, in forked children (one strided chunk each); the results come back in the items' order"""
     items = list(items)
     if not items: return []
+    if not hasattr(os, 'fork'):   # Windows has no fork: say so plainly, not as an AttributeError from the first child
+        raise RuntimeError('this host has no fork (Windows): the work cannot run in forked children')
     jobs = max(1, min(int(jobs or 1), len(items)))
     indexed = list(enumerate(items))
     chunks = [indexed[i::jobs] for i in range(jobs) if indexed[i::jobs]]   # strided: the big items spread out
