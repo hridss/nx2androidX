@@ -486,8 +486,9 @@ keeps its own licenses. Three rules when the tree changes:
 
 ## Optional native keyboard
 
-This is upstream's APK front end (the `org.nx2a` activities): this line's app front (`front_player.c`) does not build
-it, so the option only affects the legacy APK path.
+The upstream activities (`org.nx2a`) belong to the exported APK path: the phone's own port makes no APK (the app
+runs the game, and the in-game text entry is the front's overlay keyboard), so the option only applies to a legacy
+desktop APK build.
 
 `python -m porter port <folder> --native-keyboard` packages `org.nx2a.GameActivity` and its Unicode EditText dialog. Combine it with `--external-display` to select `org.nx2a.KeyboardExternalActivity`; external display alone keeps its controller keyboard. These opt-in activities require JDK `javac` plus SDK platform and build-tools; ordinary NativeActivity builds remain code-less and keep the controller keyboard. Installation and save requests resolve the installed package's launcher activity, including ports built before this option existed.
 
