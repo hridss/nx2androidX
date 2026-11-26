@@ -60,12 +60,14 @@ def main():
     if ndk is None:
         print('>> no Android NDK: the driver loader is not built (a driver the player imports will not load)')
         return 1
-    bin_ = ndk / 'toolchains' / 'llvm' / 'prebuilt' / ('darwin-x86_64' if sys.platform == 'darwin' else 'linux-x86_64') / 'bin'
-    if not (bin_ / 'clang++').is_file():
+    exe = '.exe' if os.name == 'nt' else ''
+    host0 = 'windows-x86_64' if os.name == 'nt' else ('darwin-x86_64' if sys.platform == 'darwin' else 'linux-x86_64')
+    bin_ = ndk / 'toolchains' / 'llvm' / 'prebuilt' / host0 / 'bin'
+    if not (bin_ / f'clang++{exe}').is_file():
         for host in sorted(p.name for p in (ndk / 'toolchains' / 'llvm' / 'prebuilt').iterdir()):
-            if (ndk / 'toolchains' / 'llvm' / 'prebuilt' / host / 'bin' / 'clang++').is_file():
+            if (ndk / 'toolchains' / 'llvm' / 'prebuilt' / host / 'bin' / f'clang++{exe}').is_file():
                 bin_ = ndk / 'toolchains' / 'llvm' / 'prebuilt' / host / 'bin'; break
-    cxx = str(bin_ / 'clang++')
+    cxx = str(bin_ / f'clang++{exe}')
     if not Path(cxx).is_file():
         print(f'>> no clang++ in {bin_}: the driver loader is not built (a driver the player imports will not load)')
         return 1
@@ -80,7 +82,7 @@ def main():
     for name, files, extra in libs:
         o = out / name
         # C hooks must keep the unmangled symbol names the Android loader resolves.
-        compiler = cxx if any(f.suffix == '.cpp' for f in files) else str(bin_ / 'clang')
+        compiler = cxx if any(f.suffix == '.cpp' for f in files) else str(bin_ / f'clang{exe}')
         cmd = [compiler] + flags + [str(f) for f in files] + ['-o', str(o), f'-Wl,-soname,{name}'] + link + extra
         r = subprocess.run(cmd, capture_output=True, text=True, errors='replace')
         if r.returncode:
@@ -88,7 +90,7 @@ def main():
             print(f'>> {name} did not build')
             return r.returncode
         # the symbols are of no use in the APK (the game's own page lists the libraries, not their symbols)
-        strip = bin_ / 'llvm-strip'
+        strip = bin_ / f'llvm-strip{exe}'
         if strip.is_file():
             subprocess.run([str(strip), '--strip-unneeded', str(o)], capture_output=True, text=True)
         print(f'   {name:32} {o.stat().st_size / 1024:8.0f} KB')

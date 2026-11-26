@@ -19,7 +19,7 @@ that is kept is needed by a program that runs, and every library a program needs
 The rootfs is read as the tarball it is (the payload holds it as one), twice: once to see what is in it, once to
 write what stays. Nothing is unpacked on the way, so the build needs no room for a gigabyte.
 """
-import argparse, json, os, struct, sys, tarfile
+import argparse, json, os, posixpath, struct, sys, tarfile
 from pathlib import Path
 
 # The ELF pieces the closure needs.
@@ -237,7 +237,7 @@ class Rootfs:
             target = m.linkname
             if target.startswith('/'):
                 return None
-            path = os.path.normpath(os.path.join(os.path.dirname(path), target))
+            path = posixpath.normpath(posixpath.join(posixpath.dirname(path), target))
             m = self.members.get(path)
             seen += 1
         return m
@@ -261,7 +261,7 @@ class Rootfs:
             if target.startswith('/'):
                 path = target[1:]
             else:
-                path = os.path.normpath(os.path.join(os.path.dirname(path), target))
+                path = posixpath.normpath(posixpath.join(posixpath.dirname(path), target))
         return None
 
     def _program_paths(self):
@@ -445,7 +445,7 @@ class Rootfs:
             if target.startswith('/'):
                 mid = target[1:]
             else:
-                mid = os.path.normpath(os.path.join(os.path.dirname(link), target))
+                mid = posixpath.normpath(posixpath.join(posixpath.dirname(link), target))
             if mid != link and mid in self.members and mid not in self.keep:
                 self.keep.add(mid)
                 m = self.members[mid]
@@ -477,7 +477,7 @@ class Rootfs:
                     if real is None or real not in self.keep:
                         dangling.append((m.name, m.linkname))
                         continue
-                    out_info.linkname = os.path.relpath(real, os.path.dirname(m.name) or '.')
+                    out_info.linkname = posixpath.relpath(real, posixpath.dirname(m.name) or '.')
                     t.addfile(out_info)
                 else:
                     t.addfile(out_info)

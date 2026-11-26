@@ -22,6 +22,10 @@ uint64_t now_ns(void);
 extern __thread _Atomic int dm_host_work;
 uint64_t guest_ns(void);              // Guest clock (hle_os.c; does not advance while frozen, guest_clock_freeze)
 int dm_detclock_enabled(void);
+// DM_SSL_FAKE: the SSL context and certificates are built as if the network were there (handshake and I/O still fail).
+// A game whose online library asserts when it cannot create a TLS context (Ori and the Blind Forest's Xbox Live SDK)
+// then takes its offline branch instead of aborting.
+int dm_ssl_fake(void);
 void dm_guest_clock_advanced(void);
 uint64_t dm_guest_frame(void);        // Incremented each time the host presents a frame; unaffected by machine load
 void guest_clock_freeze(int on);

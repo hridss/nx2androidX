@@ -27,6 +27,14 @@ ap.add_argument('--capture', help='a folder of shaders captured at run time on t
 ap.add_argument('--zstd', type=int, default=dmsv.LEVEL, help=f'zstd level of the SPIR-V in the bundle (default {dmsv.LEVEL}); 0: version 1, uncompressed')
 ap.add_argument('--xlate', help="the translator (dmsh_xlate.dll) to run (default: the iOS chain's dm/gfx/tools/dmsh_xlate_bin; the porter builds one from the in-repo source)")
 ap.add_argument('--spirv-tools', help="the folder of spirv-dis, spirv-as and spirv-val (the NDK's shader-tools/<host>), for the profile's SPIR-V patches that work on the text; a patch that works on the SPIR-V words needs none")
+# One translator process takes a batch and then exits: its heap grows with the shaders it has translated, so a
+# whole core-sized chunk (5,500 shaders on a phone) holds gigabytes (Ori: memory climbed past 13 GB on a PC). A
+# small batch keeps every process bounded; --jobs is then how many run at once.
+ap.add_argument('--batch', type=int, default=int(os.environ.get('NX2A_SHADER_BATCH', '256')), help='shaders one translator process takes before it exits (default 256)')
+# A shader whose translation allocates without end (Ori: a Unity UberShader variant needs more than 1 GB and keeps
+# going) would otherwise exhaust the device and let the system kill the port. The cap turns that one shader into a
+# reported failure, which the export tolerates: the rest of the game still ports.
+ap.add_argument('--heap-limit-mb', type=int, default=int(os.environ.get('NX2A_SHADER_HEAP_MB', '1024')), help='a translator process heap cap in MB (default 1024; 0: no cap)')
 a = ap.parse_args()
 
 GAME = dmsh_chain.load_game()
@@ -434,24 +442,30 @@ def main():
     if not keys: raise ValueError('no shaders selected for export')
     if a.report and os.path.abspath(a.report) == os.path.abspath(a.out): raise ValueError('shader report must not overwrite the bundle')
     batch_errors, failures, rs = {}, {}, []
-    def xl(ch):
+    def xl(ch, debug=False):
         result = None
         try:
-            jp = os.path.join(w, f'job_{abs(hash(ch[0]))}.json'); Path(jp).write_text(json.dumps([jobs[k] for k in ch]), encoding='utf-8')
-            result = subprocess.run([a.dotnet, XLATE_DLL, jp, w], capture_output=True, text=True, errors='replace')
+            batch = [{**jobs[k], 'debug': True} if debug else jobs[k] for k in ch]
+            jp = os.path.join(w, f'job_{abs(hash(ch[0]))}.json'); Path(jp).write_text(json.dumps(batch), encoding='utf-8')
+            env = os.environ.copy()
+            if a.heap_limit_mb > 0: env['DOTNET_GCHeapHardLimit'] = hex(a.heap_limit_mb * 1024 * 1024)
+            result = subprocess.run([a.dotnet, XLATE_DLL, jp, w], capture_output=True, text=True, errors='replace', env=env)
             shader_products.check_batch(result, len(ch))
             return result, None
         except Exception as e:
             return result, str(e)
-    def translate(selected):
-        chunks = [selected[i::a.jobs] for i in range(a.jobs) if selected[i::a.jobs]]
-        with cf.ThreadPoolExecutor(len(chunks)) as ex:
-            for ch, (result, error) in zip(chunks, ex.map(xl, chunks)):
+    def translate(selected, debug=False):
+        # the retry proves each shader alone (a small batch is one process); the normal pass uses --batch
+        size = 1 if debug else max(1, a.batch)
+        chunks = [selected[i:i + size] for i in range(0, len(selected), size)]
+        with cf.ThreadPoolExecutor(min(1 if debug else a.jobs, len(chunks))) as ex:
+            for ch, (result, error) in zip(chunks, ex.map(lambda c: xl(c, debug), chunks)):
                 if result is not None: rs.append(result)
                 # A failed process may have written valid products before it stopped.
                 # Keep its diagnostic for keys with no output, and validate each product.
                 batch_errors.update(dict.fromkeys(ch, error))
-    print(f'translating {len(keys)} shaders in {min(a.jobs, len(keys))} batches ...', flush=True)
+    _batch = max(1, a.batch)
+    print(f'translating {len(keys)} shaders in {(len(keys) + _batch - 1) // _batch} batches of up to {_batch} ...', flush=True)
     translate(keys)
     # second pass (as the Mac chain's dmsh_build.py finish): vertex shaders with inputs used only as integers, translated again with those inputs reported as uint (int_inputs)
     again = []
@@ -488,6 +502,17 @@ def main():
     if geometry:
         print(f'translating {len(geometry)} geometry shaders with fragment input mask {fragment_inputs:#x} ...', flush=True)
         translate(geometry)
+    # The optimizer can grow a shader's AST without end: a chain of temporaries propagated into every use is the
+    # classic exponential (Unity's UberShaders are full of them; Ori and the Blind Forest's sharedassets84 has
+    # five, each over 1 GB). The same shader translates with the optimizer off (DebugMode) - same semantics, less
+    # optimized - so the ones with no output get a second, isolated try that way before they count as failed.
+    def has_output(k):
+        try: return shader_products.output(w, k, STAGES[stages[k]]) is not None
+        except Exception: return False
+    retry = [k for k in keys if not has_output(k)]
+    if retry:
+        print(f'{len(retry)} shader(s) failed with the optimizer; translating them again without it ...', flush=True)
+        translate(retry, debug=True)
     errs = collections.Counter()
     for r in rs:
         for ln in r.stderr.splitlines():

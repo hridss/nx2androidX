@@ -25,7 +25,6 @@ done
 
 die() { echo "android-apk: $*" >&2; exit 1; }
 
-command -v gh >/dev/null || die "the gh CLI is needed (the rootfs comes from the nixport payload release)"
 # The scripts need Python 3.11+: macOS's /usr/bin/python3 is 3.9, whose TLS stack stalls on the Debian index.
 # The first interpreter that is new enough wins: the Homebrew names, then whatever python3 is.
 py=
@@ -53,6 +52,7 @@ mkdir -p "$cache"
 
 # 1. the rootfs (the supply channel's release)
 if [[ ! -s $cache/payload-arm64.tar.gz ]]; then
+    command -v gh >/dev/null || die "the gh CLI is needed (the rootfs comes from the nixport payload release)"
     echo ">> the payload (nixport-rootfs@payload-latest)"
     gh release download payload-latest -R NixPort/nixport-rootfs -p payload-arm64.tar.gz -D "$cache" \
         || die "the payload is not reachable (gh release download payload-latest -R NixPort/nixport-rootfs)"

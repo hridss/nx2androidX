@@ -456,7 +456,11 @@ def add_tree(out: tarfile.TarFile, source: Path, prefix: str) -> int:
         rel = path.relative_to(source).as_posix()
         member = out.gettarinfo(str(path), arcname=f'{prefix}/{rel}')
         if member.isreg():
+            # Windows has no execute bit (a cross-built ELF lands as 0666), so the mode would leave the
+            # compiler and the apphosts unstartable on the phone: an ELF file is a program, give it one
             with path.open('rb') as f:
+                if f.read(4) == b'\x7fELF': member.mode = 0o755
+                f.seek(0)
                 out.addfile(member, f)
             size += member.size
         else:

@@ -99,7 +99,9 @@ def patch(path, interp, dry=False, verbose=False):
     # a program that is not executable any more cannot be started.
     tmp = path.with_name(path.name + '.interp-tmp')
     tmp.write_bytes(bytes(data))
-    os.chmod(tmp, os.stat(path).st_mode & 0o777)
+    # a file with an interpreter is a program: keep the old permissions and add the execute bits (an archive
+    # written on a host without them - Windows - would otherwise leave the program unstartable)
+    os.chmod(tmp, (os.stat(path).st_mode & 0o777) | 0o111)
     os.replace(tmp, path)
     return True
 

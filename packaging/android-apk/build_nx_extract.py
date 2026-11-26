@@ -48,7 +48,9 @@ def main():
         for f in sorted(out.iterdir()):
             if f.is_file():
                 print(f'   {f.name:40} {f.stat().st_size / 1024:8.0f} KB')
-        exe = out / (f'{name}.exe' if os.name == 'nt' else name)
+        # the apphost is named after the *target* runtime, not the machine that builds it: cross-publishing
+        # linux-arm64 on a Windows host produces `nx_extract` (no .exe)
+        exe = out / (f'{name}.exe' if a.runtime.startswith('win') else name)
         if not exe.exists():
             print(f'>> no executable in {out}')
             return 1
