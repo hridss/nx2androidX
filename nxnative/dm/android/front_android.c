@@ -1684,8 +1684,8 @@ int dm_front_boot(const char *root, const char *internal, int32_t dpi, int32_t s
     // 旧包的 env.txt 也可能带）分开——旧前端的布局，玩家的既有存档就在这些子目录里
     { const char *gid = getenv("DM_GAME_ID"); char sub[80] = "", q[800];
       if (gid && gid[0] && strlen(gid) < sizeof sub - 2) snprintf(sub, sizeof sub, "/%s", gid);
-      if (sub[0]) { snprintf(q, sizeof q, "%s%s", getenv("DM_SAVE"), sub); mkdir(q, 0700); setenv("DM_SAVE", q, 0);
-                    snprintf(q, sizeof q, "%s%s", getenv("DM_TEMP"), sub); mkdir(q, 0700); setenv("DM_TEMP", q, 0); } }
+      if (sub[0]) { snprintf(q, sizeof q, "%s%s", getenv("DM_SAVE"), sub); mkdir(q, 0700); setenv("DM_SAVE", q, 1);
+                    snprintf(q, sizeof q, "%s%s", getenv("DM_TEMP"), sub); mkdir(q, 0700); setenv("DM_TEMP", q, 1); } }
     select_game_language(env);   // the game's language from the device's locale (DM_LANG=system follows it)
     { const char *e = getenv("DM_MENU_BUTTON"); if (e && *e && !atoi(e)) { atomic_store(&g_menu_btn, 0); LOG("[overlay] DM_MENU_BUTTON=0: no menu button (Back opens the menu)"); } }
 #ifdef DM_RELEASE
