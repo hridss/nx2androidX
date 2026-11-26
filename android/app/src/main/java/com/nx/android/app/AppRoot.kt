@@ -48,12 +48,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -90,7 +90,6 @@ import com.nx.android.core.ui.theme.NxPalette
 import com.nx.android.core.ui.theme.NxTheme
 import com.nx.android.core.storage.AppPaths
 import com.nx.android.data.AppLocale
-import com.nx.android.data.PadPlayers
 import com.nx.android.data.PrefsStore
 import com.nx.android.data.StorageVolumes
 import com.nx.android.domain.EnvCheck
@@ -138,10 +137,6 @@ import com.nx.android.feature.updates.UpdatePopup
 import com.nx.android.feature.updates.UpdateViewModel
 import com.nx.android.feature.updates.openIssues
 import com.nx.android.feature.updates.openRepo
-import com.nx.android.input.GamepadScan
-import com.nx.android.input.PadAssignment
-import com.nx.android.input.ui.PadCenterController
-import com.nx.android.input.ui.PadCenterScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -193,11 +188,6 @@ data class AppActions(
     val firmware: () -> String = { "" },
     val onImportFirmware: (File) -> Unit = {},
     val onClearFirmware: () -> Unit = {},
-    // the cheats: the community's files, imported from a zip into the app's own folder (the app carries none)
-    val cheatGames: () -> Int = { 0 },
-    val cheatFiles: () -> Int = { 0 },
-    val onImportCheats: (File) -> Unit = {},
-    val onClearCheats: () -> Unit = {},
     // the game profiles: the app does not carry them, the player imports a package into their own folder
     val onImportProfiles: (File) -> Unit = {},
     // the file provider: the app's own folders are visible to the file managers (on by default)
@@ -225,12 +215,9 @@ fun AppRoot(
     actions: AppActions,
     startTab: Int,
     launchBuildId: String,
-    padController: PadCenterController,
     agentSetup: AgentSetup,
     agentState: AgentConversationState,
     pageState: PageStateStore,
-    padCenterOpen: Boolean,
-    onPadCenter: (Boolean) -> Unit,
     // the assistant's full chat page: the portrait room (the activity turns the screen portrait for it);
     // the quick surface — the ball and the side panel — lives inside MainScreen and needs no orientation
     agentFullOpen: Boolean = false,
@@ -282,12 +269,9 @@ fun AppRoot(
                         actions,
                         startTab,
                         launchBuildId,
-                        padController = padController,
                         agentSetup = agentSetup,
                         agentState = agentState,
                         pageState = pageState,
-                        padCenterOpen = padCenterOpen,
-                        onPadCenter = onPadCenter,
                         agentFullOpen = agentFullOpen,
                         onAgentFull = onAgentFull,
                         outerOverlayOpen = outerOverlayOpen,
@@ -499,12 +483,9 @@ fun MainScreen(
     onboarding: OnboardingState, envBuild: EnvBuildState, drivers: DriverRepository,
     environmentSetup: EnvironmentSetup, actions: AppActions, startTab: Int,
     launchBuildId: String,
-    padController: PadCenterController,
     agentSetup: AgentSetup,
     agentState: AgentConversationState,
     pageState: PageStateStore,
-    padCenterOpen: Boolean,
-    onPadCenter: (Boolean) -> Unit,
     agentFullOpen: Boolean = false,
     onAgentFull: (Boolean) -> Unit = {},
     outerOverlayOpen: Boolean = false,
@@ -536,18 +517,15 @@ fun MainScreen(
     // 档案的处理弹窗：在线更新还是本地导入。构建页的「去导入」叫醒它。
     // 它盖住整屏，所以画在这一层（页面里画的遮罩只盖得到顶栏下面那一条缝）
     var profilesOpen by remember { mutableStateOf(false) }
+    val padCtx = LocalContext.current
     // The list of the games the porter knows: a full cover too (the top bar is under it), and the
     // builds page only reports the intent — a cover drawn in the page covers the strip under the top bar
     var gameListOpen by remember { mutableStateOf(false) }
-    // 手柄中心：从顶栏的手柄按钮进来，盖住整屏（跟设置页一样）。开着不开着是活动那边
-    // 的一份（分发层也要知道：手柄的键该进中心还是进页面）
-    val padDevices by GamepadScan.devices.collectAsStateWithLifecycle()
-    val padCtx = LocalContext.current
     val lib = library
     // 手柄导航归谁：谁在最上面，谁拿走手柄。
-    // 手柄中心开着的时候，手柄的键进中心（活动层就不发了），外面还盖着东西的时候也一样。
+    // 外面盖着东西的时候（设置页、资料库、档案面板），手柄的键就不发给这一层。
     val navHost = when {
-        outerOverlayOpen || padCenterOpen || profilesOpen || gameListOpen -> NavHost.NONE
+        outerOverlayOpen || profilesOpen || gameListOpen -> NavHost.NONE
         agentFullOpen -> NavHost.AGENT
         settingsOpen -> NavHost.SETTINGS
         faqOpen -> NavHost.FAQ
@@ -597,8 +575,6 @@ fun MainScreen(
                 onImportPack = { importPackHelp = true },
                 onSettings = { settingsOpen = true },
                 onFaq = { faqOpen = true },
-                padCount = padDevices.size,
-                onOpenPadCenter = { onPadCenter(true) },
                 chip = environmentCheckUiState.chip,
                 onChip = onEnvCheck,
             )
@@ -692,15 +668,6 @@ fun MainScreen(
                     )
                 },
                 onDismiss = { profilesOpen = false; environmentCheckViewModel.cancelPackageUpdate() },
-            )
-        }
-        // 手柄中心：盖住整屏（顶栏也在下面），关掉才回到底下的页面
-        if (padCenterOpen) {
-            PadCenterScreen(
-                controller = padController,
-                onClose = { onPadCenter(false) },
-                // 谁玩谁：全局一份配置（所有游戏共用；库页可见时本来也没有游戏在跑）
-                assignment = remember { PadPlayers(padCtx, PadPlayers.GLOBAL).load() },
             )
         }
         // 设置页：盖住整屏（顶栏也在下面），关掉才回到底下的页面
@@ -884,7 +851,6 @@ private fun TopBar(
     onImportPack: () -> Unit,
     onSettings: () -> Unit,
     onFaq: () -> Unit,
-    padCount: Int, onOpenPadCenter: () -> Unit,
     chip: EnvCheck.Chip, onChip: () -> Unit
 ) {
     val time by produceState(initialValue = "") {
@@ -933,8 +899,6 @@ private fun TopBar(
         TopIcon(Icons.Filled.Add, stringResource(R.string.lib_pack_import_action), onImportPack)
         // 重新扫描资料库
         TopIcon(Icons.Filled.Refresh, stringResource(R.string.app_refresh_library), onRefresh)
-        // 手柄中心：顶栏的入口（接着几只手柄就亮几颗）
-        PadIcon(padCount, onOpenPadCenter)
         // 设置：它是一整页，从这个图标进来
         TopIcon(Icons.Filled.Settings, stringResource(R.string.app_tab_settings), onSettings)
         // 常见问题：也是一整页，紧挨着设置图标
@@ -953,53 +917,6 @@ private fun TopBar(
 }
 
 /** 手柄的入口：接着手柄时图标是亮的，右下角的小数字是接了几只。 */
-@Composable
-private fun PadIcon(padCount: Int, onClick: () -> Unit) {
-    val description = stringResource(R.string.app_pad_center_connected, padCount)
-    Box(
-        Modifier
-            // 42dp：和 TopIcon（22dp 图标 + 两侧 10dp 内边距）一样宽，圆心才能落在同一节拍上
-            .size(42.dp)
-            .clip(RoundedCornerShape(50))
-            .clickable(onClick = onClick)
-            .semantics {
-                contentDescription = description
-                role = Role.Button
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            Icons.Filled.SportsEsports,
-            null,
-            Modifier.size(22.dp),
-            tint = if (padCount > 0) MaterialTheme.colorScheme.onBackground else NxPalette.Unbuilt,
-        )
-        if (padCount > 0) {
-            // 数字叠在图标的右下角，不排在图标旁边：图标因此一直坐在格子正中，
-            // 接上手柄时整排图标也不会跟着挪动
-            Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = (-3).dp, y = (-3).dp)
-                    .size(14.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    if (padCount > 9) "9+" else "$padCount",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 9.sp,
-                    lineHeight = 9.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    // 数字已经在按钮的描述里了，不必再读一遍
-                    modifier = Modifier.clearAndSetSemantics { },
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun TopIcon(icon: ImageVector, description: String, onClick: () -> Unit) {
     Box(

@@ -12,7 +12,6 @@ _p.add_argument('--icon', help='launcher icon (a PNG, used at its own size: nodp
 _p.add_argument('--icon-fg', help='with --icon-bg: an adaptive icon\'s foreground layer (a PNG of the 108 dp layer, the launcher\'s mask shows the middle 72 dp); --icon stays for older launchers')
 _p.add_argument('--icon-bg', help='the adaptive icon\'s background layer (a PNG, like --icon-fg)')
 _p.add_argument('--asset', action='append', default=[], metavar='NAME=FILE', help='a file the app reads with AAssetManager as NAME (assets/NAME in the APK): the gamepad theme')
-_p.add_argument('--data-root', default='', help='where the data pack is: the game reads its files from there (assets/nx2a-data.txt)')
 _p.add_argument('--dex', default='', help='a classes.dex for the launcher: the icon opens it, and it starts the game')
 _p.add_argument('--launcher-activity', default='com.nx2a.launcher.LauncherActivity', help='the launcher activity in the dex')
 _p.add_argument('--activity', default='android.app.NativeActivity', help='NativeActivity class name')
@@ -180,10 +179,6 @@ def main():
     entries = [('AndroidManifest.xml', axml(MANIFEST), 4), (f'lib/arm64-v8a/lib{LIB}.so', open(so, 'rb').read(), 16384)]
     if ARGS.dex: entries.append(('classes.dex', open(ARGS.dex, 'rb').read(), 4))
     entries += [(f'lib/arm64-v8a/{os.path.basename(x)}', open(x, 'rb').read(), 16384) for x in ARGS.extra_so]
-    if ARGS.data_root:   # the folder with the game's files: the game asks for it when it is not there
-        import tempfile
-        fd, tmp = tempfile.mkstemp(prefix='nx2a-data.'); os.write(fd, (ARGS.data_root + '\n').encode()); os.close(fd)
-        ARGS.asset.append(f'nx2a-data.txt={tmp}')
     entries += [(f'assets/{n}', open(f, 'rb').read(), 4) for n, _, f in (x.partition('=') for x in ARGS.asset)]   # stored, as every entry: AAsset reads them in place
     drawables = []
     if ARGS.icon:

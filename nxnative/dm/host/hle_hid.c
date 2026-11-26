@@ -283,28 +283,6 @@ static void fill(NpadState *s, uint32_t id, uint32_t style) {
     s->buttons = b;
     s->attributes = ATTR_CONNECTED | (id == NPAD_HANDHELD ? ATTR_WIRED | ATTR_LEFT_CONN | ATTR_LEFT_WIRED | ATTR_RIGHT_CONN | ATTR_RIGHT_WIRED : ATTR_LEFT_CONN | ATTR_RIGHT_CONN);
 }
-// The keys held now, for the cheat VM's key-press conditionals (hle_cheats.c opcodes 8 and C4): the buttons of every
-// input source ORed (the keyboard / touch path and the controllers), in the nn::hid::NpadButton bit order, and the sticks'
-// directions on 16..23 as the game sees them. The press latch is not touched: a cheat must not swallow a press from the game
-uint64_t dm_cheats_keys(void) {
-    uint64_t b = 0; int32_t a[4] = {0};
-    b |= atomic_load(&g_btn);
-    uint64_t k = atomic_load(&g_axes); for (int i = 0; i < 4; i++) a[i] = ax(k, i);
-    for (int p = 0; p < DM_PLAYERS; p++) {
-        b |= atomic_load(&g_pad_btn[p]);
-        uint64_t v = atomic_load(&g_pad_axes[p]); for (int i = 0; i < 4; i++) a[i] = pick(a[i], ax(v, i));
-    }
-    b &= 0xffffull;
-    if (a[0] < -STICK_THRESH) b |= 1u << 16;
-    if (a[1] > STICK_THRESH) b |= 1u << 17;
-    if (a[0] > STICK_THRESH) b |= 1u << 18;
-    if (a[1] < -STICK_THRESH) b |= 1u << 19;
-    if (a[2] < -STICK_THRESH) b |= 1u << 20;
-    if (a[3] > STICK_THRESH) b |= 1u << 21;
-    if (a[2] > STICK_THRESH) b |= 1u << 22;
-    if (a[3] < -STICK_THRESH) b |= 1u << 23;
-    return b;
-}
 
 // GetNpadStates(out, n, id): newest first, n entries: the current state repeated with consecutive sampling numbers. The host keeps no history, but on hardware the
 // 16-entry history is always full, and games read all of it whatever count comes back: Super Mario Odyssey (main+0x93fc20) polls every controller slot each frame, which advances

@@ -2069,7 +2069,6 @@ static void engine_dyn_tick(uint64_t presents) {
 NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
     (void)q; win_t *o = (win_t *)w; o->presents++; SEQ("present %d", idx);
     dm_fps_lock_tick();
-    dm_cheats_present();   // the game's frame is out: the cheats run once for it (the frame the game made, not the one on the screen)
     if (dm_fps_state) { static int was; int c = fps_step_cap(); if (c != was) { LOG("[nvn] frame step cap %d → %d fps at present %llu%s", was, c, (unsigned long long)o->presents, c == 30 && was == 60 ? " (prerendered movie)" : ""); was = c; } }
     if (dm_fps_state) dyn_scale_tick(o->presents);
     else engine_dyn_tick(o->presents);
@@ -2568,10 +2567,10 @@ NVN(nvnCommandBufferDrawTransformFeedback, void, NVNcommandBuffer *c, NVNdrawPri
 NVN(nvnDeviceGetTextureHandle, NVNtextureHandle, const NVNdevice *d, int tex, int samp) { (void)d; return (NVNtextureHandle)((uint64_t)(uint32_t)tex | (uint64_t)(uint32_t)samp << 20); }
 // Handle for texel fetches only (Monster Hunter Rise): a fetch reads the texture descriptor and no sampler, so the handle is the texture ID with sampler ID 0
 NVN(nvnDeviceGetTexelFetchHandle, NVNtextureHandle, const NVNdevice *d, int tex) { (void)d; return (NVNtextureHandle)(uint64_t)(uint32_t)tex; }
-// Counter timestamps are 19.2 MHz GPU ticks (nvn_mtl.m gpu_ticks: ns × 12 / 625); convert back to ns. They used to be returned as is, about 52 times smaller than GetCurrentTimestampInNanoseconds, so subtracting one from the other gave garbage
+// Counter timestamps are GPU ticks at the profile's gpu_tick_rate (nvn_mtl.m gpu_ticks: ns × DM_GAME_GPU_TICK_NUM / 625, 19.2 MHz by default); convert back to ns. They used to be returned as is, about 52 times smaller than GetCurrentTimestampInNanoseconds, so subtracting one from the other gave garbage
 NVN(nvnDeviceGetTimestampInNanoseconds, uint64_t, const NVNdevice *d, const NVNcounterData *c) {
     (void)d; CALLER_CHAIN_LOG("DM_NVN_TS_CALLER", "GPU timestamp read", 0, 0);   // DM_NVN_TS_CALLER=0x0: who measures GPU time (a frame-rate or dynamic-resolution controller)
-    return gclk_map(c->timestamp * 625 / 12);
+    return gclk_map(c->timestamp * 625 / DM_GAME_GPU_TICK_NUM);   // 614.4 MHz ticks with the profile's gpu_tick_rate 614.4 (Unreal's NVN RHI divides report deltas by that clock)
 }
 // Current GPU time (ns): the same clock as the counter timestamps -- the guest clock (guest_ns, nvn_mtl.m gpu_ticks)
 NVN(nvnDeviceGetCurrentTimestampInNanoseconds, uint64_t, const NVNdevice *d) { (void)d; return gclk_map(guest_ns()); }

@@ -11,7 +11,7 @@ class RuntimeCompilerTest {
         val launcher = object : GuestProcessLauncher {
             override fun guestEnv() = mutableMapOf<String, String>()
             override fun guest(args: List<String>, extra: Map<String, String>): Process {
-                assertEquals(listOf("-m", "porter", "rebuild-runtime", "/packs/Game-data", "--progress", "json", "--no-lsfg",
+                assertEquals(listOf("-m", "porter.phone_cli", "rebuild-runtime", "/packs/Game-data", "--progress", "json",
                                     "--allow-profile-drift"), args)
                 assertTrue(extra.isEmpty())
                 return object : Process() {
@@ -24,7 +24,7 @@ class RuntimeCompilerTest {
                 }
             }
         }
-        return RuntimeCompiler(launcher).rebuild("/packs/Game-data", true) {}
+        return RuntimeCompiler(launcher).rebuild("/packs/Game-data") {}
     }
 
     @Test fun `runtime update needs both successful exit and the matching commit result`() {
@@ -50,12 +50,11 @@ class RuntimeCompilerTest {
     }
 
     @Test fun `the drift allowance reaches the porter on every rebuild`() {
-        assertTrue(RuntimeCompiler.args("/packs/Game-data", true).contains("--allow-profile-drift"))
-        assertTrue(RuntimeCompiler.args("/packs/Game-data", false).contains("--allow-profile-drift"))
+        assertTrue(RuntimeCompiler.args("/packs/Game-data").contains("--allow-profile-drift"))
     }
 
     @Test fun `runtime command follows current frame generation policy without source keys`() {
-        assertFalse(RuntimeCompiler.args("/packs/Game-data", false).contains("--no-lsfg"))
-        assertFalse(RuntimeCompiler.args("/packs/Game-data", false).contains("-k"))
+        assertFalse(RuntimeCompiler.args("/packs/Game-data").contains("--no-lsfg"))
+        assertFalse(RuntimeCompiler.args("/packs/Game-data").contains("-k"))
     }
 }

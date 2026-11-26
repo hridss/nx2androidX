@@ -8,6 +8,7 @@ sys.path.insert(0, str(REPO))
 os.environ['NX2A_HOME'] = tempfile.mkdtemp(prefix='nx2a_test_home_')
 
 from porter import config, datapack, dumps, pipeline, profiles   # noqa: E402
+from porter import phone_port   # noqa: E402
 from porter.upstream import android_profile, game          # noqa: E402
 
 # The pipeline's messages hold "→" (mem_profile's alias region line): stdout as porter.cli.main sets it, or the Windows release runner's cp1252 pipe fails the test
@@ -81,6 +82,20 @@ class AndroidProfiles(unittest.TestCase):
         for rows in ([('status', 'boots'), ('graphics', 'directx')], [('status', 'boots'), ('lan', 'yes')]):
             d = profile_dir(rows)
             with self.assertRaises(android_profile.ProfileError, msg=rows): android_profile.load(d.name)
+    def test_sharpness_setting(self):   # super resolution's Sharpness slider, 0..100 by 25 (front_android.c settings_load sharpness=)
+        d = profile_dir([('status', 'boots'), ('setting', 'sharpness=75')])
+        self.assertEqual(android_profile.load(d.name).settings, {'sharpness': '75'})
+        with self.assertRaises(android_profile.ProfileError): android_profile.load(profile_dir([('status', 'boots'), ('setting', 'sharpness=60')]).name)
+
+    def test_sr_setting(self):   # super resolution, off or on (the pause menu's row, front_android.c settings_load sr=)
+        d = profile_dir([('status', 'boots'), ('setting', 'sr=1')])
+        self.assertEqual(android_profile.load(d.name).settings, {'sr': '1'})
+        with self.assertRaises(android_profile.ProfileError): android_profile.load(profile_dir([('status', 'boots'), ('setting', 'sr=2')]).name)
+
+    def test_stick_zone_setting(self):   # Stick area, circle or half screen (the pause menu's Gamepad tab row, front_android.c settings_load stick_zone=; issue #589)
+        d = profile_dir([('status', 'boots'), ('setting', 'stick_zone=1')])
+        self.assertEqual(android_profile.load(d.name).settings, {'stick_zone': '1'})
+        with self.assertRaises(android_profile.ProfileError): android_profile.load(profile_dir([('status', 'boots'), ('setting', 'stick_zone=2')]).name)
 
     def test_default_package(self):
         d = profile_dir([('status', 'boots')])
@@ -188,8 +203,9 @@ class DataPack(unittest.TestCase):
             self.assertIn('DM_LANG=ja', env); self.assertIn(f'DM_AOC_DIR={t / "out-data"}/aoc', env)   # the pack's own folder
             self.assertEqual((o / 'settings.txt').read_text(), 'docked=0\noverlay=1\nrumble=1\n')
             self.assertEqual((man['files'], man['bytes'], man['dlc'], man['requires']), (4, 35, [1], ['bcn']))   # the installer checks requires
-            self.assertEqual(man['status'], p.status)   # the app tells the player what to expect (an experimental port says so)
-            self.assertIn('graphics', man); self.assertIn('lan', man)   # what the game needs: the library page shows it from the pack
+            # the profile's state and what the game needs are not in the manifest: the pack carries the profile
+            # (profile/<title id>/), and the app reads it there (a pack without it falls back to the manifest's rows)
+            self.assertNotIn('status', man); self.assertNotIn('graphics', man); self.assertNotIn('lan', man)
             self.assertEqual(datapack.read_manifest(o)['package'], 'org.nx2a.neo')
             datapack.build(t / 'touch-data', profile=p, version='v196608', display='1.03', patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv',
                            settings=pipeline.TOUCH_SETTINGS)   # --touch: the gamepad starts hidden, the profile's other settings stay
@@ -250,18 +266,19 @@ class DataPack(unittest.TestCase):
             (t / 'patched').mkdir(); (t / 'patched/main.patched.bin').write_bytes(b'x' * 10)
             (t / 'romfs/Data').mkdir(parents=True); (t / 'romfs/Data/a.bin').write_bytes(b'y' * 20)
             (t / 'shaders.dmsv').write_bytes(b'DMSV')
-            (t / 'libdmplay.so').write_bytes(b'ELF'); (t / 'libvulkan_freedreno.so').write_bytes(b'DRV'); (t / 'libadrenotools.so').write_bytes(b'AT')
+            (t / 'libdmhost.so').write_bytes(b'ELF'); (t / 'libvulkan_freedreno.so').write_bytes(b'DRV'); (t / 'libadrenotools.so').write_bytes(b'AT')
             (t / 'theme.tsv').write_text('theme'); (t / 'icon.png').write_bytes(b'PNG')
             p = profiles.load(NEO)
             man = datapack.build(t / 'out-data', profile=p, version='v196608', display='1.03', patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv',
-                                 files={'host/libdmplay.so': t / 'libdmplay.so', 'drivers/libvulkan_freedreno.so': t / 'libvulkan_freedreno.so',
+                                 files={'host/libdmhost.so': t / 'libdmhost.so', 'drivers/libvulkan_freedreno.so': t / 'libvulkan_freedreno.so',
                                         'drivers/libadrenotools.so': t / 'libadrenotools.so', 'overlay/theme.tsv': t / 'theme.tsv', 'icon.png': t / 'icon.png'},
-                                 host='host/libdmplay.so', icon='icon.png', drivers=['drivers/libadrenotools.so', 'drivers/libvulkan_freedreno.so'])
+                                 icon='icon.png', drivers=['drivers/libadrenotools.so', 'drivers/libvulkan_freedreno.so'])
             o = t / 'out-data'
-            self.assertTrue((o / 'host/libdmplay.so').is_file()); self.assertTrue((o / 'drivers/libvulkan_freedreno.so').is_file())   # subfolders are made
+            self.assertTrue((o / 'host/libdmhost.so').is_file()); self.assertTrue((o / 'drivers/libvulkan_freedreno.so').is_file())   # subfolders are made
             self.assertTrue((o / 'overlay/theme.tsv').is_file()); self.assertTrue((o / 'icon.png').is_file())
             man = datapack.read_manifest(o)
-            self.assertEqual(man['host'], 'host/libdmplay.so'); self.assertEqual(man['icon'], 'icon.png')
+            self.assertNotIn('host', man)   # the host's place is a convention (host/libdmhost.so in the pack), not a manifest key
+            self.assertEqual(man['icon'], 'icon.png')
             self.assertEqual(man['drivers'], ['drivers/libadrenotools.so', 'drivers/libvulkan_freedreno.so'])
             datapack.build(t / 'pc-data', profile=p, version='v196608', display='1.03', patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv')
             pc = datapack.read_manifest(t / 'pc-data')   # the PC flow's pack carries none of the app's fields
@@ -281,15 +298,16 @@ class DataPack(unittest.TestCase):
             o = t / 'out-data'
             self.assertFalse((o / 'RomFS').exists())                       # the pack does not carry the game's files
             self.assertIn(f'DM_ROMFS={t / "romfs"}', (o / 'env.txt').read_text())   # the host reads them from there
-            self.assertEqual(man['romfs_at'], str(t / 'romfs'))            # the app checks that folder before the game runs
-            self.assertEqual(datapack.read_manifest(o)['romfs_at'], str(t / 'romfs'))
+            self.assertNotIn('romfs_at', man)   # where the game's files live is in the runtime's marker, not the manifest
+            from porter.runtime_update import build_marker
+            self.assertEqual(build_marker('h', str(t / 'romfs'))['romfs'], str(t / 'romfs'))   # the marker says it
             self.assertNotIn('romfs_at', datapack.build(t / 'pc-data', profile=p, version='v196608', display='1.03', patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv'))   # the PC flow's pack carries its own RomFS
         finally: shutil.rmtree(t, ignore_errors=True)
 
     def test_the_pack_carries_its_own_build_profile(self):   # the build profile rides in the pack (profile/<title ID>/): a rebuild reads it first, so the pack is self-sufficient; the bulk profiles package is not in it
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_'))
         try:
-            port = pipeline.Port(pipeline.Options(t))
+            port = phone_port.PhonePort(phone_port.Options(t))
             port.g = game.load(NEO); port.app_name = 'NEO'; port.work_root = t / 'work'; port.o.app = True; port.o.out = t
             port.so = t / 'libdmplay.so'; port.so.write_bytes(b'ELF')
             port.game = t / 'game'; (port.game / 'RomFS').mkdir(parents=True)
@@ -335,7 +353,7 @@ class DataPack(unittest.TestCase):
     def test_the_pack_s_place(self):   # the app's mode: the pack goes to the app's own folder, beside the build folders (the same volume, so the pack hard links the build's files); the desktop's mode: the output folder
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_'))
         try:
-            port = pipeline.Port(pipeline.Options(t))
+            port = phone_port.PhonePort(phone_port.Options(t))
             port.g = game.load(NEO); port.app_name = 'NEO'; port.work_root = t / 'work'; port.o.out = t
             stem = pipeline.app_stem(port.g, port.app_name)
             self.assertEqual(port.data_dir(), t / f'{stem}-data')                 # the desktop: the output folder
@@ -347,7 +365,7 @@ class DataPack(unittest.TestCase):
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_card_'))
         old = os.environ.get('NX2A_PACK_DIR')
         try:
-            port = pipeline.Port(pipeline.Options(t))
+            port = phone_port.PhonePort(phone_port.Options(t))
             port.g = game.load(NEO); port.app_name = 'NEO'; port.work_root = t / 'work'; port.o.out = t; port.o.app = True
             stem = pipeline.app_stem(port.g, port.app_name)
             card = t / 'card/ports'
@@ -364,14 +382,14 @@ class DataPack(unittest.TestCase):
     def test_the_loader_is_the_app_s_own(self):   # the host dlopens the loader by name: only the app's native library folder is on the linker's path, so the loader lives there and the pack carries the hooks
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_loader_'))
         try:
-            port = pipeline.Port(pipeline.Options(t))
-            (t / pipeline.ADRENOTOOLS_LOADER).write_bytes(b'AT')
-            for n in pipeline.ADRENOTOOLS_HOOKS: (t / n).write_bytes(b'HOOK')
+            port = phone_port.PhonePort(phone_port.Options(t))
+            (t / phone_port.ADRENOTOOLS_LOADER).write_bytes(b'AT')
+            for n in phone_port.ADRENOTOOLS_HOOKS: (t / n).write_bytes(b'HOOK')
             port.so = t / 'libdmplay.so'; port.so.write_bytes(b'ELF')
             hooks = sorted(p.name for p in port.loader_libs())
-            self.assertNotIn(pipeline.ADRENOTOOLS_LOADER, hooks)          # the loader is not the pack's
-            self.assertEqual(sorted(pipeline.ADRENOTOOLS_HOOKS), hooks)    # the hooks travel with the host
-            self.assertEqual([pipeline.ADRENOTOOLS_LOADER], [p.name for p in port.loader_so()])
+            self.assertNotIn(phone_port.ADRENOTOOLS_LOADER, hooks)          # the loader is not the pack's
+            self.assertEqual(sorted(phone_port.ADRENOTOOLS_HOOKS), hooks)    # the hooks travel with the host
+            self.assertEqual([phone_port.ADRENOTOOLS_LOADER], [p.name for p in port.loader_so()])
         finally:
             shutil.rmtree(t, ignore_errors=True)
 
@@ -384,12 +402,12 @@ class DataPack(unittest.TestCase):
         try:
             port = SimpleNamespace(aw=t / 'android', logs=t / 'logs', env=dict(os.environ, PYTHONUTF8='1'), package='org.nx2a.test',
                                    data_dir=lambda: t / 'out-data')
-            env, files = pipeline.Port.button_font(port)
+            env, files = phone_port.PhonePort.button_font(port)
             self.assertEqual(env, [f'DM_SHARED_FONT_EXT={t / "out-data"}/nintendo_ext.ttf']); self.assertEqual(list(files), ['nintendo_ext.ttf'])
             cmap = TTFont(files['nintendo_ext.ttf']).getBestCmap()
             self.assertTrue({0xE0E0, 0xE0E1, 0xE0E4, 0xE0E5, 0xE0EF, 0xE100} <= set(cmap))   # A, B, L, R, +, stick
             made = files['nintendo_ext.ttf'].stat().st_mtime_ns
-            self.assertEqual(pipeline.Port.button_font(port)[1]['nintendo_ext.ttf'].stat().st_mtime_ns, made)   # reused while the tool and the letters are unchanged
+            self.assertEqual(phone_port.PhonePort.button_font(port)[1]['nintendo_ext.ttf'].stat().st_mtime_ns, made)   # reused while the tool and the letters are unchanged
         finally:
             shutil.rmtree(t, ignore_errors=True)
 
@@ -401,7 +419,7 @@ class DataPack(unittest.TestCase):
         try:
             port = SimpleNamespace(o=SimpleNamespace(shared_font=None, app=False), package='org.nx2a.test',
                                    data_dir=lambda: t / 'out-data')
-            env, files = pipeline.Port.shared_font(port)
+            env, files = phone_port.PhonePort.shared_font(port)
             self.assertEqual(env, [f'DM_SHARED_FONT={datapack.files_folder("org.nx2a.test")}/standard.ttf'])   # the desktop: the install puts the pack in the app's files folder
             self.assertEqual(list(files), ['standard.ttf'])
             f = TTFont(files['standard.ttf'])
@@ -415,12 +433,12 @@ class DataPack(unittest.TestCase):
             self.assertEqual(f['head'].unitsPerEm, 2048)
             # the app's mode: the shipped font stays where it lies (the payload), so the pack does not carry it
             app = SimpleNamespace(o=SimpleNamespace(shared_font=None, app=True), package='org.nx2a.test', data_dir=lambda: t / 'out-data')
-            env, files = pipeline.Port.shared_font(app)
-            self.assertEqual(env, [f'DM_SHARED_FONT={pipeline.SHARED_CJK}']); self.assertEqual(files, {})
+            env, files = phone_port.PhonePort.shared_font(app)
+            self.assertEqual(env, [f'DM_SHARED_FONT={phone_port.SHARED_CJK}']); self.assertEqual(files, {})
             # the player's own font wins: it goes in the pack, and the host reads it from there
-            mine = t / 'mine.ttf'; shutil.copyfile(pipeline.SHARED_CJK, mine)
+            mine = t / 'mine.ttf'; shutil.copyfile(phone_port.SHARED_CJK, mine)
             own = SimpleNamespace(o=SimpleNamespace(shared_font=mine, app=True), package='org.nx2a.test', data_dir=lambda: t / 'out-data')
-            env, files = pipeline.Port.shared_font(own)
+            env, files = phone_port.PhonePort.shared_font(own)
             self.assertEqual(env, [f'DM_SHARED_FONT={t / "out-data"}/standard.ttf']); self.assertEqual(files, {'standard.ttf': mine})
         finally:
             shutil.rmtree(t, ignore_errors=True)
@@ -451,7 +469,7 @@ class Experimental(unittest.TestCase):
         ios_only = '010099C022B96000'   # Super Mario Galaxy: an iOS profile without android.tsv or patches.py (it renders with Vulkan itself, which the Android host does not take)
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_exp_')); environ = dict(os.environ)
         try:
-            port = pipeline.Port(pipeline.Options(folder=t, experimental=True)); port.env = {}; port.work = t / f'{ios_only}_build'; port.o.keys = None
+            port = phone_port.PhonePort(phone_port.Options(folder=t, experimental=True)); port.env = {}; port.work = t / f'{ios_only}_build'; port.o.keys = None
             g, ap = port.experimental_profile(game.load(ios_only), ios_only)
             self.assertEqual(g.dir, (t / f'{ios_only}_build/profile/{ios_only}').resolve())
             self.assertEqual((ap.status, ap.package), ('experimental', f'org.nx2a.t{ios_only.lower()}'))
@@ -481,7 +499,7 @@ class Experimental(unittest.TestCase):
         try:
             d = t / f'{tid}_build/profile/{tid}'; d.mkdir(parents=True); (d / 'game.tsv').write_text(f'title_id\t{tid}\n')
             self._npdm(t / f'{tid}_survey/extract/ExeFS', 0x00)
-            port = pipeline.Port(pipeline.Options(folder=t, experimental=True)); port.env = {}; port.work = t / f'{tid}_build'
+            port = phone_port.PhonePort(phone_port.Options(folder=t, experimental=True)); port.env = {}; port.work = t / f'{tid}_build'
             with self.assertRaisesRegex(BuildError, '32-bit'): port.experimental_profile(None, tid)
         finally:
             os.environ.clear(); os.environ.update(environ); shutil.rmtree(t, ignore_errors=True)
@@ -495,7 +513,7 @@ class Experimental(unittest.TestCase):
     def test_crash_log(self):   # an error porter does not expect: the traceback goes to <build folder>/logs/crash.log, and the error is raised again
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_crash_'))
         try:
-            port = pipeline.Port.__new__(pipeline.Port); port.work = t / 'X_build'
+            port = phone_port.PhonePort.__new__(pipeline.Port); port.work = t / 'X_build'
             def boom(): return {}[6]
             port._run = boom
             with self.assertRaises(KeyError): port.run()
@@ -515,7 +533,7 @@ class OwnDecoder(unittest.TestCase):
     def tearDown(self): os.environ.pop('DM_GAMES_DIR', None)
 
     def port(self, src, lost=()):
-        p = pipeline.Port(pipeline.Options(Path(tempfile.mkdtemp(prefix='nx2a_test_port_'))))
+        p = phone_port.PhonePort(phone_port.Options(Path(tempfile.mkdtemp(prefix='nx2a_test_port_'))))
         d = profile_dir([('status', 'boots')])
         p.g = game.load(d.name)
         p.game = Path(tempfile.mkdtemp(prefix='nx2a_test_game_'))
@@ -523,7 +541,7 @@ class OwnDecoder(unittest.TestCase):
         p.app_name, p.tools, p.lost = 'Test Game', {}, list(lost)
         p.versions, p.dirs = ['v1'], {'v1': p.game}   # the extraction (no ue_shaders stamp: the archives are not decoded yet)
         with mock.patch.object(pipeline.profile_guess, 'build_sources', return_value=src), \
-             mock.patch.object(pipeline, 'oodle_where', return_value='local'):
+             mock.patch.object(phone_port, 'oodle_where', return_value='local'):
             p.check_graphics()
         return p
 
@@ -595,15 +613,15 @@ class Misc(unittest.TestCase):
     def test_mt_replay_option(self):   # --mt-replay: off unless given; the port's env rows then end with DM_VK_MT_REPLAY=1 (gfx_vk_dq.c)
         from porter import cli
         self.assertTrue(cli._parser().parse_args(['port', 'x', '--mt-replay']).mt_replay); self.assertFalse(cli._parser().parse_args(['port', 'x']).mt_replay)
-        self.assertFalse(pipeline.Options(Path(".")).mt_replay)
+        self.assertFalse(phone_port.Options(Path(".")).mt_replay)
 
     def test_app_option(self):   # the nx2android app's mode is the default (no APK, no install; the pack carries the host); --game-apk turns it off
-        from porter import cli
-        self.assertTrue(cli._parser().parse_args(['port', 'x']).app); self.assertTrue(cli._parser().parse_args(['port', 'x', '--app']).app)
-        self.assertFalse(cli._parser().parse_args(['port', 'x', '--game-apk']).app)
-        self.assertFalse(pipeline.Options(Path(".")).app)   # the pipeline's own default is untouched: the CLI decides the mode
+        from porter import phone_cli
+        self.assertTrue(phone_cli._parser().parse_args(['port', 'x']).app); self.assertTrue(phone_cli._parser().parse_args(['port', 'x', '--app']).app)
+        self.assertFalse(phone_cli._parser().parse_args(['port', 'x', '--game-apk']).app)
+        self.assertNotIn('app', pipeline.Options.__dataclass_fields__)   # the pipeline's own Options is untouched: the CLI decides the mode
         err = io.StringIO()
-        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit): cli._parser().parse_args(['port', 'x', '--app', '--game-apk'])
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit): phone_cli._parser().parse_args(['port', 'x', '--app', '--game-apk'])
 
     def test_options_from_args_covers_every_field(self):   # porter port: each Options field comes from the argument of its name (Options.from_args), no hand list
         import dataclasses
@@ -617,7 +635,7 @@ class Misc(unittest.TestCase):
         from porter import cli
         self.assertTrue(cli._parser().parse_args(['port', 'x', '--no-menu-button']).no_menu_button)
         self.assertFalse(cli._parser().parse_args(['port', 'x']).no_menu_button)
-        self.assertFalse(pipeline.Options(Path(".")).no_menu_button)
+        self.assertFalse(phone_port.Options(Path(".")).no_menu_button)
         src = (Path(pipeline.__file__).read_text(encoding='utf-8'))
         self.assertIn("(['DM_MENU_BUTTON=0'] if self.o.no_menu_button else [])", src)   # in the data pack's env rows, beside --mt-replay's
         self.assertTrue(pipeline.Options.from_args(cli._parser().parse_args(['port', 'x', '--no-menu-button'])).no_menu_button)   # the CLI passes it on
@@ -642,7 +660,7 @@ class Misc(unittest.TestCase):
         try:
             (t / 'cjk.ttc').write_bytes(b'x')
             for bad in ('cjk.ttc', 'missing.ttf'):
-                with self.assertRaisesRegex(pipeline.BuildError, 'shared-font'): pipeline.Port(pipeline.Options(t, shared_font=t / bad)).run()
+                with self.assertRaisesRegex(pipeline.BuildError, 'shared-font'): phone_port.PhonePort(phone_port.Options(t, shared_font=t / bad)).run()
         finally: shutil.rmtree(t, ignore_errors=True)
 
     def test_vulkan_driver_option(self):   # --vulkan-driver FILE: parsed, and a file that is not a .so library fails before any stage
@@ -655,7 +673,7 @@ class Misc(unittest.TestCase):
         self.assertEqual(pipeline.driver_lib_name('vulkan.freedreno.so'), 'libvulkan.freedreno.so')
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_game_'))
         try:
-            with self.assertRaises(pipeline.BuildError): pipeline.Port(pipeline.Options(t, vulkan_driver=t / 'driver.txt')).run()
+            with self.assertRaises(pipeline.BuildError): phone_port.PhonePort(phone_port.Options(t, vulkan_driver=t / 'driver.txt')).run()
         finally: shutil.rmtree(t, ignore_errors=True)
 
     def test_alias_headroom_option(self):   # --alias-headroom: parsed, checked before any stage, and kept as None (automatic) when not given
@@ -666,7 +684,7 @@ class Misc(unittest.TestCase):
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_game_'))
         try:
             for bad in (-1, pipeline.ALIAS_HEADROOM_MAX + 1):
-                with self.assertRaises(pipeline.BuildError) as e: pipeline.Port(pipeline.Options(folder=t, alias_headroom=bad)).run()
+                with self.assertRaises(pipeline.BuildError) as e: phone_port.PhonePort(phone_port.Options(folder=t, alias_headroom=bad)).run()
                 self.assertIn('--alias-headroom', str(e.exception))
         finally: shutil.rmtree(t, ignore_errors=True)
 
@@ -676,7 +694,7 @@ class Misc(unittest.TestCase):
             (d / 'game.tsv').write_text((d / 'game.tsv').read_text(encoding='utf-8') + 'mem_reserve\t0x140000000\nmem_alias\t0x118000000\nmem_stack\t0x10000000\nsys_resource\t0x1000000\n',
                                         encoding='utf-8')
             (d / 'patches.py').write_text('CUTS = {}\n', encoding='utf-8')
-            port = pipeline.Port(pipeline.Options(folder=t, alias_headroom=16)); port.env = {}; port.work = t; port.g = game.load(d.name)
+            port = phone_port.PhonePort(phone_port.Options(folder=t, alias_headroom=16)); port.env = {}; port.work = t; port.g = game.load(d.name)
             port.mem_profile()
             self.assertEqual(port.g.dir, (t / 'profile-mem' / d.name).resolve())
             self.assertEqual((port.g.int('mem_alias'), port.g.int('mem_reserve')), (0x518000000, 0x540000000))
@@ -710,8 +728,8 @@ class Misc(unittest.TestCase):
         p = NS(o=NS(folder=d, app=False), work=work, fam={'base': d / 'g.nsp', 'updates': [], 'dlc': []}); real = shutil.disk_usage
         try:
             shutil.disk_usage = lambda _: NS(free=2**30 + 2**20)
-            with self.assertRaises(pipeline.BuildError): pipeline.Port.check_space(p)
-            work.mkdir(); (work / 'x').write_bytes(b'\0' * 2**20); pipeline.Port.check_space(p)   # a build folder already there counts
+            with self.assertRaises(pipeline.BuildError): phone_port.PhonePort.check_space(p)
+            work.mkdir(); (work / 'x').write_bytes(b'\0' * 2**20); phone_port.PhonePort.check_space(p)   # a build folder already there counts
         finally: shutil.disk_usage = real
 
     def space_port(self, folder, fam, work, app=False, pack_dir=None):   # a port-like object for the space check alone (the check reads the picked game's files and the build folder)
@@ -724,7 +742,7 @@ class Misc(unittest.TestCase):
         real = shutil.disk_usage
         try:
             shutil.disk_usage = lambda _: NS(free=free)
-            pipeline.Port.check_space(port)
+            phone_port.PhonePort.check_space(port)
         except pipeline.BuildError as e: return str(e)
         finally: shutil.disk_usage = real
         return None
@@ -742,13 +760,13 @@ class Misc(unittest.TestCase):
                 # the card is on another volume: the build's volume asks for the game's files, the card for the pack
                 vols = lambda path: 2 if 'card' in str(path) else 1
                 shutil.disk_usage = lambda path: NS(free=1024 if 'card' in str(path) else 2**30 + 2**20)
-                with mock.patch.object(pipeline, 'volume_of', side_effect=vols):
+                with mock.patch.object(phone_port, 'volume_of', side_effect=vols):
                     with self.assertRaises(pipeline.BuildError) as e:
-                        pipeline.Port.check_space(p)
+                        phone_port.PhonePort.check_space(p)
                     self.assertRegex(str(e.exception), r'not enough disk space for the data pack in .*card')
                     # both volumes have room now
                     shutil.disk_usage = lambda path: NS(free=2**30 + 2**20)
-                    pipeline.Port.check_space(p)
+                    phone_port.PhonePort.check_space(p)
             finally: shutil.disk_usage = real
         finally: shutil.rmtree(d, ignore_errors=True)
 
@@ -836,11 +854,11 @@ class Dumps(unittest.TestCase):   # porter/dumps.py: NSZ / XCZ → NSP; an NCZ m
 
     def nsz(self, ncz, name='g.nsz'):
         files = [(self.name + '.ncz', ncz), ('0100000000aaa0000000000000000000.tik', b't' * 0x2c0)]
-        hdr = self.dumps.pfs0_header([n for n, _ in files], [len(d) for _, d in files])
+        hdr = self.dumps._pfs0_header([n for n, _ in files], [len(d) for _, d in files])
         (self.d / name).write_bytes(hdr + b''.join(d for _, d in files)); return self.d / name
 
     def check(self, src):
-        self.assertEqual(self.dumps.size(src), len(self.dumps.pfs0_header([self.name + '.nca', 'x' * 36], [0, 0])) + len(self.nca) + 0x2c0)
+        self.assertEqual(self.dumps.size(src), len(self.dumps._pfs0_header([self.name + '.nca', 'x' * 36], [0, 0])) + len(self.nca) + 0x2c0)
         out = self.dumps.decompress(src, self.d / self.dumps.unpacked_name(src))
         self.assertEqual(out.stat().st_size, self.dumps.size(src)); self.assertEqual(out.stat().st_mtime_ns, src.stat().st_mtime_ns)
         with open(out, 'rb') as f: got = {n: (f.seek(o), f.read(s))[1] for n, o, s in self.dumps.entries(out)}
@@ -888,9 +906,9 @@ class Dumps(unittest.TestCase):   # porter/dumps.py: NSZ / XCZ → NSP; an NCZ m
         real = shutil.disk_usage
         try:
             shutil.disk_usage = lambda _: NS(free=2**30 + 3 * size)
-            pipeline.Port.check_space(p)                       # twice the decompressed size plus its NSP, plus 1 GB
+            phone_port.PhonePort.check_space(p)                       # twice the decompressed size plus its NSP, plus 1 GB
             shutil.disk_usage = lambda _: NS(free=2**30 + 3 * size - 1)
-            with self.assertRaises(pipeline.BuildError): pipeline.Port.check_space(p)
+            with self.assertRaises(pipeline.BuildError): phone_port.PhonePort.check_space(p)
         finally: shutil.disk_usage = real
 
 
@@ -1038,14 +1056,14 @@ class UnrealShaders(unittest.TestCase):
             d = Path(tmp); (d / 'RomFS').mkdir(); (d / 'ue_shaders').mkdir()
             (d / 'RomFS/game.pak').write_bytes(b'pak')
             (d / 'ue_shaders/stamp').write_text(pipeline.nsp.ue_stamp(d))
-            p = SimpleNamespace(game=d, g=mock.Mock(), dirs={'v1': d}, versions=['v1'], tools={}, app_name='test', lost=[])
+            p = SimpleNamespace(game=d, g=mock.Mock(get=lambda k, d=None: d), dirs={'v1': d}, versions=['v1'], tools={}, app_name='test')
             kinds = {k: (False, '') for k in ('oodle_packs', 'glslc_capture', 'ue_legacy')}
             kinds.update(graphics=('nvn', ''), ue_decode=(True, 'Unreal shader archive'))
             with mock.patch.object(pipeline.profile_guess, 'build_sources', return_value=kinds), mock.patch.object(pipeline, 'Adb') as adb:
-                pipeline.Port.check_graphics(p)
+                phone_port.PhonePort.check_graphics(p)
                 adb.assert_not_called()
                 (d / 'RomFS/game.pak').write_bytes(b'changed archive')
-                with self.assertRaises(pipeline.BuildError): pipeline.Port.check_graphics(p)
+                with self.assertRaises(pipeline.BuildError): phone_port.PhonePort.check_graphics(p)
 
     class FakePort:
         """the parts of Port.device_ue it uses"""
@@ -1106,7 +1124,7 @@ class UnrealShaders(unittest.TestCase):
 
     def test_the_rounds_advance_until_nothing_is_left(self):   # the same stream again is a cache hit: the round asks for nothing and the decode is done
         p = self.port([[(b'one', 6)]], {b'one': b'123456'})
-        pipeline.Port.device_ue(p)
+        phone_port.PhonePort.device_ue(p)
         self.assertEqual(p.asked, [[b'one']])   # the decoder was asked once: the second round wanted nothing
         self.assertEqual((p.dirs['v1'] / 'ue_shaders' / 'ShaderArchive-Global.ushaderbytecode').read_bytes(), b'shaders')
         self.assertEqual((p.dirs['v1'] / 'ue_shaders' / 'stamp').read_text(), p.stamp)
@@ -1114,7 +1132,7 @@ class UnrealShaders(unittest.TestCase):
     def test_a_stream_the_decoder_fails_on_is_asked_again(self):   # the round that decodes none of them says so
         from porter.upstream import BuildError
         p = self.port([[(b'one', 6), (b'two', 4)]], {b'one': b'123456'})
-        with self.assertRaises(BuildError) as e: pipeline.Port.device_ue(p)
+        with self.assertRaises(BuildError) as e: phone_port.PhonePort.device_ue(p)
         self.assertIn('decoded none of 1 streams', str(e.exception))
         self.assertEqual(p.asked, [[b'one', b'two'], [b'two']])   # the stream that failed is asked for again, the decoded one is not
 
@@ -1122,26 +1140,26 @@ class UnrealShaders(unittest.TestCase):
         from porter.upstream import BuildError
         rounds = [[(f'stream {i}'.encode(), 4)] for i in range(8)]
         p = self.port(rounds, {f'stream {i}'.encode(): b'1234' for i in range(8)})
-        with self.assertRaises(BuildError) as e: pipeline.Port.device_ue(p)
+        with self.assertRaises(BuildError) as e: phone_port.PhonePort.device_ue(p)
         self.assertIn('still need Oodle streams after 4 rounds', str(e.exception))
         self.assertEqual(len(p.asked), 4)
 
     def test_a_stamped_decode_is_not_done_again(self):   # the stamp of a version whose archives are decoded: it is left alone
         p = self.port([[(b'one', 6)]], {b'one': b'123456'}, stamp_size=3)   # the stamp of this version's paks
-        pipeline.Port.device_ue(p)
+        phone_port.PhonePort.device_ue(p)
         self.assertEqual(p.asked, [])
         self.assertFalse((p.dirs['v1'] / 'ue_shaders' / 'ShaderArchive-Global.ushaderbytecode').exists())
         p = self.port([[(b'one', 6)]], {b'one': b'123456'}, stamp_size=9)   # another pak: the stamp is not the one
-        pipeline.Port.device_ue(p)
+        phone_port.PhonePort.device_ue(p)
         self.assertEqual(p.asked, [[b'one']])
 
     def test_a_stopped_decode_continues_with_the_streams_it_has(self):   # the streams a round decoded are on disk: the next run asks for the rest only
         from porter.upstream import BuildError
         p = self.port([[(b'one', 6), (b'two', 4)]], {b'one': b'123456'})   # the decoder fails on the second stream
-        with self.assertRaises(BuildError): pipeline.Port.device_ue(p)
+        with self.assertRaises(BuildError): phone_port.PhonePort.device_ue(p)
         self.assertEqual(p.asked, [[b'one', b'two'], [b'two']])   # the stream that was decoded is not asked for again
         p = self.port([[(b'one', 6), (b'two', 4)]], {b'one': b'123456', b'two': b'5678'}, root=p.root)   # the run again, the decoder gets both
-        pipeline.Port.device_ue(p)
+        phone_port.PhonePort.device_ue(p)
         self.assertEqual(p.asked, [[b'two']])   # the stream on disk is not asked for again
 
 
@@ -1164,7 +1182,7 @@ class SubfolderScan(unittest.TestCase):   # the updates and the DLC in a subfold
             string += len(n) + 1
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(dumps.pfs0_header([n for n, _ in files], [len(d) for _, d in files]) + b''.join(d for _, d in files))
+        path.write_bytes(dumps._pfs0_header([n for n, _ in files], [len(d) for _, d in files]) + b''.join(d for _, d in files))
         return path
 
     def test_the_dlc_in_a_subfolder_is_taken(self):
@@ -1203,7 +1221,7 @@ class SubfolderScan(unittest.TestCase):   # the updates and the DLC in a subfold
         base = self.dump('Game [v0].nsp', self.BASE)
         self.dump('Update [v262144].nsp', self.BASE + 0x800)
         self.dump('1DLC/DLC [v0].nsp', self.BASE + 0x1002)
-        info = pipeline.inspect(base, keys='')
+        info = phone_port.inspect(base, keys='')
         self.assertEqual([u['folder'] for u in info['updates']], [''])       # next to the base game
         self.assertEqual([d['folder'] for d in info['dlc']], ['1DLC'])        # in the subfolder
         self.assertEqual([d['file'] for d in info['dlc']], ['DLC [v0].nsp'])

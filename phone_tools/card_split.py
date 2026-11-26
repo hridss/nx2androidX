@@ -84,7 +84,7 @@ def write_nsp(dumps, card, out, group):
     """One title's files → an NSP at out (written to out.partial, then renamed)."""
     names = [name for name, _, _ in group]
     sizes = [size for _, _, size in group]
-    header = dumps.pfs0_header(names, sizes)
+    header = dumps._pfs0_header(names, sizes)
     tmp = out.with_name(out.name + '.partial')
     try:
         with open(card, 'rb') as f, open(tmp, 'wb') as o:
@@ -147,7 +147,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     need = 0
     for title, group in groups:
-        need += len(dumps.pfs0_header([n for n, _, _ in group], [s for _, _, s in group]))
+        need += len(dumps._pfs0_header([n for n, _, _ in group], [s for _, _, s in group]))
         need += sum(s for _, _, s in group)
     room = free_bytes(out)
     if need > room:

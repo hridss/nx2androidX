@@ -51,7 +51,7 @@ class VulkanKey(unittest.TestCase):
 
     def test_the_repository_s_split_readers_are_not_in_the_key(self):
         names = {p.name for p in nsp.vulkan_files(NXNATIVE)}
-        for n in ('shader_split.py', 'unityfs.py', 'uepak.py', 'forkpool.py'):
+        for n in ('shader_split.py', 'unityfs.py', 'uepak.py'):   # forkpool.py joined the key: upstream ships the pool module beside the translator now
             self.assertNotIn(n, names)
 
 

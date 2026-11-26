@@ -35,18 +35,12 @@ class PortRunner(
         lowMem: Boolean = false,
         onEnd: () -> Unit,
     ): Thread {
-        val args = portArgs(gameFile, keys, touch, fps60, experimental, aliasHeadroom, !BuildConfig.NX_LSFG,
-            sharedFont, firmware, mtReplay, deviceLanguage(), lowMem)
+        val args = portArgs(gameFile, keys, touch, fps60, experimental, aliasHeadroom,
+            sharedFont, firmware, mtReplay, lowMem)
         // A file in a netdisk's folder is not there yet in its middle: the port would read it as a broken dump
         GameSource.cloudFolder(gameFile)?.let { onLine(s(R.string.runner_cloud_folder, it)) }
         return start(args, { onEnd() }, if (packDir.isNullOrBlank()) emptyMap() else mapOf("NX2A_PACK_DIR" to packDir))
     }
-
-    /**
-     * The phone's own language: the pack follows it when the game has it (the porter takes it as a wish: a game
-     * without it is packed in its own first language, as before).
-     */
-    private fun deviceLanguage(): String = Locale.getDefault().toLanguageTag()
 
     companion object {
 
@@ -63,10 +57,10 @@ class PortRunner(
          * glyphs), the firmware dump's system content folder (empty = none) and the multithread replay.
          */
         fun portArgs(gameFile: String, keys: String, touch: Boolean, fps60: Boolean,
-                     experimental: Boolean, aliasHeadroom: Int, noLsfg: Boolean,
+                     experimental: Boolean, aliasHeadroom: Int,
                      sharedFont: String = "", firmware: String = "", mtReplay: Boolean = false,
-                     deviceLanguage: String = "", lowMem: Boolean = false): List<String> {
-            val args = mutableListOf("-m", "porter", "port", gameFile, "-k", keys, "--progress", "json", "--app")
+                     lowMem: Boolean = false): List<String> {
+            val args = mutableListOf("-m", "porter.phone_cli", "port", gameFile, "-k", keys, "--progress", "json", "--app")
             if (touch) args += "--touch"
             if (fps60) args += "--fps60"
             if (experimental) args += "--experimental"
@@ -74,13 +68,12 @@ class PortRunner(
             if (sharedFont.isNotBlank()) args += listOf("--shared-font", sharedFont.trim())
             if (firmware.isNotBlank()) args += listOf("--firmware", firmware.trim())
             if (mtReplay) args += "--mt-replay"
-            if (deviceLanguage.isNotBlank()) args += listOf("--language-preferred", deviceLanguage.trim())
+            // The game's language is the device's, but it is the runtime that picks it: the pack lists the
+            // languages the game has (DM_LANG_SUPPORTED) and the front chooses one at launch from the locale.
+            args += listOf("--language", "system")
             // A phone with little memory free: the shader translation runs with at most two workers (the number follows
             // the free memory anyway; this caps it). Slower, but the build survives.
             if (lowMem) args += "--low-mem"
-            // A build without the frame generation (the Gradle property nxLsfg=false): the host the app builds on the
-            // device is then smaller and the frame generation reports that it is not in this build (android/NOTICE.md).
-            if (noLsfg) args += "--no-lsfg"
             return args
         }
     }
@@ -90,7 +83,7 @@ class PortRunner(
      * saved setting). [json] asks for the rows as one JSON array, the form the keys check reads.
      */
     fun doctor(keys: String, json: Boolean, onEnd: () -> Unit): Thread {
-        val args = mutableListOf("-m", "porter", "doctor")
+        val args = mutableListOf("-m", "porter.phone_cli", "doctor")
         if (json) args += "--json"
         if (keys.isNotBlank()) args += listOf("-k", keys.trim())
         val t = Thread {
@@ -115,7 +108,7 @@ class PortRunner(
      * import worked; the porter's own lines say why it did not.
      */
     fun importProfiles(packageFile: String, onEnd: (Int) -> Unit): Thread {
-        val args = mutableListOf("-m", "porter", "profiles", "import", packageFile)
+        val args = mutableListOf("-m", "porter.phone_cli", "profiles", "import", packageFile)
         return start(args, onEnd)
     }
 

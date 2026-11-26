@@ -22,7 +22,11 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
 
     companion object {
         const val MARKER_FILE = "build.json"
-        private const val HOST_FILE = "libdmplay.so"
+
+        // 宿主的正名（revision 9 的契约含新前端与新文件名）。libdmplay.so 是旧前端的库：见到即过时，
+        // 不能再被装载或晋升（prepareRuntime 对它就地重建）。
+        private const val HOST_FILE = "libdmhost.so"
+        private const val LEGACY_HOST_FILE = "libdmplay.so"
 
         /** the managed hooks, beside the host (the loader's own library loads them) */
         val HOOKS = setOf("libhook_impl.so", "libmain_hook.so", "libfile_redirect_hook.so", "libgsl_alloc_hook.so")
@@ -31,7 +35,6 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         fun expected(): RuntimeBuildMarker = RuntimeBuildMarker(
             playerApiRevision = PlayerApiRevision.CURRENT,
             profileH = "",           // compared against the pack's own manifest, not a constant
-            noLsfg = !BuildConfig.NX_LSFG,
         )
     }
 
@@ -44,7 +47,7 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         RuntimeBuildMarker(
             playerApiRevision = o.optInt("player_api_revision", 0),
             profileH = o.optString("profile_h"),
-            noLsfg = if (o.has("no_lsfg")) o.optBoolean("no_lsfg") else null,
+            romfs = o.optString("romfs"),
         )
     } catch (_: Exception) {
         null
@@ -55,7 +58,16 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
     /** the host this folder's runtime loads (the file must be there: [complete] says whether it is) */
     fun hostOf(dir: File): File = File(dir, HOST_FILE)
 
-    /** the folder holds a whole runtime: the host and the loader's hooks, nothing half in place */
+    /** 旧前端的运行库（libdmplay.so）还在目录里就删掉：改名后它永远不可能再被装载，留着只会误导 */
+    fun pruneLegacyHost(dir: File) {
+        File(dir, LEGACY_HOST_FILE).delete()
+    }
+
+    /**
+     * The folder holds a whole runtime: the host and the loader's hooks, nothing half in place.
+     * A folder with only the pre-rename libdmplay.so is NOT complete: that library is the old front (no drawer,
+     * no input), so the runtime is rebuilt rather than loaded.
+     */
     fun complete(dir: File): Boolean =
         dir.isDirectory && hostOf(dir).isFile && HOOKS.all { File(dir, it).isFile }
 
@@ -68,7 +80,6 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         if (marker == null) return false
         val expected = expected()
         if (marker.playerApiRevision != expected.playerApiRevision) return false
-        if (marker.noLsfg != null && marker.noLsfg != expected.noLsfg) return false
         val packProfile = ported.profileH
         if (packProfile.isNotEmpty() && marker.profileH.isNotEmpty() && packProfile != marker.profileH) return false
         return true
@@ -81,7 +92,7 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         pending.writeText(JSONObject().let { o ->
             o.put("player_api_revision", marker.playerApiRevision)
             o.put("profile_h", marker.profileH)
-            marker.noLsfg?.let { o.put("no_lsfg", it) }
+            o.put("romfs", marker.romfs)
             o.toString()
         })
         if (!pending.renameTo(File(dir, MARKER_FILE))) {

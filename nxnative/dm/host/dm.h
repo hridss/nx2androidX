@@ -152,16 +152,6 @@ void dm_guest_write_prep_register(void (*fn)(void *addr, size_t len));
 void dm_res_report_register(void (*fn)(uint32_t tick, const char *why));   // Resource count callback (registered by the graphics layer): called every 250 ticks, when the loading screen has been dismissed, and on exit when the record is full
 void (*dm_res_report_cb(void))(uint32_t tick, const char *why);   // Get the registered resource count callback (null if not registered)
 void dm_guest_write_prepare(void *addr, size_t len);
-// Cheats (hle_cheats.c): Atmosphère-format cheat files applied to the running game (the folder the app names:
-// the app's own cheats/ folder, where the file it downloaded from the community library lies)
-// void dm_cheats_init(void);   // at start (main.c): loads the file of the running build from the folder DM_CHEATS names
-// void dm_cheats_present(void);   // per presented frame (hle_nvn.c): runs the enabled cheats once
-// int dm_cheats_open(const char *dir);   // load the cheats of the running build from that folder: the entries (0 = no file of this build)
-// void dm_cheats_close(void);   // drop the loaded cheats
-// const char *dm_cheats_build(void);   // the build ID the cheat files are named by (the first 16 hex digits of main's, upper case)
-// int dm_cheats_count(void);   // the entries the player can switch
-// int dm_cheats_row(int i, const char **name, int *on, const char **why);   // one entry: its name, whether it is on, why it cannot run ("" when it can)
-// int dm_cheats_set(int i, int on);   // switch it (1 = done, -1 = it cannot run, 0 = no such entry)
 // A cheat that writes the game's code (loader.c dm_module_code_write): the host opens the write bit on the pages it
 // needs, writes, and flushes the instruction cache so the other cores run the new code. The execution bit never goes
 // off: a thread that is executing there would fault (SIGSEGV) and take the game with it. 1 = written, 0 = refused
@@ -170,14 +160,6 @@ int dm_module_code_write(module_t *m, uint64_t off, const void *src, size_t len)
 int dm_module_write(module_t *m, uint64_t off, const void *src, size_t len);
 // Does the range [off, off+len) touch a place the rewriter changed or hooked? 1 = yes: a cheat must not write there
 int dm_module_avoided(module_t *m, uint64_t off, uint64_t len);
-void dm_cheats_init(void);
-void dm_cheats_present(void);
-int dm_cheats_open(const char *dir);
-void dm_cheats_close(void);
-const char *dm_cheats_build(void);
-int dm_cheats_count(void);
-int dm_cheats_row(int i, const char **name, int *on, const char **why);
-int dm_cheats_set(int i, int on);
 // Graphics lifecycle (hle_nvn.c): on=1 suspends (afterwards submit / present block, and in-flight GPU work is drained before returning), on=0 resumes; called by the iOS front end when entering and leaving the background
 void dm_gfx_suspend(int on);
 void dm_movie_hold(int on);   // hle_movie.c: the game is held (background, pause menu); the time held is no movie decoder's idle time (md_tail)

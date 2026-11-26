@@ -4,6 +4,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
 import android.net.Uri
 import com.nx.android.data.saves.SaveIo
+import com.nx.android.domain.GameApkExport
+import com.nx.android.domain.GameApkExportService
+import com.nx.android.domain.GameEntry
 import com.nx.android.domain.playback.RunOptionsRepository
 import com.nx.android.domain.playback.RunOptionsSnapshot
 import com.nx.android.domain.saves.SaveRepository
@@ -29,8 +32,8 @@ class GameDetailViewModelTest {
         val options = FakeRunOptionsRepository()
         val store = ViewModelStore()
         try {
-            val first = GameDetailViewModel(SavedStateHandle(), FakeSaveRepository(), FakeSaveIo(), options)
-            val second = GameDetailViewModel(SavedStateHandle(), FakeSaveRepository(), FakeSaveIo(), options)
+            val first = GameDetailViewModel(SavedStateHandle(), FakeSaveRepository(), FakeSaveIo(), options, FakeExportService())
+            val second = GameDetailViewModel(SavedStateHandle(), FakeSaveRepository(), FakeSaveIo(), options, FakeExportService())
             store.put("detail-one", first)
             store.put("detail-two", second)
             val firstPack = File("/games/one")
@@ -85,6 +88,14 @@ class GameDetailViewModelTest {
     private class FakeSaveIo : SaveIo {
         override fun target(uri: Uri): SaveTarget = throw UnsupportedOperationException()
         override fun source(uri: Uri): SaveSource = throw UnsupportedOperationException()
+    }
+
+    /** The export is not what this test is about: it only has to be there. */
+    private class FakeExportService : GameApkExportService {
+        override fun export(entry: GameEntry, targetDir: File,
+                            onProgress: (GameApkExport.Progress) -> Unit,
+                            log: (String) -> Unit): GameApkExport.Result = GameApkExport.Result(false, "not_used")
+        override fun move(dataFolder: File, packageName: String, log: (String) -> Unit): Boolean = false
     }
 
     private companion object {

@@ -554,6 +554,18 @@ def main():
     shutil.rmtree(apk, ignore_errors=True)
     apk.mkdir(parents=True)
 
+    # the overlay's pixel font (front_android.c asset('font/ui.bin'), upstream pipeline.ui_font_assets): without it
+    # the pause menu draws Latin-1 only and the Chinese/Japanese/Korean labels come out as boxes
+    font_d = REPO / 'nxnative/dm/third_party/fusion-pixel-font'
+    ui_font = font_d / 'fusion-pixel-12px-proportional-zh_tw.nxpf'
+    if not ui_font.is_file(): raise SystemExit(f'{ui_font} is missing (the overlay menu would draw Chinese as boxes)')
+    (apk / 'font').mkdir(parents=True)
+    shutil.copyfile(ui_font, apk / 'font/ui.bin')
+    for lic in sorted(p for p in font_d.rglob('*.txt')):
+        dst = apk / 'font' / lic.relative_to(font_d).as_posix()
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(lic, dst)
+
     payload = Path(a.payload) if a.payload else cache / 'payload-arm64.tar.gz'
     if not payload.exists(): raise SystemExit(f'{payload} is missing (fetch it from the nixport payload release)')
 

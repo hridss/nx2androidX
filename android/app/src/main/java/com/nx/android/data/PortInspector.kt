@@ -27,7 +27,7 @@ class PortInspector @Inject constructor(
 ) : GameInspector {
 
     override suspend fun inspect(gameFile: String, keys: String): GameInfo? = withContext(Dispatchers.IO) {
-        val args = mutableListOf("-m", "porter", "inspect", gameFile, "--json")
+        val args = mutableListOf("-m", "porter.phone_cli", "inspect", gameFile, "--json")
         if (keys.isNotBlank()) args += listOf("-k", keys)
         val process = runCatching { launcher.guest(args) }.getOrNull() ?: return@withContext null
         GameInfoJson.decode(readOutput(process, TIMEOUT_MS))

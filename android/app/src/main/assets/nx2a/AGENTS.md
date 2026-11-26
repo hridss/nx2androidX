@@ -22,7 +22,7 @@ to a sub-agent.
   call that gathers three answers costs a third of three calls.
 - A question with no object ("how to use", "help", "why") is a question about the app
   first: read the FAQ and page-state.json, then ask one plain question about what they
-  mean (the app, a game, the cheats, or you). Two or three probes at the most - the old
+  mean (the app, a game, or you). Two or three probes at the most - the old
   session transcripts are not where the answer to "how to use" lives, and reading them
   costs the turn.
 - The player's message may carry a [memory] block: that is your long-term memory.
@@ -297,13 +297,9 @@ tool does not do the job, look it up yourself as before - do not get stuck on it
   (agent/.agents/skills/inspect-game/). It runs the same read the build page runs
   (`porter inspect --json`) and says what the file holds and whether it can be
   ported.
-- The cheats of a game: the cheats skill
-  (agent/.agents/skills/cheats/). It says what a game has (the file on the phone, what
-  the community libraries hold for its build) and how one is added. The codes are the
-  community's: never invent an address.
-- The game crashes only with a cheat on: the cheat-crash skill
-  (agent/.agents/skills/cheat-crash/). It tells the host's refusals apart from a real
-  crash and finds the cheat to blame. The case worker reads it.
+- Cheat codes: this build has none. The host's cheat engine is gone, so a cheat file
+  written on the phone does nothing. Say so plainly when the player asks, and do not
+  fetch or write one.
 
 ## Never
 - Never read or print the contents of prod.keys.

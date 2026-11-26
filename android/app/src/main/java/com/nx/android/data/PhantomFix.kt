@@ -74,7 +74,7 @@ object PhantomFix {
 
     @Volatile private var pairPort: Int? = null
     @Volatile private var connectPort: Int? = null
-    private var discoveries = listOf<Mdns>()
+    private var discoveries = listOf<AdbMdns>()
 
     /** Wireless debugging's state before the fix: switched off again only if it was off */
     private var wifiAdbWasOn = true
@@ -135,8 +135,8 @@ object PhantomFix {
         connectPort = null
         stopDiscovery()
         discoveries = listOf(
-            Mdns(app, "_adb-tls-pairing._tcp") { pairPort = it; if (state is State.Waiting) state = State.Waiting(it) },
-            Mdns(app, "_adb-tls-connect._tcp") { connectPort = it },
+            AdbMdns(app, "_adb-tls-pairing._tcp") { pairPort = it; if (state is State.Waiting) state = State.Waiting(it) },
+            AdbMdns(app, "_adb-tls-connect._tcp") { connectPort = it },
         ).onEach { it.start() }
         state = State.Waiting(null)
         notifyCodeRequest(app)
@@ -212,15 +212,7 @@ object PhantomFix {
     }
 
     /** The App's adb key, made once; kept out of backups. */
-    private fun key(app: Context): RSAPrivateCrtKey {
-        val f = File(app.noBackupFilesDir, "adb-key.pk8")
-        if (f.isFile) runCatching { return AdbWire.loadKey(f.readBytes()) }
-        val k = AdbWire.newKey()
-        val tmp = File(f.path + ".tmp")
-        tmp.writeBytes(k.encoded)
-        tmp.renameTo(f)
-        return k
-    }
+    private fun key(app: Context): RSAPrivateCrtKey = AdbChannels.key(app)
 
     private object ConscryptTls : AdbWire.Tls {
         override val provider: Provider by lazy { Conscrypt.newProvider() }

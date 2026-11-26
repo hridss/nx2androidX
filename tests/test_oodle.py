@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from porter.pipeline import on_android, oodle_job, oodle_result, oodle_where   # noqa: E402
+from porter.phone_port import on_android, oodle_job, oodle_result, oodle_where   # noqa: E402
 from porter.upstream import BuildError   # noqa: E402
 
 

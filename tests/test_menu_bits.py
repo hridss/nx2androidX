@@ -19,8 +19,7 @@ class MenuBits(unittest.TestCase):
         self.assertIn(f'(menu & {bits["OVE_ST"]:#x}) != 0 && (menu & {bits["OVT_ST"]:#x}) == 0', java, 'ExternalActivity reads the editor and text bits as overlay_layout.h defines them')
 
     def test_no_bare_mode_bit_in_the_sources(self):
-        # this line builds front_player.c (upstream's APK front, front_android.c, stays deleted); the Java copies it does not build are not checked here
-        for f in ('front_player.c', 'gfx_vk_present.c'):
+        for f in ('front_android.c', 'gfx_vk_present.c'):
             s = (ANDROID / f).read_text(encoding='utf-8')
             self.assertNotRegex(s, r'(st|menu) >> 16 & 1|return 1 << 16 \|', f'{f}: use OVT_ST')
 

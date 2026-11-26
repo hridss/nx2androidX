@@ -9,8 +9,8 @@ from pathlib import Path
 from unittest import mock
 
 from porter import memory
-from porter import cli
-from porter import pipeline
+from porter import phone_cli
+from porter import phone_port
 
 
 class MemoryJobsTest(unittest.TestCase):
@@ -89,11 +89,11 @@ class CommandLineTest(unittest.TestCase):
 
     def test_the_low_memory_mode_is_an_option_of_the_port(self):
         """The flag reaches the build options: the port takes it as one of its own"""
-        args = cli._parser().parse_args(['port', '/sdcard/game.nsp', '--low-mem'])
+        args = phone_cli._parser().parse_args(['port', '/sdcard/game.nsp', '--low-mem'])
         self.assertTrue(args.low_mem)
 
     def test_without_the_flag_it_is_off(self):
-        args = cli._parser().parse_args(['port', '/sdcard/game.nsp'])
+        args = phone_cli._parser().parse_args(['port', '/sdcard/game.nsp'])
         self.assertFalse(args.low_mem)
 
 
@@ -101,15 +101,15 @@ class TranslationWorkersTest(unittest.TestCase):
     """The pipeline's own count: what it hands to the translation, and what it says when there is no room"""
 
     def port(self, low_mem=False, jobs=8):
-        p = pipeline.Port.__new__(pipeline.Port)
-        p.o = pipeline.Options(folder=Path('/tmp'), jobs=jobs, low_mem=low_mem)
+        p = phone_port.PhonePort.__new__(phone_port.PhonePort)
+        p.o = phone_port.Options(folder=Path('/tmp'), jobs=jobs, low_mem=low_mem)
         return p
 
     def workers(self, avail=None, **kw):
         """the pipeline's count on a machine with 8 cores: the count follows the cores (one worker per core), so a
         runner with fewer of them would answer with its own number and the test would not say what it means"""
         with mock.patch.object(memory, 'available_mb', return_value=avail), \
-                mock.patch.object(pipeline.os, 'cpu_count', return_value=8):
+                mock.patch.object(phone_port.os, 'cpu_count', return_value=8):
             return self.port(**kw).translation_workers()
 
     def test_the_workers_follow_the_free_memory(self):
@@ -126,7 +126,7 @@ class TranslationWorkersTest(unittest.TestCase):
         self.assertEqual((2, 8192), self.workers(8192, jobs=2))
 
     def test_no_room_stops_the_stage_with_a_clear_error(self):
-        with self.assertRaises(pipeline.BuildError) as cm:
+        with self.assertRaises(phone_port.BuildError) as cm:
             self.workers(900)
         self.assertIn('memory', str(cm.exception))
 
