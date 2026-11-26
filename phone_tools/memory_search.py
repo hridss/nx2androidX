@@ -379,8 +379,10 @@ def read_issues(path: Path) -> list[dict]:
     return out
 
 
-# The problem entry of a case file: "### 2026-11-23 the crash (status: fixed)".
-ENTRY = re.compile(r'^###\s+(?P<title>.+?)\s*\((?P<status>status:[^)]*)\)\s*$')
+# The problem entry of a case file: "### 2026-11-23 the crash (status: fixed)". The stage of the
+# port's life may follow it in brackets ("### ... (status: fixed) [stage 2]") - it is still an
+# entry, and it still carries its fields.
+ENTRY = re.compile(r'^###\s+(?P<title>.+?)\s*\((?P<status>status:[^)]*)\)\s*(?:\[[^\]]*\])?\s*$')
 # The fields of an entry.
 FIELDS = {
     "symptom": ("Symptom:",),

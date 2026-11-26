@@ -534,6 +534,29 @@ The port stops at a stage when the shader split finds too few shaders.
         self.assertIn('shirai91#419', result.stdout)   # the pull request number
         self.assertIn('[pr]', result.stdout)           # which corpus it came from
 
+    def test_a_case_entry_with_a_stage_keeps_its_fields(self):
+        """An entry that carries the stage of the port's life is still an entry: the case corpus
+        has to hand out its status, cause and fix (the entry format grew the stage in 2026-11-25
+        and the search lost every field of the new format)."""
+        folder = Path(tempfile.mkdtemp(prefix='nx2a_player_'))
+        case = folder / '010078D000F88000'
+        case.mkdir(parents=True)
+        (case / 'spec.md').write_text(
+            '# DRAGON BALL XENOVERSE 2 (010078D000F88000) case file\n\n'
+            '## Runtime problems\n\n'
+            '### 2026-11-25 the guest crashes with SIGSEGV (status: pending approval) [stage 2]\n'
+            'Symptom: the game is gone five seconds in\n'
+            'Cause: a null this pointer in the guest NVN client library\n'
+            'Proposed fix: the movie module needs the queue before the texture\n'
+            'Evidence: the crash line in log.txt\n'
+            'Plan:\n- [ ] 1. one change - verify: a run that lasts\n')
+        index_dir = self.build(player=folder)
+        result = self.search('search', '--index', str(index_dir), '--corpus', 'case', 'SIGSEGV')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('status: pending approval', result.stdout)
+        self.assertIn('a null this pointer', result.stdout)
+        self.assertIn('the movie module needs the queue', result.stdout)
+
     def test_the_cases_are_capped(self):
         rows = tuple(f'shirai91\t{n}\tMERGED\tprofile\tcrash\thost\tcore\tyes\t\t\t\t\t'
                      f'fix(host): case {n}\tsummary {n}\thttps://example/{n}' for n in range(40))

@@ -303,50 +303,55 @@ def app_version() -> str:
 
 # The engine's sub-agent extension (@tintinweb/pi-subagents) and the wait path of its get_subagent_result
 # tool: that wait has no end, and the tool's own answer tells the model to use it ("Use wait: true or check
-# back later"). A top-level agent - the one a session spawns for itself - then holds the player's whole
-# conversation for as long as it runs: the player cannot talk to the assistant meanwhile, and every step the
-# agent takes shows up as a tool call of that session.
+# back later"). A session that asks for the result of a running agent is then held for as long as that agent
+# runs: the player cannot talk to the assistant meanwhile, and every step the agent takes shows up as a tool
+# call of that session. A session that started at 22:03 on 2026-11-25 sat in that wait for 38 minutes.
 #
-# The extension knows the two kinds apart (isTopLevelAgent: a nested agent has a parent, a top-level one
-# does not), so the wait stays for the nested agents - a case worker waits for the Explore agents it spawned
-# - and goes away for the top-level ones: their summary is posted into the conversation when they are done,
-# and the session relays it then. That is the flow the engine was built for; the wait is the alternative.
+# The wait goes, and the tool answers at once: the agent keeps running, and its summary is posted into the
+# conversation when it is done - the flow the engine was built for (the completion notification), with the
+# wait as the alternative. The tool serves top-level agents only (the engine's own guard above the wait says
+# so); a nested agent's own tools are a different implementation, in another file, and are left alone.
 #
 # The patch is an edit of the engine's own file, so it has to stop the build when the file does not look the
 # way this expects: an engine that changed under it would ship the old behaviour silently.
 SUBAGENT_PATCHES = (
     (
-        '                description: "If true, wait for the agent to complete before returning. Default: false.",',
-        '                description: "If true, wait for the agent to complete before returning. This is for a '
-        'nested agent (one another agent spawned): a top-level agent answers at once, and its summary is posted '
-        'into the conversation when it is done. Default: false.",',
+        '            wait: Type.Optional(Type.Boolean({\n'
+        '                description: "If true, wait for the agent to complete before returning. Default: false.",\n'
+        '            })),\n',
+        '',
     ),
     (
-        '            if (params.wait && (record.status === "running" || record.status === "queued")) {',
-        '            // nx2a: a top-level agent belongs to the session itself. Waiting on it inline holds the\n'
-        '            // player\'s whole conversation for as long as it runs, so the status is the answer here:\n'
-        '            // the completion notification is posted into the conversation, and the session relays it\n'
-        '            // when it arrives.\n'
-        '            if (params.wait && isTopLevelAgent(record)) {\n'
-        '                // (the status below is the answer)\n'
-        '            }\n'
-        '            else if (params.wait && (record.status === "running" || record.status === "queued")) {',
+        '            // Wait for completion if requested. Cancellation stops only this tool\n'
+        '            // call; the background agent keeps running and remains unconsumed so its\n'
+        '            // completion notification can still be delivered.\n'
+        '            // Queued agents have no promise yet (it\'s created when the queue starts\n'
+        '            // them), so poll until they leave the queue, then await like a running one.\n'
+        '            if (params.wait && (record.status === "running" || record.status === "queued")) {\n'
+        '                while (record.status === "queued") {\n'
+        '                    await abortable(new Promise((resolve) => setTimeout(resolve, QUEUE_WAIT_POLL_MS)), signal);\n'
+        '                }\n'
+        '                if (record.promise)\n'
+        '                    await abortable(record.promise, signal);\n'
+        '            }\n',
+        '            // nx2a: there is no wait here. This tool answers at once, so a session that asks\n'
+        '            // for the result of a running agent gets its status instead of being held until the\n'
+        '            // agent is done - the player could not talk to the assistant meanwhile, and every step\n'
+        '            // the agent took showed up as a tool call of that session. The agent keeps running,\n'
+        '            // and its summary is posted into the conversation when it is done.\n',
     ),
     (
         '                output += "Agent is still running. Use wait: true or check back later.";',
-        '                output += isTopLevelAgent(record)\n'
-        '                    ? "Agent is still running. Do not wait on it: answer with what you have and end your turn - its summary is posted into this conversation when it is done."\n'
-        '                    : "Agent is still running. Use wait: true or check back later.";',
+        '                output += "Agent is still running. Do not wait for it: answer with what you have and end your turn - its summary is posted into this conversation when it is done.";',
     ),
 )
 
 
 def patch_engine_subagents(runtime: Path) -> None:
-    """The engine's sub-agent extension: the wait path of get_subagent_result must not hold a session.
+    """The engine's sub-agent extension: get_subagent_result must not hold a session.
 
-    See SUBAGENT_PATCHES for what the wait does and why the two kinds of agent are told apart. Every patch
-    has to match exactly once: a file that moved under this stops the build instead of shipping the old
-    behaviour."""
+    See SUBAGENT_PATCHES for what the wait does and why it goes. Every patch has to match exactly
+    once: a file that moved under this stops the build instead of shipping the old behaviour."""
     path = runtime / 'extensions' / 'pi-subagents' / 'dist' / 'index.js'
     if not path.is_file():
         raise SystemExit('android-apk: the engine carries no sub-agent extension (pi-subagents is missing)')

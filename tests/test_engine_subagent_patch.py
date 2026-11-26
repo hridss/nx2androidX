@@ -1,5 +1,5 @@
-# The engine's sub-agent extension: the wait path of get_subagent_result must not hold a session. The build
-# patches the engine's own file when it stages it (packaging/android-apk/build_assets.py).
+# The engine's sub-agent extension: get_subagent_result must not hold a session. The build patches the
+# engine's own file when it stages it (packaging/android-apk/build_assets.py).
 import importlib.util, shutil, subprocess, tempfile, unittest, zipfile
 from pathlib import Path
 
@@ -8,14 +8,20 @@ spec = importlib.util.spec_from_file_location('build_assets', SCRIPT)
 build_assets = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(build_assets)
 
-# The three places the patch touches, as they are in the engine's file. They are read from the patch itself,
-# so a patch that changes is a patch that is tested.
-WAIT_DESCRIPTION, WAIT_GUARD, RUNNING_TEXT = (old for old, _ in build_assets.SUBAGENT_PATCHES)
+# The three places the patch touches, as they are in the engine's own file. They are read from the patch
+# itself, so a patch that changes is a patch that is tested.
+WAIT_OPTION, WAIT_BLOCK, RUNNING_TEXT = (old for old, _ in build_assets.SUBAGENT_PATCHES)
 
-# The engine's file as the package carries it (pristine). The staged copy in the build's cache is patched in place,
-# so it is not the input of this test: a build that ran once would leave the patch already applied there.
-CACHED_PACKAGES = sorted((Path(__file__).resolve().parent.parent / 'packaging' / 'android-apk' / '.cache' / 'pi-respack')
-                          .glob('pi-agent-r*.zip'))
+# The engine package the build takes, in the build's cache. The file inside it is the original one: the
+# staged tree holds the patched copy, and patching that again is what the build refuses to do.
+CACHE = Path(__file__).resolve().parent.parent / 'packaging' / 'android-apk' / '.cache' / 'pi-respack'
+ENGINE_FILE = 'extensions/pi-subagents/dist/index.js'
+
+
+def engine_package() -> Path | None:
+    """The newest engine package in the cache, if there is one."""
+    packages = sorted(CACHE.glob('pi-agent-r*.zip'))
+    return packages[-1] if packages else None
 
 
 class EngineSubagentPatch(unittest.TestCase):
@@ -25,8 +31,9 @@ class EngineSubagentPatch(unittest.TestCase):
         self.file.parent.mkdir(parents=True)
         self.file.write_text('\n'.join([
             'function defineTool(o) { return o; }',
-            WAIT_DESCRIPTION,
-            WAIT_GUARD,
+            'const agent_id = Type.String();',
+            WAIT_OPTION,
+            WAIT_BLOCK,
             RUNNING_TEXT,
         ]), encoding='utf-8')
 
@@ -34,28 +41,16 @@ class EngineSubagentPatch(unittest.TestCase):
         build_assets.patch_engine_subagents(self.dir)
         return self.file.read_text(encoding='utf-8')
 
-    def pristine_engine_file(self, work: Path) -> Path:
-        """The engine's file as the package carries it (not the patched copy the build leaves in its cache)"""
-        (work / 'extensions' / 'pi-subagents' / 'dist').mkdir(parents=True)
-        out = work / 'extensions' / 'pi-subagents' / 'dist' / 'index.js'
-        with zipfile.ZipFile(CACHED_PACKAGES[-1]) as z:
-            with z.open('extensions/pi-subagents/dist/index.js') as src, out.open('wb') as dst:
-                shutil.copyfileobj(src, dst)
-        return out
-
-    def test_the_wait_is_taken_from_a_top_level_agent(self):
+    def test_the_wait_is_gone(self):
         got = self.patch()
-        self.assertIn('isTopLevelAgent(record)', got)
-        self.assertIn('else if (params.wait && (record.status', got)
+        self.assertNotIn('params.wait', got)
+        self.assertNotIn('wait: Type.Optional', got)
+        self.assertNotIn('await abortable(record.promise', got)
 
     def test_the_running_answer_does_not_teach_the_wait_anymore(self):
         got = self.patch()
-        # the nested agent keeps the old answer, the top-level one gets a new one
-        self.assertIn('? "Agent is still running. Do not wait on it', got)
-        self.assertIn(': "Agent is still running. Use wait: true or check back later.";', got)
-
-    def test_the_description_says_who_may_wait(self):
-        self.assertIn('nested agent', self.patch())
+        self.assertIn('Do not wait for it', got)
+        self.assertNotIn('Use wait: true or check back later', got)
 
     def test_a_file_that_moved_stops_the_build(self):
         self.file.write_text('something else entirely\n', encoding='utf-8')
@@ -69,26 +64,31 @@ class EngineSubagentPatch(unittest.TestCase):
             build_assets.patch_engine_subagents(self.dir)
         self.assertIn('carries no sub-agent extension', str(e.exception))
 
-    @unittest.skipUnless(CACHED_PACKAGES, 'the engine package is not in this checkout')
+    @unittest.skipUnless(engine_package() is not None, 'the engine package is not in the cache')
     def test_the_real_engine_file(self):
-        """The engine's own file, patched: every patch matches once, and the file is still one program."""
+        """The engine's own file, out of the package: every patch matches once, and it is still a program."""
         work = self.dir / 'real'
-        self.pristine_engine_file(work)
+        (work / 'extensions' / 'pi-subagents' / 'dist').mkdir(parents=True)
+        with zipfile.ZipFile(engine_package()) as z:
+            with z.open(ENGINE_FILE) as src, (work / ENGINE_FILE).open('wb') as dst:
+                shutil.copyfileobj(src, dst)
         build_assets.patch_engine_subagents(work)
-        got = (work / 'extensions' / 'pi-subagents' / 'dist' / 'index.js').read_text(encoding='utf-8')
-        self.assertIn('if (params.wait && isTopLevelAgent(record))', got)
-        self.assertIn('else if (params.wait && (record.status === "running"', got)
-        self.assertNotIn('\n            if (params.wait && (record.status === "running"', got)
+        got = (work / ENGINE_FILE).read_text(encoding='utf-8')
+        self.assertNotIn('params.wait', got)
+        self.assertIn('Do not wait for it', got)
 
-    @unittest.skipUnless(CACHED_PACKAGES and shutil.which('node'), 'the engine package is not here (or node is missing)')
+    @unittest.skipUnless(engine_package() is not None and shutil.which('node'),
+                         'the engine package is not in the cache (or node is missing)')
     def test_the_patched_file_is_still_a_program(self):
         """The patched file has to parse: a patch that breaks the extension breaks the assistant."""
         work = self.dir / 'real'
-        self.pristine_engine_file(work)
+        (work / 'extensions' / 'pi-subagents' / 'dist').mkdir(parents=True)
+        with zipfile.ZipFile(engine_package()) as z:
+            with z.open(ENGINE_FILE) as src, (work / ENGINE_FILE).open('wb') as dst:
+                shutil.copyfileobj(src, dst)
         build_assets.patch_engine_subagents(work)
-        patched = work / 'extensions' / 'pi-subagents' / 'dist' / 'index.js'
         as_module = work / 'index.mjs'   # the file is a module: node checks it as one
-        as_module.write_bytes(patched.read_bytes())
+        as_module.write_bytes((work / ENGINE_FILE).read_bytes())
         check = subprocess.run(['node', '--check', str(as_module)], capture_output=True, text=True)
         self.assertEqual(0, check.returncode, check.stderr)
 
