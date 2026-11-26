@@ -4,7 +4,6 @@
 #        debug = for bring-up and diagnosis only (a profile may not set it; promote it to profile first). ",ios" = read only by the iOS host.
 # when: start = read once at start-up; live = re-read while the game runs (a ctl.txt `env` line changes it); ? = not documented yet.
 # tests/test_settings.py checks that every getenv("DM_...") in the core has a row here and that profiles and porter set only rows they may.
-
 DM_ADAPTIVE_FPS	bool	1	profile	start	perf_android.c	the adaptive frame-rate governor (perf_android.c); 0 = off, the game runs at its own rate
 DM_ADAPT_UP_PCT	int	90	profile	?	perf_android.c	the governor steps up a rate when frames fit in this percent of the faster rate's budget (1..99)
 DM_ALIAS_WINDOWS	bool		debug	?	hle_svc.c	
@@ -351,6 +350,8 @@ DM_VK_SKIP_OPS	str		debug	live	gfx_vk_exec.c	bisection aids: skip command kinds;
 DM_VK_SLOT0_FILL	bool		debug	?	gfx_vk_exec.c	
 DM_VK_SPV_ALT	bool		debug	?	gfx_vk_exec.c	pipelines made while `ALT` is on use `<dir>/<key>.spv` in place of the bundle's code where the file exists (same bindings), so two compilations of a shader compare in one run (e.g. the translator's GLSL through `glslc`, or a patched module)
 DM_VK_SPV_DIR	str		debug	?	gfx_vk_shader.c	pipelines made while `ALT` is on use `<dir>/<key>.spv` in place of the bundle's code where the file exists (same bindings), so two compilations of a shader compare in one run (e.g. the translator's GLSL through `glslc`, or a patched module)
+DM_VK_SR	bool		debug	start	gfx_vk_present.c	super resolution: the game's picture is upscaled through SGSR 1.0 instead of the bilinear blit (DM_VK_SR=0/1 overrides the menu)
+DM_VK_SR_SHARP	int		debug	?	gfx_vk_present.c	the upscaler's sharpness, percent (0..100; the menu's Sharpness slider)
 DM_VK_SUBGROUP_ONE_LANE	bool		debug	start	gfx_vk_shader.c	no shader module is rewritten as subgroups of one invocation (`gfx_vk_subgroup.c`): modules whose stage lacks subgroup operations keep them, as before the rewrite, which Vulkan leaves undefined (VUID-RuntimeSpirv-None-06343). For A/B tests on a driver where a rewritten shader draws wrong. Qualcomm's
 DM_VK_SUBGROUP_PIN	int		debug	start	gfx_vk_core.c	game pipelines' fragment and compute stages run at that subgroup size (`VkPipelineShaderStageRequiredSubgroupSizeCreateInfo`), where the device's `requiredSubgroupSizeStages` allows it; a compute workgroup larger than `maxComputeWorkgroupSubgroups` such subgroups keeps the driver's size. Off by defa
 DM_VK_SUBMIT_SPLIT	bool		debug	live	gfx_vk_core.c	don't submit the pieces early
