@@ -1484,13 +1484,15 @@ class Port:
                 if (dst / p.name).is_file() and (dst / p.name).stat().st_size == p.stat().st_size: continue
                 shutil.copyfile(p, dst / p.name); got.append(p.name)
             return got
+        if not self.tools.get('adb'): return []   # optional for a port that does not install (toolchain.require)
         try:
             adb = Adb(self.tools.get('adb'), self.o.device or getattr(self, 'cfg', {}).get('device'), log=say)
             adb.pick()
             base = f'{datapack.files_folder(self.package)}/{folder}' if folder else datapack.files_folder(self.package)
             return adb.pull_new(base, dst, pattern=pattern)
         except AdbError as e:
-            say(f'the pack\'s {folder or "files"} not pulled ({e})'); return []
+            if self.o.install or 'no device connected' not in str(e): say(f'the pack\'s {folder or "files"} not pulled ({e})')
+            return []
 
     def pull_captures(self):
         """Shaders whose code no game file holds: the app saves each one the bundle lacks on the device (gfx_vk_shader.c vk_shader_missing), and they are

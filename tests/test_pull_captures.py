@@ -20,7 +20,7 @@ class FakeAdb:
 class PullCaptures(unittest.TestCase):
     def port(self, install=False, adb='adb'):
         p = pipeline.Port.__new__(pipeline.Port)
-        p.o, p.cfg, p.tools, p.package, p.aw = types.SimpleNamespace(install=install, device=None), {}, {'adb': adb}, 'org.nx2a.test', Path('android')
+        p.o, p.cfg, p.tools, p.package, p.aw = types.SimpleNamespace(install=install, device=None, app=False), {}, {'adb': adb}, 'org.nx2a.test', Path('android')
         return p
 
     def pull(self, port, error=None):

@@ -89,7 +89,7 @@ class ExportChecks(unittest.TestCase):
                    spirv_patches=lambda: {},   # the profile's SPIR-V patches: none in this fixture
                    a=SimpleNamespace(pkg=str(self.root/'pkg'), out=str(self.out), capture=None, keys='',
                                      jobs=self.jobs, dotnet='dotnet', zstd=0, report=str(self.report),
-                                     spirv_tools=None),
+                                     spirv_tools=None, batch=1, heap_limit_mb=0, xlate=None),
                    STAGES={'vs': 0, 'cs': 5}, kinds_all=collections.Counter(),
                    captured=lambda _: {}, records=lambda _: [b'fixture'],
                    job_for=lambda key, stage, rec, w: ({'key': key, 'attr': {}}, b''),
