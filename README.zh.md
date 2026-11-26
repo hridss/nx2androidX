@@ -118,11 +118,11 @@ App 里自带一个助手。它跑在手机自己的 Linux 环境里 —— 就�
 
 | 游戏 | 修了什么 | 证据 | 状态 |
 |---|---|---|---|
-| 忍者小龟（Teenage Mutant Ninja Turtles: Shredder's Revenge，`0100BB8017F24000`） | 游戏开局就调 Epic 的在线 SDK，而宿主一律拒绝 SDK 模块，它解了个空指针就崩了；现在档案点头，SDK 就照常加载 | [案例分支](https://github.com/zFitness/nx2androidX/tree/case/0100BB8017F24000-tmnt) | 能玩；档案还只是测绘出来的临时版 |
-| 空之轨迹 2 代（Trails in the Sky 2nd Chapter，韩版，`0100E8B028B54000`） | 纹理构建器没有回答「这块存储是谁的」，色调映射读到一片零，`fmod(colour, 0)` 出来 NaN，整个场景全黑 | [案例分支](https://github.com/zFitness/nx2androidX/tree/case/0100E8B028B54000-sky2nd) | 画面不再全黑 |
+| 忍者小龟（Teenage Mutant Ninja Turtles: Shredder's Revenge，`0100BB8017F24000`） | 游戏开局就调 Epic 的在线 SDK，而宿主一律拒绝 SDK 模块，它解了个空指针就崩了；现在档案点头，SDK 就照常加载 | [案例分支](https://github.com/zFitness/nx2androidX/tree/case/0100BB8017F24000-tmnt) | 能玩；已毕业进正式适配列表 |
+| 空之轨迹 2 代（Trails in the Sky 2nd Chapter，韩版，`0100E8B028B54000`） | 纹理构建器没有回答「这块存储是谁的」，色调映射读到一片零，`fmod(colour, 0)` 出来 NaN，整个场景全黑 | [案例分支](https://github.com/zFitness/nx2androidX/tree/case/0100E8B028B54000-sky2nd) | 画面不再全黑；已毕业进正式适配列表 |
 | 荒野大镖客（Red Dead Redemption，`01007820196A6000`） | 游戏的着色器藏在 Rockstar 加密的 RPF6 归档里，分割工具读不了（0 个着色器）；游戏的电影又另开了一个音频渲染器，宿主不驱动它，片头之后画面就一直黑着 | [案例分支](https://github.com/zFitness/nx2androidX/tree/case/01007820196A6000-rdr) | 着色器分割过了，3,628 个着色器；标题画面回来了 |
 
-这三个都还没进正式适配列表：档案和修复都在案例分支上，还没合进主线。等一个游戏「毕业」—— 档案、`android.tsv`、清单里的那一行都齐了 —— 它就并进本页顶部的数字里。
+其中两个已经「毕业」：档案与修复都进了主线，因此它们算进本页顶部的数字里（表里留着这一行，是为了说明这个游戏是谁修好的）。荒野大镖客还在案例分支上 —— 档案与修复都还没落地。
 
 你的游戏也一样？游戏库抽屉 → 助手 → **贡献上游**，那一局的案例档案会打成一个 zip。把它挂到[案例档案 issue](https://github.com/zFitness/nx2androidX/issues/new?template=case_file.yml)上，这个修复就能被人读、被人落进仓库。
 

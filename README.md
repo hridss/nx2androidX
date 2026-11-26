@@ -120,11 +120,11 @@ That knowledge was never rare — it was scattered across hundreds of pull reque
 
 | Game | What it fixed | Evidence | State |
 |---|---|---|---|
-| Teenage Mutant Ninja Turtles: Shredder's Revenge (`0100BB8017F24000`) | the game calls Epic's online SDK at start-up, and the host refused every SDK module — it died with a null online object; the SDK is now loaded when the profile asks for it | [the case branch](https://github.com/zFitness/nx2androidX/tree/case/0100BB8017F24000-tmnt) | playable; the profile is still the survey's provisional one |
-| Trails in the Sky 2nd Chapter (`0100E8B028B54000`) | the texture builder did not answer which storage it was given, so the tone map read zeros, `fmod(colour, 0)` was NaN, and the whole scene was black | [the case branch](https://github.com/zFitness/nx2androidX/tree/case/0100E8B028B54000-sky2nd) | the scene is not black any more |
+| Teenage Mutant Ninja Turtles: Shredder's Revenge (`0100BB8017F24000`) | the game calls Epic's online SDK at start-up, and the host refused every SDK module — it died with a null online object; the SDK is now loaded when the profile asks for it | [the case branch](https://github.com/zFitness/nx2androidX/tree/case/0100BB8017F24000-tmnt) | playable; graduated into the official list |
+| Trails in the Sky 2nd Chapter (`0100E8B028B54000`) | the texture builder did not answer which storage it was given, so the tone map read zeros, `fmod(colour, 0)` was NaN, and the whole scene was black | [the case branch](https://github.com/zFitness/nx2androidX/tree/case/0100E8B028B54000-sky2nd) | the scene is not black any more; graduated into the official list |
 | Red Dead Redemption (`01007820196A6000`) | the game keeps its shaders in Rockstar's encrypted RPF6 archives, which the shader split could not read (0 shaders); and the game's movies open a second audio renderer, which the host did not drive, so the screen stayed black after the intro | [the case branch](https://github.com/zFitness/nx2androidX/tree/case/01007820196A6000-rdr) | the shader split passes with 3,628 shaders and the title screen comes back |
 
-None of them is in the ported list yet: the profile and the fix live on a case branch, not in the main line. A game that graduates — profile, `android.tsv` and the row in the checklist — moves into the count at the top of this page.
+Two of them have graduated: their profile and the fix are in the main line now, so they count in the numbers at the top of this page (their row stays here, to say who found the fix). Red Dead Redemption is still on a case branch — the profile and the fix have not landed yet.
 
 Your game too? The game detail page → the assistant → **Contribute upstream** packs that game's case file into a zip. Attach it to a [case file issue](https://github.com/zFitness/nx2androidX/issues/new?template=case_file.yml) and the fix can be read, applied and landed.
 
