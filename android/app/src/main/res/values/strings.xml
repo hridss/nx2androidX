@@ -493,6 +493,7 @@
     <string name="lib_remove_what_done">This game will leave the library. The data pack goes with it (the host, the icon, and the saves that live in it), together with the build cache. It cannot be undone. The game\'s own files are not touched.</string>
     <string name="lib_remove_what_failed">This game will leave the library, and its build cache (the work folder, the half-made pack) goes with it. The game\'s own files are not touched.</string>
     <string name="lib_remove_what_empty">This game has no build data here; it only leaves the library. The game\'s own files are not touched.</string>
+    <string name="lib_rebuild_runtime_action">Rebuild the runtime</string>
     <string name="lib_remove_cache_action">Clear the build cache</string>
     <string name="lib_remove_cache_confirm_title">Clear the build cache?</string>
     <string name="lib_remove_cache_what_done">The build cache goes (the work folder, the half-made pack). The data pack is not touched, the game keeps working; the next build unpacks the game again and takes longer.</string>

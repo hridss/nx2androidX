@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
@@ -571,6 +572,18 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
                                     onClick = { menuOpen = false; if (backup) askBackupZip() else askExport() },
                                 )
                             }
+                            // 重建运行库：不闪退也要能点名重建（宿主行为变了、存档布局修了这类时候），
+                            // 走闪退弹框的同一条路（重建标记一路传到游戏页的 prepare）
+                            DropdownMenuItem(
+                                text = { Text(locale.str(R.string.lib_rebuild_runtime_action)) },
+                                leadingIcon = { Icon(Icons.Filled.Build, null, Modifier.size(18.dp)) },
+                                onClick = {
+                                    menuOpen = false
+                                    val p = ported
+                                    if (p == null) actions.onToast(locale.str(R.string.lib_artifact_missing))
+                                    else actions.onRunRebuild(p.pack, e.label)
+                                },
+                            )
                             if (!cacheLocked && !e.isImported) {
                                 DropdownMenuItem(
                                     text = { Text(locale.str(R.string.lib_remove_cache_action)) },

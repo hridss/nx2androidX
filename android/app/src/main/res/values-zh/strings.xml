@@ -492,6 +492,7 @@
     <string name="lib_remove_what_done">这个游戏会从游戏库消失，数据包（宿主、图标，存档在数据包里，一并消失）连同构建缓存一起删除，不可恢复。游戏源文件不受影响。</string>
     <string name="lib_remove_what_failed">这个游戏会从游戏库消失，构建缓存（工作区、半成品包）一起删掉。游戏源文件不受影响。</string>
     <string name="lib_remove_what_empty">这个游戏在这里没有构建数据，只把它移出游戏库。游戏源文件不受影响。</string>
+    <string name="lib_rebuild_runtime_action">重建运行库并进入</string>
     <string name="lib_remove_cache_action">清除构建缓存</string>
     <string name="lib_remove_cache_confirm_title">清除构建缓存？</string>
     <string name="lib_remove_cache_what_done">删掉构建缓存（工作区、半成品包）。数据包不受影响，游戏照常能玩；下次构建要从头解包，会多花一些时间。</string>
