@@ -16,12 +16,12 @@ data class RuntimeUpdateResult(val success: Boolean, val reason: String = "")
  * misbehaving game is ported again.
  */
 class RuntimeCompiler @Inject constructor(private val guestLauncher: GuestProcessLauncher) {
-    fun rebuild(pack: String, noLsfg: Boolean = !BuildConfig.NX_LSFG,
+    fun rebuild(pack: String,
                 log: (String) -> Unit): RuntimeUpdateResult {
         var committed = false
         var reason = ""
         return try {
-            val process = guestLauncher.guest(args(pack, noLsfg))
+            val process = guestLauncher.guest(args(pack))
             process.inputStream.bufferedReader().useLines { lines ->
                 lines.forEach { line ->
                     val event = PortEvents.parse(line)
@@ -51,9 +51,8 @@ class RuntimeCompiler @Inject constructor(private val guestLauncher: GuestProces
     }
 
     companion object {
-        fun args(pack: String, noLsfg: Boolean): List<String> {
+        fun args(pack: String): List<String> {
             val args = mutableListOf("-m", "porter", "rebuild-runtime", pack, "--progress", "json")
-            if (noLsfg) args.add("--no-lsfg")
             // the profile the game has now is always the one a rebuild uses (no confirmation step)
             args.add("--allow-profile-drift")
             return args

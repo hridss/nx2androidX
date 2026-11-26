@@ -27,16 +27,15 @@ class GameApkExporter @Inject constructor(private val guestLauncher: GuestProces
      * @param dataFolder the self-sufficient data folder (the manifest, the icon, the theme)
      * @param apk where to write the APK
      * @param key the signing key (the app's own: every exported game shares it)
-     * @param dataRoot where the game reads its data from (its own directory on the device)
      * @param driver the Vulkan driver the APK carries, null for the device's own
      * @param vercodeOffset the versionCode offset (the app counts the exports of the same game)
      */
-    fun build(dataFolder: File, apk: File, key: File, dataRoot: String, driver: File?, vercodeOffset: Int,
+    fun build(dataFolder: File, apk: File, key: File, driver: File?, vercodeOffset: Int,
               log: (String) -> Unit): GameApkBuild {
         var reason = ""
         var built = GameApkBuild(false)
         return try {
-            val process = guestLauncher.guest(args(dataFolder, apk, key, dataRoot, driver, vercodeOffset))
+            val process = guestLauncher.guest(args(dataFolder, apk, key, driver, vercodeOffset))
             process.inputStream.bufferedReader().useLines { lines ->
                 lines.forEach { line ->
                     val event = PortEvents.parse(line)
@@ -63,12 +62,11 @@ class GameApkExporter @Inject constructor(private val guestLauncher: GuestProces
 
     companion object {
         /** The command line the guest runs. */
-        fun args(dataFolder: File, apk: File, key: File, dataRoot: String, driver: File?, vercodeOffset: Int): List<String> {
+        fun args(dataFolder: File, apk: File, key: File, driver: File?, vercodeOffset: Int): List<String> {
             val args = mutableListOf(
                 "-m", "porter", "export-apk", dataFolder.absolutePath,
                 "--out", apk.absolutePath,
                 "--key", key.absolutePath,
-                "--data-root", dataRoot,
                 "--vercode-offset", vercodeOffset.toString(),
                 "--progress", "json",
             )

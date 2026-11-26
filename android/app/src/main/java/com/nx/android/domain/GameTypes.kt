@@ -134,7 +134,6 @@ data class Ported(
     val graphics: String = "", // 清单里的 graphics：游戏自己用的图形接口（vulkan / gl / nvn，空 = 不知道；老的数据包没有这一项）
     val lan: Boolean? = null, // 清单里的 lan：游戏能不能局域联机（null = 清单里没有这一项：老的数据包，由档案补上）
     val hostDeclared: Boolean = true, // 清单里声明了 host（= 旧格式，运行库在包里；没有这个字段 = 新格式，运行库在统一目录）。默认 true：直接构造的场合按旧格式对待（包里带着宿主）
-    val noLsfg: Boolean? = null, // 清单里的 no_lsfg（构建指纹的一部分；老的数据包没有这一项）
     val profileH: String = "", // 清单里的 profile_h（这个包的运行库按哪份档案编的）：与目录侧标记比对
     val marker: RuntimeBuildMarker? = null, // 统一目录侧的构建标记（新格式才有；启动判断只读目录侧）
 ) {
@@ -170,5 +169,4 @@ data class Ported(
 data class RuntimeBuildMarker(
     val playerApiRevision: Int,
     val profileH: String,
-    val noLsfg: Boolean?,   // 旧包晋升出来的运行库不知道这一项（null = 没记，不参与比对）
 )

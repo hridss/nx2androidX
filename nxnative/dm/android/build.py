@@ -18,8 +18,7 @@ ap.add_argument('--out')
 ap.add_argument('--api', default='31')
 ap.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
 ap.add_argument('--exe', action='store_true'); ap.add_argument('--lib', action='store_true')
-ap.add_argument('--play', action='store_true', help='also libdmplay.so: the host statically linked with the player\'s JNI entry (jni_android.c), one per game, for the app\'s :play process')
-ap.add_argument('--no-lsfg', action='store_true', help='build without the frame generation (NX_LSFG): the host has no lsfg/ code (the drawer then reports "not in this build")')
+ap.add_argument('--play', action='store_true', help="also libdmhost.so: the host statically linked with the app's JNI adapter (jni_android.c), one per game, for the app's :play process")
 ap.add_argument('--only-compile', action='store_true', help='compile every source and report errors, no link')
 ap.add_argument('--keep-going', action='store_true')
 ap.add_argument('-O', default='2')
@@ -97,21 +96,16 @@ ASM = srcs('host/entry.S', 'gfx/nvn/nvn_entry.S', 'gfx/nvn/nvn_thunks.S')
 VPX = srcs('third_party/libvpx/**/*.c')
 ZSTD = srcs('third_party/zstd/zstddeclib.c')   # zstd's decompressor: the shader bundle's SPIR-V (gfx_vk_shader.c bundle_spv)
 
-# The two fronts, one per shape: the player's (the app's :play process: the app draws the gamepad and every
-# panel) and the upstream's APK front (a standalone APK: a NativeActivity of its own, which draws the gamepad
-# itself and finds the folder its data is in). They implement the same interface (dm/host/front.h), so a build
-# links one of them, never both.
-FRONT_PLAYER, FRONT_APK = 'front_player.c', 'front_android.c'
-
-def port_files(front):
-    """The port sources for one shape: the common ones, with that shape's front in the other one's place."""
+# One front (front_android.c: the upstream's, abstracted into a neutral core and an Android shell — a shell's
+# entry is what a NativeActivity APK runs; the app's :play process drives the core's plain-data inputs through
+# the adapter jni_android.c instead). frame generation and the player's own front are gone with this line's
+# convergence: the host has no lsfg/ or vka/ code, and front_player.c is deleted.
+def port_files():
     out = []
     for p in srcs('android/compat/*.c', 'android/*.c'):
         if p.name == 'gfx_null.c' and a.gfx != 'null': continue   # one graphics backend
         if (p.name.startswith('gfx_vk') or p.name == 'gl_android.c') and a.gfx != 'vk': continue   # GLES presents through Vulkan and is not part of a null NVN tool
-        if p.name in ('jni_android.c', 'dm_framegen.c', 'vka_shim.c'): continue   # jni_android.c goes into --play's link, dm_framegen.c + vka_shim.c into every target's (their list below)
-        if p.name == FRONT_APK: continue   # the upstream's front comes in the player's place, not in its own
-        if p.name == FRONT_PLAYER: out.append(DM / 'android' / front); continue
+        if p.name in ('jni_android.c',): continue   # jni_android.c goes into --play's link (its list below)
         out.append(p)
     return out
 
@@ -119,7 +113,7 @@ INC = ['-include', str(DM / 'android/compat/include/darwin_compat.h'), '-include
        f'-I{DM / "third_party/vulkan-headers/include"}', f'-I{gen / a.game}', f'-I{DM / "third_party/libvpx"}', f'-I{DM / "third_party/stb_vorbis"}', f'-I{DM / "third_party/zstd"}', f'-I{DM / "android"}']
 CFLAGS = [TARGET, f'-O{a.O}'] + DBG + ['-fPIC', '-fno-omit-frame-pointer', '-ffixed-x18', '-Wall', '-Wno-unused-function', '-Wno-unused-variable', '-Wno-unused-but-set-variable',
           '-Wno-format', '-Wno-deprecated-declarations', '-Wno-gnu-folding-constant', '-Werror=implicit-function-declaration', '-Werror=return-type',
-          '-Werror=incompatible-pointer-types', '-Werror=int-conversion', '-D_GNU_SOURCE', '-DDM_ANDROID=1', '-fno-strict-aliasing', '-fvisibility=hidden'] + (['-DDM_RELEASE=1'] if a.release else []) + ([] if a.no_lsfg else ['-DNX_LSFG=1'])
+          '-Werror=incompatible-pointer-types', '-Werror=int-conversion', '-D_GNU_SOURCE', '-DDM_ANDROID=1', '-fno-strict-aliasing', '-fvisibility=hidden'] + (['-DDM_RELEASE=1'] if a.release else [])
 VPX_FLAGS = [TARGET, '-O2'] + DBG + ['-fPIC', f'-I{DM / "third_party/libvpx"}', f'-I{DM / "third_party/libvpx/config"}', '-w']
 ZSTD_FLAGS = [TARGET, '-O2'] + DBG + ['-fPIC', '-fvisibility=hidden', '-DZSTDLIB_VISIBLE=', '-DZSTDERRORLIB_VISIBLE=', '-w']   # its API stays inside libdmhost.so
 
@@ -159,19 +153,18 @@ def build(files):
             elif err.strip() and '--verbose' in sys.argv: print(err, file=sys.stderr)
     return objs, failed
 
-# the frame generation travels with every target (the present calls it); its GPL chain only when built in. The null device has no present, so it takes neither
-def shape_files(front):
-    """The sources of one shape: the host, the graphics, that shape's front and the frame generation."""
-    return HOST + GFX + port_files(front) + ASM + ([] if a.gfx == 'null' else srcs('android/dm_framegen.c')) + (srcs('android/lsfg/*.c', 'android/vka_shim.c') if not a.no_lsfg else [])
-PLAY_FILES = shape_files(FRONT_PLAYER) if (a.play or a.exe) else []   # the app's :play process and the headless executable
-APK_FILES = shape_files(FRONT_APK) if a.lib else []                   # a standalone APK: the upstream's front
-PLAYS = srcs('android/jni_android.c')   # the player's JNI entry: compiled always (the errors surface here too), linked only for --play
-objs, failed = build(PLAY_FILES)
-aobjs, afailed = build(APK_FILES)
+# the sources of every shape: the host, the graphics, the one front. Frame generation is gone (the
+# convergence: the fork's own lsfg/ chain deleted), so there is no --no-lsfg and no NX_LSFG define.
+def shape_files():
+    """The sources of one shape: the host, the graphics, the front."""
+    return HOST + GFX + port_files() + ASM
+FILES = shape_files()
+PLAYS = srcs('android/jni_android.c')   # the app's JNI adapter: compiled always (the errors surface here too), linked only for --play
+objs, failed = build(FILES)
 pobjs, pfailed = build(PLAYS)
 vobjs, vfailed = build(VPX + ZSTD)
-failed += afailed + pfailed + vfailed
-print(f'compiled {len(PLAY_FILES) + len(APK_FILES) + len(PLAYS) + len(VPX) + len(ZSTD)} sources, {len(failed)} failed' + (': ' + ', '.join(str(f.relative_to(DM)) for f in failed) if failed else ''))
+failed += pfailed + vfailed
+print(f'compiled {len(FILES) + len(PLAYS) + len(VPX) + len(ZSTD)} sources, {len(failed)} failed' + (': ' + ', '.join(str(f.relative_to(DM)) for f in failed) if failed else ''))
 if failed and not a.keep_going: sys.exit(1)
 if a.only_compile: sys.exit(1 if failed else 0)
 
@@ -185,16 +178,16 @@ def link(args, name):
         args = ['--rsp-quoting=windows', '@' + str(rsp)]
     return subprocess.run([CC] + CC_EXTRA + args, capture_output=True, text=True, errors='replace')   # CC_EXTRA: the on-device toolchain's sysroot and runtime
 
-if a.play:   # libdmplay.so: the whole host + the JNI entry, statically linked (jni_android.c's header comment)
-    r = link(LDFLAGS + ['-shared', '-Wl,-soname,libdmplay.so', '-o', str(out / 'libdmplay.so')] + [str(o) for o in objs + pobjs + vobjs] + LIBS, 'libdmplay')
-    print(r.stderr.strip() if r.returncode else f'linked {out / "libdmplay.so"}', file=sys.stderr if r.returncode else sys.stdout)
+if a.play:   # libdmhost.so: the whole host + the app's JNI adapter, statically linked (jni_android.c) — the app's :play runtime, the same front the exported APK carries
+    r = link(LDFLAGS + ['-shared', '-Wl,-soname,libdmhost.so', '-o', str(out / 'libdmhost.so')] + [str(o) for o in objs + pobjs + vobjs] + LIBS, 'libdmhost-play')
+    print(r.stderr.strip() if r.returncode else f'linked {out / "libdmhost.so"}', file=sys.stderr if r.returncode else sys.stdout)
     if r.returncode: sys.exit(1)
     if a.release:   # the static symbol table goes too (the dynamic one stays: the JNI surface)
         _strip = (bin_ / ('llvm-strip.exe' if os.name == 'nt' else 'llvm-strip'))
         if NX2A_ARM_HOST:
             _strip = Path(_sh.which('llvm-strip') or _sh.which('llvm-strip-18') or _sh.which('strip') or _strip)
-        subprocess.run([str(_strip), '--strip-unneeded', str(out / 'libdmplay.so')], check=True)
-        print(f'stripped {out / "libdmplay.so"}: {(out / "libdmplay.so").stat().st_size // 1024} KB')
+        subprocess.run([str(_strip), '--strip-unneeded', str(out / 'libdmhost.so')], check=True)
+        print(f'stripped {out / "libdmhost.so"}: {(out / "libdmhost.so").stat().st_size // 1024} KB')
 if a.exe:
     r = link(LDFLAGS + ['-pie', '-o', str(out / 'dmhost')] + [str(o) for o in objs + vobjs] + LIBS, 'dmhost')
     print(r.stderr.strip() if r.returncode else f'linked {out / "dmhost"}', file=sys.stderr if r.returncode else sys.stdout)

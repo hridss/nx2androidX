@@ -1,11 +1,11 @@
-// Android port: the on-screen gamepad's layout, shared by the touch handling (the front: front_android.c for a standalone APK, front_player.c for the app's :play process) and its drawing (gfx_vk_present.c, with the app's theme: overlay_theme.c).
+// Android port: the on-screen gamepad's layout, shared by the touch handling (front_android.c) and its drawing (gfx_vk_present.c, with the app's theme: overlay_theme.c).
 // Two layouts, the tablet's and the phone's (dm/android/overlay_default.tsv): a control's centre is x window heights from its anchor (the left edge, the middle
 // or the right edge: a thumb reaches as far from the edge on any width) and y of the window's height down; its size is in window heights (round controls stay round)
 #pragma once
 #include <math.h>
 #include <stdlib.h>
 #include "dm_input.h"
-// The overlay's UI language (implemented in front_android.c: DM_UI_LANG=zh|en, else device locale; the player's front has no menu of its own).
+// The overlay's UI language (implemented in front_android.c: DM_UI_LANG=zh|en, else device locale).
 int dm_ui_zh(void);
 #define TR(en, zh) (dm_ui_zh() ? (zh) : (en))
 enum { OV_STICK_L, OV_STICK_R, OV_BUTTON, OV_DPAD, OV_MENU };   // OV_MENU: the menu button (shown with the gamepad on or off, 70%; env.txt DM_MENU_BUTTON=0 leaves it out): pauses the game and opens the settings
@@ -48,7 +48,7 @@ static inline int ov_band(float W, float H, float *y0, float *bh) {   // the ban
 static inline int ov_layout_for_size(int width, int height) {
     float y0, bh, h = (float)height; if (ov_band((float)width, h, &y0, &bh)) h = bh;
     return h > 0 && (float)width / h >= OV_PHONE_ASPECT; }
-int dm_overlay_layout(void);   // the front: 0 the tablet's, 1 the phone's (front_android.c, front_player.c)
+int dm_overlay_layout(void);   // front_android.c: 0 the tablet's, 1 the phone's
 #define OV_CTLS (OV_LAYOUTS[dm_overlay_layout()])
 #define OV_KNOB 0.42f        // a stick's knob radius, of the stick's (the theme-less drawing)
 #define OV_MENU_ALPHA 0.70f
@@ -273,18 +273,7 @@ static inline int ov_menu_item(int tab, int row) {
 #define OVT_ST 0x10000   // the mode bits of dm_menu_state, one each: OVT_ST the text entry, OVE_ST the layout editor, OVS_ST the save picker (tests/test_menu_bits.py)
 int dm_menu_state(void);
 enum { OVX_IDLE, OVX_BUSY, OVX_DONE, OVX_NOSAVE, OVX_FAILED };   // Export save: the button; copying; the export's name; the game has not saved yet; failed
-int dm_save_note(char *out, int cap);   // the front: the outcome (OVX_*) and the last export's name, or why it failed
-// who answers a touch: OV_ANSWER_ALL (every control), OV_ANSWER_MENU (only the menu button), OV_ANSWER_NONE (nothing answers)
-// The editor is open: every control answers, shown or not (the editor chooses among them). The player: the app draws the gamepad and the menu button
-// as one layer, so the app's answer decides (drawn → every control, hidden → nothing: an empty place answers nothing). The desktop host draws the pad
-// itself, and its own switches then say what is on the screen (the gamepad hidden → the menu button alone, it is still drawn).
-enum { OV_ANSWER_NONE, OV_ANSWER_MENU, OV_ANSWER_ALL };
-static inline int ov_answer(int editor, int app, int app_drawn, int host_shown) {
-    if (editor) return OV_ANSWER_ALL;
-    if (app) return app_drawn ? OV_ANSWER_ALL : OV_ANSWER_NONE;
-    return host_shown ? OV_ANSWER_ALL : OV_ANSWER_MENU;
-}
-
+int dm_save_note(char *out, int cap);   // front_android.c: the outcome (OVX_*) and the last export's name, or why it failed
 static inline float ov_menu_scale(void) { float s = dm_overlay_scale(), fit = 0.92f / (OVM_ROWS * OV_MENU_ROW + 2 * OV_MENU_PAD); return s < fit ? s : fit; }
 static inline void ov_menu_rect(float W, float H, float r[4]) {   // x, y, width, height in window pixels
     float s = ov_menu_scale(), pw = OV_MENU_W * H * s, ph = (OVM_ROWS * OV_MENU_ROW + 2 * OV_MENU_PAD) * H * s;
@@ -343,7 +332,7 @@ static inline int ov_ed_button_at(float x, float y, const float p[4], int first,
 #define OVS_ST 0x40000
 enum { OVS_EMPTY, OVS_TITLE, OVS_ITEM, OVS_NOTE, OVS_BUTTON, OVS_BACK };   // a row: nothing; the title (left) and the page (right); a save (its name, its size);
 typedef struct { int style; char left[80], right[40]; } ov_srow;            // a line of text; a button (the import); Back or Cancel, centred as Resume is
-int dm_save_rows(ov_srow rows[OVM_ROWS]);   // the front: the picker's rows, 0 when it is not open
+int dm_save_rows(ov_srow rows[OVM_ROWS]);   // front_android.c: the picker's rows, 0 when it is not open
 
 // ---- the text entry's keyboard (front_android.c front_text_input, drawn by gfx_vk_present.c ov_text_panel), in the pause menu's panel rectangle ----
 // Four rows of ten character keys and a row of four wide ones; p is the panel's rectangle (x, y, width, height: the window's for touches, the raster's for drawing).

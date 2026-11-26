@@ -54,7 +54,6 @@ import com.nx.android.appstate.PortState
 import com.nx.android.data.AppLocale
 import com.nx.android.data.AppLog
 import com.nx.android.data.AppVersion
-import com.nx.android.data.CheatRepo
 import com.nx.android.data.Gamespec
 import com.nx.android.data.LogBundle
 import com.nx.android.data.Player
@@ -72,9 +71,6 @@ import com.nx.android.app.AppActions
 import com.nx.android.app.AppRoot
 import com.nx.android.app.CrashReport
 import com.nx.android.input.GamepadScan
-import com.nx.android.input.PadCalibration
-import com.nx.android.input.PadTestInput
-import com.nx.android.input.ui.PadCenterController
 import com.nx.android.core.ui.nav.NavEdge
 import com.nx.android.core.ui.nav.NavKey
 import com.nx.android.core.ui.nav.NavKeys
@@ -145,16 +141,6 @@ class MainActivity : ComponentActivity() {
     var launchTab = 0
     private var launchBuildId by mutableStateOf("")
 
-    /** 手柄中心（首页顶栏的入口）：档案跟游戏共用同一个文件 */
-    private val padController by lazy { PadCenterController.forContext(this) }
-
-    /** 导入或清除了金手指：这个数一变，设置页那一行跟着重画 */
-    private var cheatsChanged by mutableStateOf(0)
-
-    /** 首页的手柄中心开着吗（开着的时候手柄的键不进库页，只进示波与抓键）。
-     *  这一份是**唯一**的那份：分发层（dispatchKeyEvent）与页面读的都是它。 */
-    var padCenterOpen by mutableStateOf(false)
-
     /** The assistant's full chat page is open (the portrait one)? The one copy: AppRoot's entry writes it,
      *  the orientation collector in onCreate reads it. The side panel does not count — it is landscape. */
     private var agentFullOpen by mutableStateOf(false)
@@ -195,8 +181,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             AppRoot(prefs, locale, port, library, onboarding, drivers, environmentSetup, actions,
-                launchTab, launchBuildId, padController, agentSetup, agentConversation, pageState,
-                padCenterOpen = padCenterOpen, onPadCenter = { padCenterOpen = it },
+                launchTab, launchBuildId, agentSetup, agentConversation, pageState,
                 agentFullOpen = agentFullOpen, onAgentFull = { agentFullOpen = it },
                 crash = crash, onCrashHandled = { crash = null },
                 onExportGamespec = { titleId -> exportGamespec(titleId) })
@@ -272,11 +257,6 @@ class MainActivity : ComponentActivity() {
         // 名字取自 envCheck 那份状态：导入或清除之后，这一行立刻跟着变（普通读 prefs 不会刷新界面）
         firmware = { envCheck.firmwareName },
         onImportFirmware = { zip -> importFirmware(zip) },
-        // 金手指：社区的 Atmosphère 文件，玩家导入一个 zip（App 不带）
-        cheatGames = { cheatGames() },
-        cheatFiles = { cheatFiles() },
-        onImportCheats = { zip -> importCheats(zip) },
-        onClearCheats = { clearCheats() },
         // 游戏档案：玩家导入的档案包（App 不带档案），导入的是 App 私有目录里的那一份
         onImportProfiles = { zip -> importProfiles(zip) },
         onClearFirmware = {
@@ -338,48 +318,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * 导入金手指包：社区的 Atmosphère 文件（App 不带，玩家从社区仓库或论坛上拿 zip）。
-     * 解到 App 自己的目录（files/cheats/<title ID>/<build ID>.txt），抽屉里那个游戏就有金手指了。
-     * 分辨率类的条目不要（App 有自己的渲染比例），只有分辨率的文件不写。
-     */
-    private fun importCheats(zip: File) {
-        if (!zip.isFile) { toast(locale.str(R.string.cheats_import_failed, zip.name)); return }
-        lifecycleScope.launch {
-            val r = withContext(Dispatchers.IO) {
-                runCatching { CheatRepo.importZip(zip, filesDir) }
-            }
-            r.onSuccess { s ->
-                AppLog.line("cheats: imported ${s.files} file(s) for ${s.gameCount} game(s) from ${zip.name}")
-                toast(locale.str(R.string.cheats_imported_toast, s.gameCount, s.files))
-                cheatsChanged++
-            }.onFailure { e ->
-                AppLog.line("[RED] cheats: the import failed: ${e.message}")
-                toast(locale.str(R.string.cheats_import_failed, e.message ?: zip.name))
-            }
-        }
-    }
 
-    /** 忘掉导入的金手指：App 私有目录里的那一份删掉（游戏里的那些也不再有） */
-    private fun clearCheats() {
-        CheatRepo.root(filesDir).deleteRecursively()
-        AppLog.line("cheats: the imported cheats were removed")
-        toast(locale.str(R.string.cheats_cleared))
-        cheatsChanged++
-    }
 
-    /** 导入过的金手指：几个游戏、几个文件（设置页那一行） */
-    private fun cheatGames(): Int {
-        cheatsChanged            // 导入或清除之后这一行要重画
-        return CheatRepo.root(filesDir).listFiles()?.count { it.isDirectory } ?: 0
-    }
 
-    private fun cheatFiles(): Int {
-        cheatsChanged
-        return CheatRepo.root(filesDir).listFiles()?.sumOf { dir ->
-            dir.listFiles()?.count { it.name.endsWith(".txt") } ?: 0
-        } ?: 0
-    }
 
     /**
      * 导入游戏档案包：App 不带档案（几百 MB 的着色器表），玩家导入一份，移植器在自己的目录里找到它们。
@@ -522,20 +463,6 @@ class MainActivity : ComponentActivity() {
      * Back 不在这里管：面板自己收（Compose 的 BackHandler）。
      */
     override fun dispatchKeyEvent(e: KeyEvent): Boolean {
-        // 手柄中心开着：手柄设备的键只进示波，不进库页。
-        // 判据是「这个事件来自手柄设备」，不是「keyCode 是不是手柄键」：有的 ROM 会把
-        // 手柄的 B 键再发一个 BACK（小米就是这样），漏下去就把中心关了。
-        // 导航条与手势的 Back 不是手柄设备：它们照旧走（BackHandler 关中心）。
-        if (padCenterOpen && isGamepad(e.deviceId)) {
-            if (GamepadScan.devices.value.none { it.id == e.deviceId }) GamepadScan.refreshNow(this)
-            // 认上报方式时，这一下是「测量」，不是按键：不进示波
-            if (padController.probing) {
-                AppLog.line("pad: a key while the probe waits: device=${e.deviceId} scan=${e.scanCode} key=${e.keyCode}")
-            }
-            if (padController.probeKey(e.deviceId, e.scanCode, e.keyCode)) return true
-            PadTestInput.onKey(e) { deviceId, scan, key -> padController.resolveTarget(deviceId, scan, key) }
-            return true
-        }
         // 手柄的键 → 界面导航：库页因此能用手柄选游戏、打开与关掉配置面板。
         val nav = navKeyOf(e)
         if (nav != null) {
@@ -547,16 +474,10 @@ class MainActivity : ComponentActivity() {
         return super.dispatchKeyEvent(e)
     }
 
-    /** 摇杆与扳机：中心开着的时候只进示波；中心关着的时候摇杆当方向键。 */
+    /** 摇杆当方向键：十字键帽优先，左摇杆兜底。边沿触发——推到底发一次，回中才能再走一步，
+     * 不然摇杆一推就一路走到底。扳机与肩键不参与导航。
+     */
     override fun onGenericMotionEvent(e: MotionEvent): Boolean {
-        if (padCenterOpen) {
-            val info = GamepadScan.devices.value.firstOrNull { it.id == e.deviceId }
-            val deadzone = info?.let { padController.deadzoneOf(it) } ?: PadCalibration.DEFAULT_DEADZONE
-            PadTestInput.onMotion(e, deadzone)
-            return true
-        }
-        // 摇杆当方向键：十字键帽优先，左摇杆兜底。边沿触发——推到底发一次，回中才能再走一步，
-        // 不然摇杆一推就一路走到底。扳机与肩键不参与导航。
         if (isGamepad(e.deviceId)) {
             // 两边各记各的边沿：帽子的方向与摇杆的方向不是一回事
             val hat = hatEdge.onAxis(

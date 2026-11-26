@@ -49,13 +49,10 @@ import com.nx.android.feature.updates.UpdateViewModel
 import com.nx.android.data.AppLocale
 import com.nx.android.domain.drivers.Driver
 import com.nx.android.domain.drivers.DriverRepository
-import com.nx.android.data.LosslessDll
 import com.nx.android.app.AppActions
 import com.nx.android.core.ui.LocalAppLocale
 import com.nx.android.core.ui.components.ActionRow
 import com.nx.android.core.ui.components.ChoiceRow
-import com.nx.android.core.ui.components.CheatsHint
-import com.nx.android.core.ui.components.CheatsRow
 import com.nx.android.core.ui.components.CloseIcon
 import com.nx.android.core.ui.components.FirmwareHint
 import com.nx.android.core.ui.components.FirmwareRow
@@ -101,7 +98,6 @@ enum class SettingsSection(@StringRes val title: Int) {
     ENVIRONMENT(R.string.env_section),
     STORAGE(R.string.set_section_storage),
     DRIVERS(R.string.driver_section),
-    DISPLAY(R.string.set_section_display),
     AGENT(R.string.set_section_agent),
     ABOUT(R.string.set_section_about),
 }
@@ -156,7 +152,6 @@ fun SettingsScreen(ob: OnboardingState, build: EnvBuildState, drivers: List<Driv
                         SettingsSection.ENVIRONMENT -> EnvironmentSection(ob, build, actions, onRequest)
                         SettingsSection.STORAGE -> StorageSection(storageViewModel)
                         SettingsSection.DRIVERS -> DriversSection(drivers, driverRepository, actions, onRequest, onDrivers)
-                        SettingsSection.DISPLAY -> DisplaySection(actions, onRequest)
                         SettingsSection.AGENT -> AgentSettingsSection(agentViewModel)
                         SettingsSection.ABOUT -> AboutSection(ob, update, actions)
                     }
@@ -225,17 +220,6 @@ private fun EnvironmentSection(ob: OnboardingState, build: EnvBuildState, action
         onClear = { actions.onClearFirmware() },
     )
     FirmwareHint()
-    // 金手指：玩家导入的一份（App 不带金手指：社区的 Atmosphère 文件由玩家自己导入）
-    CheatsRow(
-        games = actions.cheatGames(),
-        files = actions.cheatFiles(),
-        onImport = {
-            onRequest(PickerRequest(PickerMode.FILE, setOf("zip"), null, locale.str(R.string.cheats_pick),
-                onPicked = { f -> actions.onImportCheats(f) }))
-        },
-        onClear = { actions.onClearCheats() },
-    )
-    CheatsHint()
 }
 
 /** prod.keys 的路径行：状态点 + 路径 + 修改 */
@@ -303,35 +287,6 @@ private fun DriversSection(drivers: List<Driver>, repository: DriverRepository, 
     NoteRow(stringResource(R.string.driver_installed_hint))
 }
 
-/**
- * 画面：帧生成（Lossless.dll）。设备级的一次性配置，状态以私有副本为准，
- * 选择后校验并复制（不内置、不下载）。
- */
-@Composable
-private fun DisplaySection(actions: AppActions, onRequest: (PickerRequest) -> Unit) {
-    val locale = LocalAppLocale.current
-    val context = LocalContext.current
-    var model by remember { mutableStateOf(LosslessDll.ensure(context)?.absolutePath) }
-
-    SubtitleRow(stringResource(R.string.fg_section))
-    // 一行：状态 + 一个动作（挑一个装上，或换一个）。没有「重新发现」那个按钮：
-    // 私有副本在每次进游戏前、每次进这一区时都会自己刷新一遍。
-    InfoRow(
-        title = "Lossless.dll",
-        note = if (model != null) stringResource(R.string.fg_ready, model!!) else stringResource(R.string.fg_not_found),
-        trailing = {
-            QuietButton(stringResource(if (model != null) R.string.common_change else R.string.common_choose), onClick = {
-                onRequest(PickerRequest(PickerMode.FILE, emptySet(), null, locale.str(R.string.fg_choose), onPicked = { f ->
-                    if (LosslessDll.install(context, f)) {
-                        model = LosslessDll.ensure(context)?.absolutePath
-                        actions.onToast(locale.str(R.string.fg_ready_short))
-                    } else actions.onToast(locale.str(R.string.fg_not_a_dll))
-                }))
-            })
-        },
-    )
-    NoteRow(stringResource(R.string.fg_hint))
-}
 
 /**
  * 关于：版本号（点一下去 GitHub 仓库）、检查更新、界面的语言、重跑引导。

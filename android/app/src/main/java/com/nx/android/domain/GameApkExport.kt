@@ -110,14 +110,16 @@ object GameApkExport {
     fun copyCommand(folder: File, gameDir: String): String {
         val src = folder.absolutePath
         val dst = gameDir.trimEnd('/')
-        return "mkdir -p '$dst' && cd '$src' && tar -cf - . | (cd '$dst' && tar -xf -) && chmod -R a+rX '$dst'"
+        // tar 的非致命抱怨（如顶层目录的 settime 不归它管）不得跳过 chmod——那会让导出的游戏读不了自己的数据。
+        // chmod 无条件执行；用清单文件在不在做一次廉价的完整性检查（每个数据文件夹都有它）。
+        return "mkdir -p '$dst' && cd '$src' && (tar -cf - . | (cd '$dst' && tar -xf -)); chmod -R a+rX '$dst' && [ -f '$dst/nx2a-data.json' ]"
     }
 
     /** The same copy with cp, for a device whose tar cannot do it. */
     fun copyCommandFallback(folder: File, gameDir: String): String {
         val src = folder.absolutePath
         val dst = gameDir.trimEnd('/')
-        return "mkdir -p '$dst' && cp -r '$src'/. '$dst'/ && chmod -R a+rX '$dst'"
+        return "mkdir -p '$dst' && cp -r '$src'/. '$dst'/ ; chmod -R a+rX '$dst' && [ -f '$dst/nx2a-data.json' ]"
     }
 
     /** How big a tree is (only stat: files and bytes, no content read). */

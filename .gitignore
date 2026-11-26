@@ -43,3 +43,7 @@ title.keys
 /android/.idea/
 /android/.agentbridge/
 android/gradle/gradle-daemon-jvm.properties
+
+
+.memembed
+.memembed-m5

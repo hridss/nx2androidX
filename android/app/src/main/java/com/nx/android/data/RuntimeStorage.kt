@@ -31,7 +31,6 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         fun expected(): RuntimeBuildMarker = RuntimeBuildMarker(
             playerApiRevision = PlayerApiRevision.CURRENT,
             profileH = "",           // compared against the pack's own manifest, not a constant
-            noLsfg = !BuildConfig.NX_LSFG,
         )
     }
 
@@ -44,7 +43,6 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         RuntimeBuildMarker(
             playerApiRevision = o.optInt("player_api_revision", 0),
             profileH = o.optString("profile_h"),
-            noLsfg = if (o.has("no_lsfg")) o.optBoolean("no_lsfg") else null,
         )
     } catch (_: Exception) {
         null
@@ -68,7 +66,6 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         if (marker == null) return false
         val expected = expected()
         if (marker.playerApiRevision != expected.playerApiRevision) return false
-        if (marker.noLsfg != null && marker.noLsfg != expected.noLsfg) return false
         val packProfile = ported.profileH
         if (packProfile.isNotEmpty() && marker.profileH.isNotEmpty() && packProfile != marker.profileH) return false
         return true
@@ -81,7 +78,6 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         pending.writeText(JSONObject().let { o ->
             o.put("player_api_revision", marker.playerApiRevision)
             o.put("profile_h", marker.profileH)
-            marker.noLsfg?.let { o.put("no_lsfg", it) }
             o.toString()
         })
         if (!pending.renameTo(File(dir, MARKER_FILE))) {

@@ -71,13 +71,9 @@ def _parser():
                          'brought up on, none for one it was)')
     _romfs_at(po, 'with --install: ')
     po.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
-    po.add_argument('--no-lsfg', action='store_true',
-                    help='build the host without the frame generation (the lsfg/ code): the host is then smaller and the frame generation '
-                         'reports "not in this build" (dm/android/build.py --no-lsfg)')
     po.add_argument('--progress', default='auto', choices=('auto', 'bar', 'lines', 'json', 'off'), help='json: one JSON event per line, for the GUI')
     rt = sub.add_parser('rebuild-runtime', help='rebuild a pack runtime without the original game files')
     rt.add_argument('pack')
-    rt.add_argument('--no-lsfg', action='store_true')
     rt.add_argument('--allow-profile-drift', action='store_true',
                     help='rebuild with the profile the game has now even when it is not the one the pack was built with '
                          '(that profile is the one a full re-port would use too; the game may behave differently than when it was ported)')
@@ -118,10 +114,8 @@ def _parser():
     ex.add_argument('data', help='the data folder (a self-sufficient export of the data pack: the manifest, the icon, the theme and the game\'s files)')
     ex.add_argument('--out', required=True, help='the APK to write')
     ex.add_argument('--key', required=True, help='the signing key (the app\'s own: every exported game shares it, so a rebuild installs over the one before)')
-    ex.add_argument('--data-root', default='', help='where the game reads its data from (default: the data folder itself): the path the APK carries')
     ex.add_argument('--driver', default='', help='the Vulkan driver library the APK carries (the host loads it from the APK\'s own library folder); without one the game runs on the device\'s own driver')
     ex.add_argument('--vercode-offset', type=int, default=0, help='the versionCode offset (the app counts the exports of the same game, so a later one installs over an earlier one)')
-    ex.add_argument('--no-lsfg', action='store_true', help='build the host without the frame generation (the lsfg/ code)')
     ex.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
     ex.add_argument('--progress', choices=('json', 'lines'), default='lines')
     return ap
@@ -229,7 +223,7 @@ def cmd_rebuild_runtime(a):
         else: print(message, flush=True)
     try:
         if a.progress == 'json': print(json.dumps({'ev': 'stage', 'k': 1, 'n': 1, 'name': 'Update runtime'}), flush=True)
-        result = rebuild(a.pack, no_lsfg=a.no_lsfg, jobs=a.jobs, allow_profile_drift=a.allow_profile_drift, emit=emit)
+        result = rebuild(a.pack, jobs=a.jobs, allow_profile_drift=a.allow_profile_drift, emit=emit)
         if a.progress == 'json': print(json.dumps({'ev': 'result', **result}), flush=True)
         else: emit('Runtime updated: ' + result['data'])
         return 0
@@ -356,9 +350,8 @@ def cmd_export_apk(a):
     try:
         stage(1, 2, 'Build the host')
         result = export(Path(a.data), Path(a.out), Path(a.key),
-                        data_root=Path(a.data_root) if a.data_root else None,
                         driver=Path(a.driver) if a.driver else None,
-                        vercode_offset=a.vercode_offset, jobs=a.jobs, no_lsfg=a.no_lsfg, emit=emit)
+                        vercode_offset=a.vercode_offset, jobs=a.jobs, emit=emit)
         stage(2, 2, 'Pack the APK')
         if a.progress == 'json': print(json.dumps({'ev': 'result', **result}), flush=True)
         else: emit('APK: ' + result['apk'])

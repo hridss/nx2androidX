@@ -2,20 +2,17 @@
 """The game as a standalone APK: the host built for a NativeActivity of its own, and the APK that ties it to its data folder.
 
 The app's mode runs the game itself: the host carries the player's JNI entry (libdmplay.so) and the app drives it. A
-standalone APK has no app: the host is the upstream's APK front (libdmhost.so, dm/android/front_android.c), the game
-reads its files from its own external directory (/storage/emulated/0/Android/data/<package>/files), and the APK says
-where that directory is (assets/nx2a-data.txt, written by mkapk.py).
+standalone APK has no app: the host is the upstream's APK front (libdmhost.so, dm/android/front_android.c) and the game
+reads its files from its own external directory (/storage/emulated/0/Android/data/<package>/files), which is where the
+data is put before the player installs the APK.
 
-    python3 -m porter export-apk <data folder> --out <apk> --key <key.json> [--data-root <folder>] [--driver <library>]
+    python3 -m porter export-apk <data folder> --out <apk> --key <key.json> [--driver <library>]
                                          [--vercode-offset N]
 
 The data folder is a self-sufficient export of the data pack (the app makes it: the pack's own files, the game's files
 in RomFS/, and a manifest without this machine's paths). This command builds the host for it, packs the APK (mkapk.py:
 the Python standard library only, no JDK and no Android SDK) and signs it with the key. Every exported game shares one
 key (the app's own), so a rebuild of the same game installs over the one before it.
-
---data-root is where the game reads its data from (the default: the data folder itself). It is what the APK carries
-(assets/nx2a-data.txt), so it must be a path the exported game can reach.
 
 --driver is the Vulkan driver library the APK carries: the host loads it from the APK's own library folder (the row
 DM_VK_DRIVER in the data folder's env.txt names it). Without one the game runs on the device's own driver, and the
@@ -66,6 +63,12 @@ def profile_landscape(tid: str) -> bool:
     return _profile_value(tid, 'orientation') != 'any'
 
 
+def game_files_dir(package: str) -> str:
+    """Where the exported game reads its files from: its own external directory, the one the system gives every
+    app (the host's front takes it from the package's own path, so the APK carries nothing about it)."""
+    return f'/storage/emulated/0/Android/data/{package}/files'
+
+
 def _profile_value(tid: str, key: str) -> str:
     """One key of the profile's Android keys (android.tsv), '' when the profile has none"""
     try:
@@ -83,7 +86,7 @@ def with_profile(tid: str):
     return profiles_layer.copy_to_games(tid)
 
 
-def build_host(tid: str, out: Path, jobs: int, no_lsfg: bool = False) -> Path:
+def build_host(tid: str, out: Path, jobs: int) -> Path:
     """The host of this game as a standalone APK: libdmhost.so, the upstream's APK front, built for the phone.
 
     The profile comes from the player's profile layer (the app does not carry the profiles): it is copied into the
@@ -92,7 +95,6 @@ def build_host(tid: str, out: Path, jobs: int, no_lsfg: bool = False) -> Path:
     if not ndk: raise BuildError('no Android NDK found: python -m porter tools --download')
     args = [sys.executable, str(DM / 'android/build.py'), '--game', tid, '--ndk', str(ndk), '--out', str(out),
             '--lib', '--release', '--jobs', str(jobs)]
-    if no_lsfg: args.append('--no-lsfg')
     env = dict(os.environ, DM_GAME=tid)
     tc_lib = toolchain.toolchain_lib_dirs()
     if tc_lib: env['LD_LIBRARY_PATH'] = str(tc_lib[0]) + os.pathsep + env.get('LD_LIBRARY_PATH', '')
@@ -144,17 +146,16 @@ def set_driver(data: Path, driver: Path = None) -> bool:
     except OSError: return False
 
 
-def pack_apk(so: Path, out: Path, key: Path, man: dict, data: Path, driver: Path = None, data_root: Path = None,
+def pack_apk(so: Path, out: Path, key: Path, man: dict, data: Path, driver: Path = None,
              version_code: int = 1, label: str = '') -> int:
     """The APK: the host, the data folder's theme and icon, the overlay's font, the loader and its hooks, and the
     driver when there is one. Signed with the key (the app's own). → the APK's size in bytes"""
     from porter.pipeline import version_code as version_code_of
     ver = str(man.get('version') or man.get('display') or '1.0')
     code = version_code if version_code else version_code_of(ver)
-    root = Path(data_root) if data_root else data
     args = [sys.executable, str(DM / 'android/apk/mkapk.py'), str(so), str(out), str(key),
             '--package', str(man['package']), '--label', label or str(man.get('name') or man['package']),
-            '--lib', 'dmhost', '--data-root', str(root), '--version-code', str(code), '--version-name', ver, '--release']
+            '--lib', 'dmhost', '--version-code', str(code), '--version-name', ver, '--release']
     if profile_landscape(title_id_of(man)): args += ['--landscape']   # the game's own orientation (the profile's)
     icon = data / str(man.get('icon') or 'icon.png')
     if icon.is_file(): args += ['--icon', str(icon)]
@@ -169,28 +170,27 @@ def pack_apk(so: Path, out: Path, key: Path, man: dict, data: Path, driver: Path
     return out.stat().st_size
 
 
-def export(data: Path, out: Path, key: Path, data_root: Path = None, driver: Path = None, vercode_offset: int = 0,
-           jobs: int = 8, no_lsfg: bool = False, emit=print) -> dict:
+def export(data: Path, out: Path, key: Path, driver: Path = None, vercode_offset: int = 0,
+           jobs: int = 8, emit=print) -> dict:
     """The APK of a game whose data folder is ready: the host, the APK, the driver's line in env.txt.
     → {'apk', 'data', 'package', 'size', 'driver'}"""
     man = manifest(data)
     tid = title_id_of(man)
-    root = Path(data_root) if data_root else data
     copied = with_profile(tid)   # the profile the tools look for is in the tree's dm/games while the build runs
     try:
         emit(f'{man.get("name") or tid}: building the host for a standalone APK')
         with tempfile.TemporaryDirectory(prefix='nx2a_export_') as t:
-            so = build_host(tid, Path(t), jobs, no_lsfg=no_lsfg)
+            so = build_host(tid, Path(t), jobs)
             emit(f'{man.get("name") or tid}: the host is {so.stat().st_size / 2**20:.1f} MB')
-            size = pack_apk(so, out, key, man, data, driver=driver, data_root=root,
+            size = pack_apk(so, out, key, man, data, driver=driver,
                             version_code=version_code(str(man.get('version') or '1.0'), vercode_offset),
                             label=str(man.get('name') or man.get('display') or ''))
         if not set_driver(data, driver):
             emit(f'[RED] {data}/env.txt could not be written: the game runs on the device\'s own driver')
     finally:
         if copied: shutil.rmtree(copied, ignore_errors=True)   # the copy of the imported profile goes when the host is built
-    say(f'{out}: {size / 2**20:.1f} MB (the data: {root})')
-    return {'apk': str(out), 'data': str(root), 'package': str(man['package']), 'size': size,
+    say(f'{out}: {size / 2**20:.1f} MB (the data: {game_files_dir(str(man["package"]))})')
+    return {'apk': str(out), 'data': game_files_dir(str(man['package'])), 'package': str(man['package']), 'size': size,
             'driver': str(driver) if driver else ''}
 
 

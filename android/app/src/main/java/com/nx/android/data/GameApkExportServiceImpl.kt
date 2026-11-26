@@ -80,7 +80,7 @@ class GameApkExportServiceImpl @Inject constructor(
         // 2. the APK
         onProgress(GameApkExport.Progress(GameApkExport.Stage.BUILD, 0f))
         val driver = GameApkExport.envValue(env, "DM_VK_DRIVER")?.let { File(it) }?.takeIf { it.isFile }
-        val built = exporter.build(folder, apk, keyFile(), gameDir, driver, nextOffset(entry.titleId)) { log(it) }
+        val built = exporter.build(folder, apk, keyFile(), driver, nextOffset(entry.titleId)) { log(it) }
         if (!built.ok) {
             folder.deleteRecursively()
             apk.delete()

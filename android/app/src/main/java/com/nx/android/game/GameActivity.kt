@@ -17,32 +17,31 @@ import android.view.MotionEvent
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +54,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -62,54 +62,36 @@ import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.nx.android.NxApp
 import com.nx.android.R
+import com.nx.android.appstate.PageFacts
+import com.nx.android.appstate.PageState
+import com.nx.android.appstate.PageStateStore
+import com.nx.android.agent.runtime.GamespecExporter
+import com.nx.android.agent.runtime.openGamespecIssue
+import com.nx.android.agent.ui.AgentConversationState
+import com.nx.android.agent.ui.AgentDrawerHost
+import com.nx.android.agent.ui.AgentEdgeBadge
 import com.nx.android.core.storage.AppPaths
 import com.nx.android.core.ui.ProvideAppLocale
 import com.nx.android.core.ui.theme.NxPalette
 import com.nx.android.core.ui.theme.NxTheme
 import com.nx.android.data.AppLocale
 import com.nx.android.data.AppLog
-import com.nx.android.data.CheatRepo
-import com.nx.android.data.CheatSettings
-import com.nx.android.data.FrameGenSettings
 import com.nx.android.data.GameLog
 import com.nx.android.data.Gamespec
-import com.nx.android.data.LosslessDll
-import com.nx.android.data.MotionKnobs
 import com.nx.android.data.MotionSettings
-import com.nx.android.data.PadPlayers
 import com.nx.android.data.PrefsStore
-import com.nx.android.data.RatePin
 import com.nx.android.data.RateSettings
 import com.nx.android.data.RuntimeCompiler
-import com.nx.android.data.RuntimeLibraries
 import com.nx.android.data.RuntimeStorage
+import com.nx.android.data.RuntimeLibraries
 import com.nx.android.data.drivers.Drivers
 import com.nx.android.data.hasGyroscope
 import com.nx.android.data.library.LibraryFileScanner
 import com.nx.android.data.playback.PackEnvStore
 import com.nx.android.domain.RuntimeBuildMarker
 import com.nx.android.game.GameActivity.Companion.prepareScope
-import com.nx.android.game.hud.HudField
-import com.nx.android.game.hud.HudOverlay
-import com.nx.android.game.input.PadEditor
-import com.nx.android.game.input.PadView
-import com.nx.android.agent.runtime.GamespecExporter
-import com.nx.android.agent.runtime.openGamespecIssue
-import com.nx.android.agent.ui.AgentConversationState
-import com.nx.android.agent.ui.AgentDrawerHost
-import com.nx.android.agent.ui.AgentEdgeBadge
-import com.nx.android.appstate.PageFacts
-import com.nx.android.appstate.PageState
-import com.nx.android.appstate.PageStateStore
-import com.nx.android.game.overlay.GameDrawer
-import com.nx.android.game.overlay.TextPrompt
-import com.nx.android.input.GamepadScan
-import com.nx.android.input.PadAssignment
-import com.nx.android.input.PadAxes
-import com.nx.android.input.PadCalibration
-import com.nx.android.input.PadProfileStore
-import com.nx.android.input.PadSpec
-import com.nx.android.input.ui.PadCenterController
+import com.nx.android.game.overlay.audioOutputDevices
+import com.nx.android.agent.ui.AgentDrawerHost as AgentDrawerHostAlias
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 import java.lang.ref.WeakReference
@@ -117,10 +99,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import javax.inject.Inject
 
 /**
@@ -140,12 +120,14 @@ internal enum class PreparePhase { IDLE, RUNNING, READY, FAILED }
  * the process's own ([prepareScope], outliving any activity instance) brings the host in — the fingerprint
  * is checked against the pack, a stale runtime is rebuilt by a porter subprocess right here, and the host
  * is copied into the app's private folder. Only when that is done does the page load the host
- * ([System.load]), build the game UI (the SurfaceView last: its surfaceCreated must not fire before the
- * host is in) and start it ([Native.start]). The drawer (Compose, over the surface) holds the game's live
- * switches — the frame generation among them; Back stays with the game's own pause menu once the game is
- * up. The host ends the process when the game ends (one game per process), and [endProcess] kills it too —
- * a started host cannot be started again in the same process, so a recreated activity of a running game
- * only re-hands its window ([hostRunning]).
+ * ([System.load]), put the SurfaceView in (its surfaceCreated must not fire before the host is in) and
+ * start it ([Native.start]).
+ *
+ * 游戏内的一切界面都归宿主核心画（虚拟手柄、四页签菜单、计数器、布局编辑器、存档选择器——上游的那套）；
+ * App 在游戏画面上只画助手（右缘的徽标与抽屉，游戏照常跑）。宿主菜单的「声音输出」回调游戏页的
+ * [openAudioMenu]，弹 App 自己的选设备对话框。宿主结束进程就是游戏结束（一个进程一个进程一把钥匙——
+ * 一个进程一个游戏），[endProcess] 是主动版。起来了的宿主不能在同进程再起一次，重建出来的活动只把
+ * 新窗口交给跑着的游戏（[hostRunning]）。
  */
 @AndroidEntryPoint
 class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
@@ -189,21 +171,9 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
     /** 页面状态快照：助手想知道玩家此刻在哪一局，就读它 */
     @Inject lateinit var pageState: PageStateStore
 
-    /** 界面语言：toast 与抽屉里的词从这里取 */
+    /** 界面语言：toast 与助手的词从这里取 */
     private val locale: AppLocale get() = (application as NxApp).locale
 
-    private var paused by mutableStateOf(false)
-    private var drawerOpen by mutableStateOf(false)
-    /** 助手的侧抽屉开着吗（游戏里从右边缘那枚徽标进来） */
-    private var agentDrawerOpen by mutableStateOf(false)
-    /** 抽屉第一次打开之后就一直留在组合里；之前不组合它（游戏启动时不必付这份开销） */
-    private var agentEverOpened by mutableStateOf(false)
-    private var fgSettings: FrameGenSettings? = null
-    private var rateSettings: RateSettings? = null
-    private var motionSettings: MotionSettings? = null
-    private var cheatSettings: CheatSettings? = null
-    private var cheatStatus by mutableStateOf(CheatStatus())   // 金手指页的状态（文件在不在、出处、下载到哪了）
-    private var padPlayers: PadPlayers? = null
     private var packPath: String? = null
     private var packTitleId: String? = null
     private var packName: String = ""
@@ -227,42 +197,19 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         )
     }
 
-    /** the game UI (surface, pad, drawer) is in the view tree: the native calls and the input paths are live */
+    /** the game UI (surface, assistant) is in the view tree: the native calls and the input paths are live */
     private var gameUiReady = false
-    private lateinit var padView: PadView
-
-    // 性能 HUD：两条线与它显示哪些字段（App 的偏好，重启后仍在）
-    private var hudStats by mutableStateOf(false)
-    private var hudDevice by mutableStateOf(false)
-    private var hudFields by mutableStateOf(HudField.DEFAULT)
-    private var hudFahrenheit by mutableStateOf(false)
 
     // 助手在游戏画面上的入口（右缘的那条把手）：玩家可以在设置里把它收走
     private var agentBadge by mutableStateOf(true)
+    /** 助手的侧抽屉开着吗（游戏里从右边缘那枚徽标进来） */
+    private var agentDrawerOpen by mutableStateOf(false)
+    /** 抽屉第一次打开之后就一直留在组合里；之前不组合它（游戏启动时不必付这份开销） */
+    private var agentEverOpened by mutableStateOf(false)
+    /** 宿主菜单的「声音输出」弹出的 App 对话框（列系统给的设备，选了经 JNI 送回宿主） */
+    private var audioMenuOpen by mutableStateOf(false)
 
-    /** 游戏要文字时（宿主的通知 3）：App 用系统输入法问玩家 */
-    private data class TextReq(val title: String, val text: String, val max: Int)
-    private var textReq by mutableStateOf<TextReq?>(null)
-
-    /** 布局编辑器开着吗（App 自己的面板：游戏等着，触摸归编辑器） */
-    private var editorOpen by mutableStateOf(false)
-
-    // ---- 外接屏：游戏到大屏上，手机当手柄 ----
-    private var externalDisplay: ExternalDisplay? = null
-    private var externalOn by mutableStateOf(false)          // 玩家开了这个模式吗
-    private var externalSupported by mutableStateOf(false)   // 这个包的运行库能接第二个窗口吗
-    private lateinit var screenBlank: View                  // 外接屏接管时盖住手机上的旧画面
-
-    // ---- 物理手柄：App 监听系统的输入设备，告诉宿主有几个在用（宿主不再自己轮询设备列表）----
     private val inputManager: InputManager get() = getSystemService(InputManager::class.java)
-    private val ctrlDevices = mutableSetOf<Int>()   // 真正发过输入的手柄（发过才算在用）
-    private var ctrlListener: InputManager.InputDeviceListener? = null
-    private var ctrlCount = -1
-
-    // ---- 手柄中心：每只手柄一份档案（App 侧），映射表推给宿主 ----
-    private lateinit var padController: PadCenterController
-    private var padSupported by mutableStateOf(false)   // 宿主有没有那三个入口（老包没有）
-    private var scanSupported = true   // 宿主带扫描码的那个入口（老包没有）
 
     private fun isGamepad(deviceId: Int): Boolean {
         val d = inputManager.getInputDevice(deviceId) ?: return false
@@ -270,86 +217,6 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         val s = d.sources
         return (s and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
                (s and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-    }
-
-    /** 一个手柄发了输入：它算「在用」，虚拟手柄不算（老前端也是这个规矩：issue #22）。
-     * 「在用」的手柄占着玩家 1 时，虚拟手柄（玩家 1 的那一份）让位 */
-    private fun noteController(source: Int, deviceId: Int) {
-        if ((source and (InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK)) == 0) return
-        if (!isGamepad(deviceId)) return
-        if (ctrlDevices.add(deviceId)) pushControllers()
-    }
-
-    private fun pushControllers() {
-        val n = ctrlDevices.size
-        if (n == ctrlCount) return
-        ctrlCount = n
-        runCatching { Native.padDevices(n) }   // 宿主还没载入时跳过
-        updatePadVisibility()
-    }
-
-    /**
-     * 虚拟手柄让不让位：玩家 1 被物理手柄占了才让。
-     *
-     * 玩家 1 永远是手机（抽屉的「谁玩谁」那一页这么写），虚拟按键是玩家 1 的手柄；物理手柄
-     * 指派给玩家 2 之后它就空出来了，两个人一起玩（双人成行那样）才凑得齐。在用的手柄按
-     * PadAssignment.playerOf 查：自动模式下没被指派走的手柄都算玩家 1。
-     */
-    private fun updatePadVisibility() {
-        if (!::padView.isInitialized) return
-        val assignment = padPlayers?.load() ?: PadAssignment()
-        val infos = GamepadScan.devices.value
-        val inUse = ctrlDevices.mapNotNull { id -> infos.firstOrNull { it.id == id }?.profileKey }
-        padView.setPlayer1Taken(assignment.player1Taken(inUse))
-    }
-
-    private fun watchControllers() {
-        val l = object : InputManager.InputDeviceListener {
-            override fun onInputDeviceAdded(id: Int) { pushControllers(); pushPadMapping() }   // 接上了不算在用：它得先发输入
-            override fun onInputDeviceRemoved(id: Int) { if (ctrlDevices.remove(id)) pushControllers(); pushPadMapping() }
-            override fun onInputDeviceChanged(id: Int) { pushControllers() }
-        }
-        ctrlListener = l
-        runCatching { inputManager.registerInputDeviceListener(l, Handler(Looper.getMainLooper())) }
-    }
-
-    // ---- 手柄中心：档案、映射表与捕获 ----
-
-    /**
-     * 档案读进来（坏了就是空的：回到出厂映射，手柄中心照常能开）。
-     *
-     * 中心在首页与游戏里共用一份状态：这里改的是同一个文件（游戏下次起来读它）。
-     */
-    private fun loadPadProfiles() {
-        padController = PadCenterController(
-            PadProfileStore(File(filesDir, "pads/${PadProfileStore.FILE_NAME}")),
-            onChanged = { pushPadMapping() },   // 档案改了：新表推给宿主（改完即时生效，不用重启游戏）
-        )
-    }
-
-    /**
-     * 每只手柄的档案推给宿主：它的表按设备寻址，同型号的两只各查各的。
-     * 老包（没有那两个入口）推不动，这一层就当没有手柄中心。
-     */
-    private fun pushPadMapping(): Boolean {
-        val devices = GamepadScan.devices.value
-        // 谁玩谁（这个游戏里哪只手柄是几号玩家）：存的是手柄的指纹，拔了再插还是那个玩家
-        val assignment = padPlayers?.load() ?: PadAssignment()
-        val spec = PadSpec.build(devices.map { info ->
-            val profile = padController.profiles[info.profileKey]
-            PadSpec.Device(
-                deviceId = info.id,
-                labels = profile?.labels ?: false,
-                printCoded = profile?.printCoded ?: false,
-                player = assignment.playerOf(info.profileKey),
-                calibration = profile?.calibration ?: PadCalibration(),
-                zTrig = info.roles.zTrig,
-                rxStick = info.roles.rxStick,
-            )
-        })
-        val ok = runCatching { Native.padMapping(spec) }.isSuccess
-        padSupported = ok
-        return ok
     }
 
     private fun immersive() {
@@ -366,9 +233,6 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
      * 横屏时窗口铺满整块屏幕：默认的挖孔策略下，系统把整个窗口避开刘海/挖孔，窗口窄一条。
      * 游戏画面是在这个窗口里居中的，于是整幅画面被推到右边，左边多出一条黑带（挖孔正好在那条带上）。
      * 允许画进挖孔区之后，窗口就是整块屏幕，画面居中到整块屏上，左右黑边等宽，挖孔落在黑边里。
-     *
-     * 还要让内容自己铺满：挖孔的 inset 照样上报给 app（那是给内容避让用的），
-     * 内容框若按它裁剪，游戏的画面仍旧窄一条、黑边依旧不对称。
      */
     private fun drawOverCutout() {
         if (Build.VERSION.SDK_INT < 28) return   // 挖孔从 Android 9 起才有；更早的设备本来就不避让
@@ -390,7 +254,7 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         forceRebuild = intent.getBooleanExtra(EXTRA_REBUILD, false)
         immersive()
         drawOverCutout()
-        if (hostRunning) { installGameUi(); setupExternalDisplay(); return }   // a recreation (the system rebuilt the activity): the running game takes the new window in surfaceCreated
+        if (hostRunning) { installGameUi(); return }   // a recreation (the system rebuilt the activity): the running game takes the new window in surfaceCreated
         // 没带包的一条（resume 的自愈）：这个进程里没有正在跑的游戏，也没有准备在进行——
         // 它是「从不杀」模型下的清道夫，把幽灵进程收掉。
         if (packPath.isNullOrEmpty()) {
@@ -402,7 +266,7 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
             startGame(preparedHostPath)
             return
         }
-        // 出生即 Loading：Back 被接管，游戏 UI（SurfaceView/手柄/抽屉）一概不进视图树——
+        // 出生即 Loading：Back 被接管，SurfaceView 一概不进视图树——
         // surfaceCreated 若早于 System.load 会抛 UnsatisfiedLinkError。准备在进程级的协程里做，
         // 页面重建时不重跑（新实例只接管 Loading 界面）。
         showLoading()
@@ -426,7 +290,7 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
     @Composable
     private fun LoadingPage() {
         val name = packName
-        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
             Column(
                 Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -481,9 +345,6 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         prepareStep = ""
         prepareReason = ""
         prepareJob = prepareScope.launch {
-            // 每次进游戏，单条金手指都从关开始：上一局开过的不再自动生效。金手指是社区的代码，
-            // 有时会把游戏弄闪退——玩家闪退后重进要是还开着那条，就进不来了，也关不掉。
-            clearCheatToggles()
             val outcome = prepareRuntime(File(pack))
             withContext(Dispatchers.Main) {
                 if (outcome.ok) {
@@ -516,8 +377,8 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
             ?: return PrepareOutcome(reason = locale.str(R.string.main_cannot_run_not_a_pack, pack.name))
         val dir = runtimeStorage.dir(ported.titleId)
         // forceRebuild：玩家点名要重建（闪退后的「重新构建」）——目录里那份对不上也不将就，一律重编。
-        // 旧格式的包（清单带 host，运行库在包里）：目录里那份对得上就直接用（旧包也能零拷贝）；
-        // 包能跑而目录没有（或对不上）→ 晋升拷贝；包跑不了（接口对不上、宿主没了）→ 就地重建。
+        // 旧格式的包（清单带 host，运行库在包里）：目录里那份是旧前端的 libdmplay.so，标记的接口版本
+        // 对不上 → 就地重建（重建写的是新名字 libdmhost.so 与新标记，旧文件随之作废）。
         if (ported.hostDeclared) {
             if (ported.runnable && !forceRebuild) {
                 if (runtimeStorage.complete(dir) && runtimeStorage.matches(ported, runtimeStorage.readMarker(dir))) {
@@ -528,10 +389,10 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
                     withContext(Dispatchers.IO) {
                         RuntimeLibraries.copyForLaunch(ported, dir)
                     }
-                    // 拷完由 App 写入构建标记（否则下次启动无从判版本）。旧包的清单没有记 lsfg，
-                    // 晋升出来的运行库标记里就留着这一项不参与比对。
+                    // 拷完由 App 写入构建标记（否则下次启动无从判版本）。旧包的运行库是旧前端的，
+                    // 晋升拷贝只是过渡：标记里的接口版本对不上，下一次启动就地重建。
                     runtimeStorage.writeMarker(dir, RuntimeBuildMarker(
-                        playerApiRevision = ported.playerApiRevision, profileH = ported.profileH, noLsfg = null))
+                        playerApiRevision = ported.playerApiRevision, profileH = ported.profileH))
                 } catch (e: Exception) {
                     return PrepareOutcome(reason = e.message.orEmpty().ifBlank { e.javaClass.simpleName })
                 }
@@ -562,7 +423,7 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
      * 就地重建（porter 子进程，stdout 读进来就是 Loading 的进度）；成功返回 null，失败返回原因。
      *
      * 这一步的输出写进游戏自己的文件夹（rebuild.log，每次重建覆盖）：重建只发生在启动这一刻，
-     * 它属于这个游戏，游戏详情抽屉的日志包会把它一起带走。
+     * 它属于这个游戏，游戏详情页的日志包会把它一起带走。
      */
     private suspend fun rebuild(pack: File): PrepareOutcome? {
         val writer = try {
@@ -613,401 +474,46 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         installGameUi()
         val pack = packPath ?: return endProcess()
         val titleId = packTitleId
-        // the title id keeps this game's saves, temp and log apart from the others' (host_start_common)
-        fgSettings = titleId?.let { FrameGenSettings(PrefsStore(this), it) }
-        rateSettings = titleId?.let { RateSettings(PrefsStore(this), it) }
-        motionSettings = titleId?.let { MotionSettings(PrefsStore(this), it) }
-        cheatSettings = titleId?.let { CheatSettings(PrefsStore(this), it) }
-        padPlayers = PadPlayers(this, PadPlayers.GLOBAL)   // 谁玩谁是全局一份（手柄中心与这里读写同一份）
-        // 手柄的档案（每只手柄一份）与手柄的枚举：中心靠它
-        loadPadProfiles()
-        GamepadScan.start(this)
-        // the default driver: a game whose driver was never picked runs on the app's built-in one (the row goes
-        // into the pack's env.txt, which the host reads). A driver the player picked is left alone.
-        applyDefaultDriver(File(pack))
-        // the performance HUD's own preferences: the two lines, the fields, the temperature's unit
-        val prefs = PrefsStore(this)
-        hudStats = prefs.bool(PrefsStore.HUD_STATS, false)
-        hudDevice = prefs.bool(PrefsStore.HUD_DEVICE, false)
-        hudFields = HudField.of(prefs.str(PrefsStore.HUD_FIELDS, "").split(",").filter { it.isNotBlank() })
-            .ifEmpty { HudField.DEFAULT }
-        hudFahrenheit = prefs.bool(PrefsStore.HUD_TEMP_F, false)
-        // 助手的游戏内入口：默认在画面上，玩家可以在设置里收走
-        agentBadge = prefs.bool(PrefsStore.AGENT_BADGE, true)
-        // 体感的两行也交给宿主：开不开（默认按设备有没有陀螺仪）与保留甩动方向（每个游戏各一份）
-        val env = (fgSettings?.load()?.envLines(LosslessDll.ensure(this)?.absolutePath) ?: emptyArray()) +
-            (motionSettings?.load(hasGyroscope(this))?.envLines() ?: emptyArray()) +
-            (cheatSettings?.envLine(cheatsDir()) ?: emptyArray())
+        // 玩家在详情页预设的运行参数，经环境行进宿主：帧率档位（DM_FPS_PIN，0/未设 = 跟随游戏）、
+        // 体感的两行（开不开、保留甩动方向）。这些是启动时读的默认值——游戏内不再改它们。
+        val rate = RateSettings(PrefsStore(this), titleId.orEmpty()).load()
+        val motion = MotionSettings(PrefsStore(this), titleId.orEmpty()).load(hasGyroscope(this))
+        val env = (rate?.takeIf { it.fps != 0 }?.let { arrayOf("DM_FPS_PIN=${it.fps}") } ?: emptyArray()) +
+            motion.envLines()
         if (!Native.start(pack, filesDir.path, titleId, resources.displayMetrics.densityDpi, env, this)) {
             endProcess()   // the save import asked to end: it happens at the next start
             return
         }
         hostRunning = true
-        // 手柄的显示与浓淡：App 的偏好是唯一真值，宿主只留运行时的副本（settings.txt 不再写这两项）
-        runCatching { Native.padPrefs(padView.shown, padView.opacity) }
-        // 手柄的映射表：每只手柄的档案推给宿主（老包没有那个入口，推不动就算了）
-        pushPadMapping()
-        // 外接屏：宿主能接第二个窗口吗（老包没有那个能力位，这个模式对它没有意义）
-        setupExternalDisplay()
-        // 玩家选的帧率档位：start 之后才下发——包的 env.txt 在宿主启动时读过，晚 setenv 的那份留下来，
-        // 玩家的选择盖过档案自己的 DM_FPS_PIN。没选过就不下发，档案的默认继续说话。
-        rateSettings?.load()?.let { pin -> runCatching { Native.perfPinSet(pin.fps) } }
-        // 金手指页的状态：宿主起来了才知道这个 build 的编号（下载过的文件在不在、出处）
-        refreshCheatStatus()
-        awaitCheatBuild()
-        watchControllers()
+        // the default driver: a game whose driver was never picked runs on the app's built-in one (the row goes
+        // into the pack's env.txt, which the host reads). A driver the player picked is left alone.
+        applyDefaultDriver(File(pack))
     }
 
-    /** 游戏的视图树：SurfaceView + 外接屏遮罩 + 手柄层 + 抽屉（准备完成才建——见类注释） */
+    /** 游戏的视图树：SurfaceView + 助手层（准备完成才建——见类注释） */
     private fun installGameUi() {
         val frame = FrameLayout(this)
         val surface = SurfaceView(this)
         surface.holder.addCallback(this)
         frame.addView(surface, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        // 外接屏接管时盖住手机上的那块画面（宿主不再往它画，留在那里的是旧的一帧）
-        screenBlank = View(this).apply { setBackgroundColor(android.graphics.Color.BLACK); visibility = View.GONE }
-        frame.addView(screenBlank, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        // 虚拟手柄绘制层（android-virtual-pad）：画在游戏画面之上、抽屉之下；不消费触点——命中与分流在宿主
-        padView = PadView(this, PrefsStore(this), packPath?.let { File(it) }, packTitleId)
-        padView.onMenuTapped = { runOnUiThread { if (drawerOpen) drawerOpen = false else openDrawer() } }   // ☰ 按钮：App 开自己的抽屉
-        frame.addView(padView, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        // the drawer's layer: a ComposeView over the game's surface (the composition needs the activity's owners on the view)
+        // the assistant's layer: a ComposeView over the game's surface (the badge and the drawer; the game
+        // keeps running under it — the assistant watches a running game, so nothing here holds the clock)
         val compose = ComposeView(this)
         compose.setViewTreeLifecycleOwner(this)
         compose.setViewTreeViewModelStoreOwner(this)
         compose.setViewTreeSavedStateRegistryOwner(this)
-        compose.setContent { NxTheme { ProvideAppLocale(locale) { DrawerRoot() } } }
+        compose.setContent { NxTheme { ProvideAppLocale(locale) { GameOverlayRoot() } } }
         frame.addView(compose, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         setContentView(frame)
         immersive()
         gameUiReady = true
     }
 
-    // ---- 外接屏：游戏到大屏上，手机当手柄 ----
-
-    /**
-     * 外接屏的承载：这个宿主能不能接第二个窗口，开关与那块屏的 presentation。
-     * 宿主启动之后才问得出能力位（老运行时没有那个入口）；页面被重建时也走这里，
-     * 外接屏的模式跟着新页面继续（上一个页面收掉时游戏先回到手机，新页面再把它送上去）。
-     */
-    private fun setupExternalDisplay() {
-        if (externalDisplay != null) return
-        externalSupported = runCatching { Native.frontCaps() }.getOrDefault(0) and Native.FRONT_CAPS_EXTERNAL != 0
-        externalDisplay = ExternalDisplay(this, object : ExternalDisplay.Listener {
-            override fun surfaceChanged(surface: Surface, width: Int, height: Int) {
-                runCatching { Native.externalSurface(surface) }   // 游戏画到那块屏上
-                setScreenBlank(true)                            // 手机上的旧画面盖住
-            }
-            override fun surfaceLost() {
-                runCatching { Native.externalSurface(null) }      // 屏没了：游戏回到手机
-                setScreenBlank(false)
-            }
-        })
-        // 玩家开过这个模式吗（App 的偏好是唯一真值）
-        externalOn = PrefsStore(this).bool(PrefsStore.EXTERNAL_DISPLAY, false)
-        if (externalOn && externalSupported) startExternal()
-    }
-
-    /** 开始找外接屏：找到了就把它的画面交给宿主（游戏就到大屏上去了，手机剩下手柄） */
-    private fun startExternal() {
-        externalDisplay?.start()
-    }
-
-    /** 不找外接屏了：宿主把游戏放回手机自己的画面 */
-    private fun stopExternal() {
-        externalDisplay?.stop()
-    }
-
-    /** 外接屏现在接上了吗（问系统，实时：插上拔下都要看得见） */
-    private fun externalScreenAttached(): Boolean = externalDisplay?.available() == true
-
-    /**
-     * 外接屏接管了游戏：手机上那块画面是旧的（宿主不再往它画），盖住它——
-     * 手机上只剩手柄，玩家不会以为游戏还在手机上。
-     */
-    private fun setScreenBlank(on: Boolean) {
-        if (::screenBlank.isInitialized) screenBlank.visibility = if (on) View.VISIBLE else View.GONE
-    }
-
-    /** 抽屉的开关：外接屏模式（即时生效：插上屏就切过去，拔掉就切回来） */
-    private fun setExternal(on: Boolean) {
-        externalOn = on
-        PrefsStore(this).put(PrefsStore.EXTERNAL_DISPLAY, on)
-        if (on) startExternal() else stopExternal()
-    }
-
-    // ---- 金手指（宿主那边跑，App 只下发开关）----
-
-    /** App 自己的金手指目录（下载来的文件在这里：重打包不动它） */
-    private fun cheatsDir(): String? {
-        val tid = packTitleId ?: return null
-        val dir = CheatRepo.dir(filesDir, tid)
-        return if (dir.isDirectory) dir.absolutePath else null
-    }
-
-    /**
-     * 金手指的总开关：开着就让宿主加载这个 build 的金手指文件（运行时就能开关每一条），
-     * 关着就让宿主什么都不加载、不执行。开关本身按游戏记着（下次启动照旧）。
-     */
-    private fun setCheatsMaster(on: Boolean) {
-        val s = cheatSettings ?: return
-        s.setMaster(on)
-        val dir = cheatsDir()
-        if (on && dir != null) runCatching { Native.cheatsOpen(dir) } else runCatching { Native.cheatsClose() }
-    }
-
-    /** 开关一条金手指：宿主那边改状态并记下来（它自己知道这个 build 的编号与条目名） */
-    private fun setCheat(index: Int, on: Boolean) {
-        AppLog.line("cheats: cheat $index -> ${if (on) "on" else "off"}")
-        runCatching { Native.cheatsSet(index, on) }
-    }
-
-    /**
-     * 这个游戏的金手指文件在不在手机上（下载过没有）：宿主那边按 build 编号找文件，
-     * 所以这里也按它的编号找。
-     */
-    private fun cheatFile(): File? {
-        val tid = packTitleId ?: return null
-        val build = cheatBuild() ?: return null
-        return CheatRepo.file(CheatRepo.dir(filesDir, tid), build)
-    }
-
-    /**
-     * 这个 build 的编号（金手指文件按它命名）：宿主知道自己这个 build（它加载完模块就有了），
-     * 宿主还没加载完时先看数据包里的重写器表（同一份 BUILD_ID，不用等）。
-     */
-    private fun cheatBuild(): String? {
-        val fromHost = runCatching { Native.cheatsBuild() }.getOrNull()?.takeIf { it.length >= 16 }
-        return fromHost ?: packBuildId()
-    }
-
-    /**
-     * 数据包里重写器记的 main 的 build ID（fixups 表的头一行，和宿主读到的是同一个值）：
-     * 宿主还没加载完模块时，App 靠它知道这个游戏的版本。
-     */
-    private fun packBuildId(): String? {
-        val pack = packPath ?: return null
-        return CheatRepo.buildIdOf(File(pack))
-    }
-
-    /**
-     * 清掉这个 build 的单条金手指开关（它们记在下载来的文件旁边，宿主启动时读）：
-     * 单条开关不跨游戏次数——每次进游戏都从关开始。
-     *
-     * 在准备阶段做（宿主还没起，那时的编号从数据包的表里读）。
-     */
-    private fun clearCheatToggles() {
-        val tid = packTitleId ?: return
-        val build = packBuildId() ?: return
-        val dir = CheatRepo.dir(filesDir, tid)
-        if (!dir.isDirectory) return
-        if (CheatRepo.clearToggles(dir, build)) {
-            AppLog.line("cheats: this session starts with all cheats off ($build)")
-        }
-    }
-
-    /**
-     * 宿主在自己的线程里加载模块：它过一会儿才知道自己这个 build 的编号（金手指文件按它命名）。
-     * 数据包里的表已经能回答了（不必等），这一轮只是等宿主自己知道，好让两边的值对齐。
-     */
-    private fun awaitCheatBuild() {
-        lifecycleScope.launch {
-            for (i in 0 until 60) {
-                refreshCheatStatus()
-                if (runCatching { Native.cheatsBuild() }.getOrNull()?.length?.let { it >= 16 } == true) return@launch
-                // 老宿主没有金手指这个入口（调用即抛）：不用再等了
-                if (runCatching { Native.cheatsList() }.isFailure) return@launch
-                delay(500)
-            }
-        }
-    }
-
-    /** 抽屉打开：这时宿主该知道自己的 build 编号了（金手指页要拿它去库里挑文件） */
-    private fun openDrawer() {
-        // 两个抽屉不叠在一起：助手抽屉让位（游戏继续跑）
-        if (agentDrawerOpen) closeAgentDrawer()
-        AppLog.line("cheats: the drawer opened")
-        drawerOpen = true
-        refreshCheatStatus()
-    }
-
-    /** 助手的抽屉打开：游戏照常跑着——助手要看着它抓帧、翻日志，停了就什么都看不到 */
-    private fun openAgentDrawer() {
-        agentDrawerOpen = true
-        drawerOpen = false        // 设置抽屉让位：两个抽屉不叠在一起
-    }
-
-    /** 助手抽屉收起：游戏本来就在跑，这里只是把抽屉收走 */
-    private fun closeAgentDrawer() {
-        agentDrawerOpen = false
-    }
-
-    /** 金手指页的状态：文件在不在、出处是什么（进游戏时读一遍，之后下载完再读） */
-    private fun refreshCheatStatus() {
-        var downloaded = false
-        var credit = ""
-        val file = cheatFile()
-        if (file != null) {
-            downloaded = file.isFile
-            val note = CheatRepo.creditFile(file.parentFile, file.name.removeSuffix(".txt"))
-            if (note.isFile) credit = runCatching { note.readText() }.getOrDefault("").trim()
-        }
-        // 能不能下载：得有这个游戏的 title ID（库的地址用它）与它这个 build 的编号（挑哪一节用它）
-        val canDownload = packTitleId != null && cheatBuild() != null
-        cheatStatus = cheatStatus.copy(downloaded = downloaded, credit = credit, canDownload = canDownload)
-    }
-
-    /**
-     * 从社区库下载这个 build 的金手指（要联网）：文件下到 App 自己的目录里，
-     * 下好了让宿主把新文件加载起来（总开关开着才跑）。
-     */
-    private fun downloadCheats() {
-        val tid = packTitleId ?: return
-        val build = cheatBuild()
-        if (build == null) { cheatStatus = cheatStatus.copy(download = CheatDownload.NO_BUILD); return }
-        if (cheatStatus.download == CheatDownload.DOWNLOADING) return
-        cheatStatus = cheatStatus.copy(download = CheatDownload.DOWNLOADING)
-        AppLog.line("cheats: fetching the library's file of $build for $tid")
-        lifecycleScope.launch {
-            val dir = CheatRepo.dir(filesDir, tid)
-            val result = withContext(Dispatchers.IO) { CheatRepo.download(tid, build, dir) }
-            result.fold(
-                onSuccess = {
-                    val credit = runCatching { CheatRepo.creditFile(dir, build).readText() }.getOrDefault("")
-                    AppLog.line("cheats: $build downloaded (${it.length()} bytes) from $credit")
-                },
-                onFailure = { AppLog.line("[RED] cheats: the download failed: ${it.message}") },
-            )
-            if (result.isSuccess && cheatSettings?.master() == true) {
-                runCatching { Native.cheatsOpen(dir.absolutePath) }
-            }
-            refreshCheatStatus()
-            val state = if (result.isSuccess) CheatDownload.DONE
-            else when (result.exceptionOrNull()) {
-                is CheatRepo.NoSuchBuild -> CheatDownload.NO_BUILD
-                is CheatRepo.NothingUsable -> CheatDownload.NO_USABLE
-                else -> CheatDownload.FAILED
-            }
-            cheatStatus = cheatStatus.copy(download = state)
-        }
-    }
-
-    /**
-     * The default driver: the app's built-in one (the driver it ships), written into the pack when the player
-     * never picked a driver for this game. The row is written once — a driver the player picked (the device's own
-     * one included) stays what it is.
-     */
-    private fun applyDefaultDriver(pack: File) {
-        val builtIn = Drivers.list(this).firstOrNull { it.shipped } ?: return
-        PackEnvStore.ensureDriverDefault(pack, builtIn.library.absolutePath)
-    }
-
-    // ---- 性能 HUD 的开关与字段（App 的偏好，唯一真值）----
-
-    private fun saveHudStats(on: Boolean) { hudStats = on; PrefsStore(this).put(PrefsStore.HUD_STATS, on) }
-    private fun saveHudDevice(on: Boolean) { hudDevice = on; PrefsStore(this).put(PrefsStore.HUD_DEVICE, on) }
-    private fun saveHudFields(fields: Set<HudField>) {
-        hudFields = fields
-        PrefsStore(this).put(PrefsStore.HUD_FIELDS, HudField.keys(fields))
-    }
-    private fun saveHudFahrenheit(on: Boolean) { hudFahrenheit = on; PrefsStore(this).put(PrefsStore.HUD_TEMP_F, on) }
-
-    /**
-     * 帧率档位：App 的偏好是唯一真值（按游戏记着），宿主那边只是运行时的副本——
-     * 钉住一档（60/40/30）或放它自由自适应（0），即时生效（perf_android.c 的 fps_pin 每 30 帧重读一次）。
-     */
-    private fun saveRatePin(pin: RatePin) {
-        rateSettings?.save(pin)
-        runCatching { Native.perfPinSet(pin.fps) }
-    }
-
-    /** 宿主现在的体感开关（位 1 = 体感开着，位 2 = 保留甩动方向）：宿主是唯一真源 */
-    private fun motionState(): Int =
-        runCatching { Native.motionGet() }.getOrDefault(0)
-
-    /** 抽屉的操作页：体感瞄准的两个开关（即时下发，顺手记下，下一次启动还是这个） */
-    private fun saveMotion(on: Boolean, raw: Boolean) {
-        motionSettings?.save(MotionKnobs(on, raw))
-        runCatching { Native.motionSet(on, raw) }
-    }
-
-    /**
-     * 宿主的上行通知（front_player.c 的 dm_app_notice）：宿主不知道抽屉，它只说发生了什么。
-     * 1 = 玩家点了 ☰（轻点不是拖动）→ 抽屉开关；2 = 宿主打开了自己的面板（文本输入/布局编辑器/存档选择）
-     * → 抽屉收起，面板画在游戏画面上，不被抽屉盖住；3 = 游戏要文字 → App 用系统输入法问玩家。
-     * 通知可能来自宿主的任何线程（触摸那条在主线程，文本输入那条在游戏的线程上），状态只在主线程上改。
-     */
-    fun onHostNotice(what: Int) {
-        runOnUiThread {
-            when (what) {
-                1 -> if (drawerOpen) drawerOpen = false else openDrawer()
-                2 -> drawerOpen = false
-                3 -> textReq = readTextRequest()
-            }
-        }
-    }
-
-    /** 游戏要问的内容（宿主那边挂着，等着 App 的回答） */
-    private fun readTextRequest(): TextReq? = runCatching {
-        val o = JSONObject(Native.textRequest())
-        TextReq(o.optString("title"), o.optString("text"), o.optInt("max", 0))
-    }.getOrNull()
-
-    /** 玩家的回答：文字交回宿主，游戏的线程继续 */
-    private fun submitText(ok: Boolean, text: String) {
-        textReq = null
-        runCatching { Native.textResult(ok, text) }
-    }
-
-    // ---- 布局编辑器（App 自己的面板）：游戏等着，触摸归编辑器 ----
-
-    private fun openEditor() {
-        drawerOpen = false
-        editorOpen = true
-        padView.openEditor()
-        runCatching { Native.hold(true) }   // 游戏先等着（时钟不走，声音静下来）
-    }
-
-    /** 关闭编辑器：改动已经存好了（拖动松手就存，大小对话框确定才存），这里只是收尾 */
-    private fun closeEditor() {
-        editorOpen = false
-        padView.closeEditor()
-        runCatching { Native.hold(false) }
-    }
-
-    /** 恢复默认布局：控件回到布局自己放的地方与大小（存进数据包的 settings.txt） */
-    private fun resetPadLayout() {
-        padView.resetControls()
-    }
-
-    /** the drawer's tree: the HUD, the panel, and the paused overlay (the surface keeps presenting through it) */
+    /** 助手的层：右缘的徽标、滑出的抽屉，与宿主菜单叫出来的声音输出对话框 */
     @Composable
-    private fun DrawerRoot() {
-        // 手柄：接着的设备与它们此刻的输入（中心的面板用）
-        val padDevices by GamepadScan.devices.collectAsState()
+    private fun GameOverlayRoot() {
         Box(Modifier.fillMaxSize()) {
-            if (paused) {
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null) { paused = false; Native.lifecycle(1) },
-                    contentAlignment = Alignment.Center,
-                ) { Text(locale.str(R.string.drawer_paused_overlay), color = Color.White,
-                    style = MaterialTheme.typography.titleLarge) }
-            }
-            // 性能 HUD：画在游戏画面之上（App 自己画，宿主不再往画面里画东西）；顶中，避开刘海与挖孔。
-            // 它排在抽屉之前：抽屉是前景的面板，HUD 该在它下面——否则读数会压在抽屉的顶上。
-            HudOverlay(
-                enabled = hudStats,
-                deviceLine = hudDevice,
-                fields = hudFields,
-                fahrenheit = hudFahrenheit,
-                engineLabel = { fgSettings?.load()?.takeIf { it.on }?.let { "LSFG ${it.mult}x" } },
-                chargingText = locale.str(R.string.hud_charging),
-                packPath = packPath,
-                modifier = Modifier.align(Alignment.TopCenter).displayCutoutPadding().padding(top = 8.dp),
-            )
             // 助手的徽标：右边缘垂直居中的一条小把手，点它就滑出助手抽屉。
-            // 它排在设置抽屉之前——设置抽屉开着的时候，那块遮罩把它盖住。
             // 玩家可以在设置里收走它（那条把手是画面上的东西，游戏画面该是游戏的）。
             if (agentBadge && !agentDrawerOpen) {
                 AgentEdgeBadge(
@@ -1015,65 +521,6 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
                     modifier = Modifier.align(Alignment.CenterEnd),
                 )
             }
-            GameDrawer(
-                paused = paused,
-                open = drawerOpen,
-                onOpenChange = { if (it) openDrawer() else drawerOpen = false },
-                settings = fgSettings,
-                onRatePin = { saveRatePin(it) },
-                motion = { motionState() },
-                motionHasGyro = hasGyroscope(this@GameActivity),
-                onMotion = { on, raw -> saveMotion(on, raw) },
-                padShown = { padView.shown },
-                onPadShown = { padView.shown = it },
-                padOpacity = { padView.opacity },
-                onPadOpacity = { padView.opacity = it },
-                padStyle = { padView.style },
-                onPadStyle = { padView.style = it },
-                hudStats = { hudStats },
-                onHudStats = { saveHudStats(it) },
-                hudDevice = { hudDevice },
-                onHudDevice = { saveHudDevice(it) },
-                hudFields = { hudFields },
-                onHudFields = { saveHudFields(it) },
-                hudFahrenheit = { hudFahrenheit },
-                onHudFahrenheit = { saveHudFahrenheit(it) },
-                // 谁玩谁：这个游戏里哪只手柄是几号玩家（存的是手柄的指纹）
-                pads = { GamepadScan.devices.value },
-                players = { padPlayers?.load() ?: PadAssignment() },
-                onPlayers = { assignment ->
-                    padPlayers?.save(assignment)
-                    pushPadMapping()   // 新的表立刻推给宿主：手柄换人，游戏里立刻就是新的玩家
-                    updatePadVisibility()   // 玩家 1 空出来了，虚拟按键回来（它是玩家 1 的手柄）
-                },
-                onLayoutEditor = { openEditor() },
-                onResetPadLayout = { resetPadLayout() },
-                // 外接屏：游戏到大屏上，手机当手柄
-                externalSupported = { externalSupported },
-                externalOn = { externalOn },
-                externalAvailable = { externalScreenAttached() },
-                onExternal = { setExternal(it) },
-                // 金手指：总开关与每条的开关（宿主那边加载、跑、记）
-                cheatsMaster = { cheatSettings?.master() == true },
-                onCheatsMaster = { setCheatsMaster(it) },
-                onCheatToggle = { i, on -> setCheat(i, on) },
-                // 金手指文件：社区库下载的（那一行）或玩家导入的；这一页只显示状态
-                cheatStatus = { cheatStatus },
-                onCheatsDownload = { downloadCheats() },
-                // 暂停/继续：游戏原地停/起，抽屉不收——玩家可以一边停着一边调设置
-                onPauseGame = {
-                    paused = true
-                    Native.lifecycle(0)
-                },
-                onResumeGame = {
-                    paused = false
-                    Native.lifecycle(1)
-                },
-                onExit = {
-                    drawerOpen = false
-                    endProcess()
-                },
-            )
             // 助手的侧抽屉：从右边滑出来的那张（与首页同一套），开着的时候游戏照常跑着
             // 第一次打开之前不组合它：徽标点开之后它才进组合，然后就一直留着
             LaunchedEffect(agentDrawerOpen) { if (agentDrawerOpen) agentEverOpened = true }
@@ -1093,60 +540,119 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
                     onExportGamespec = { packTitleId?.let { exportGamespec(it) } },
                 )
             }
-            // 布局编辑器：App 自己的面板，画在游戏画面上（游戏先等着）
-            if (editorOpen) {
-                PadEditor(
-                    controls = { padView.controls() },
-                    onDrag = { c, cx, cy -> padView.moveControl(c, cx, cy) },
-                    onDrop = { c, cx, cy -> padView.dropControl(c, cx, cy) },
-                    onSizePreview = { c, s -> padView.previewSize(c, s) },
-                    onSizeCommit = { c, s -> padView.commitSize(c, s) },
-                    onSizeCancel = { c -> padView.cancelPreview(c) },
-                    onLongPress = { c -> padView.hideControl(c) },   // 长按：把它藏起来
-                    onShow = { c -> padView.showControl(c) },        // 点一下幽灵：把它找回来
-                    onDone = { closeEditor() },
+            // 宿主菜单的「声音输出」叫出来的对话框：列系统给的设备，选了经 JNI 送回宿主（立刻切换）
+            if (audioMenuOpen) {
+                val devices = remember { audioOutputDevices(this@GameActivity) }
+                val current = remember { runCatching { Native.audioGet() }.getOrDefault(0) }
+                AlertDialog(
+                    onDismissRequest = { audioMenuOpen = false },
+                    confirmButton = {},
+                    dismissButton = {},
+                    title = { Text(stringResource(R.string.drawer_audio_output), style = MaterialTheme.typography.titleMedium) },
+                    text = {
+                        Column {
+                            ListItem(
+                                headlineContent = { Text(stringResource(R.string.drawer_audio_follow)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                trailingContent = { if (current == 0) Text("✓", color = NxPalette.Cream) },
+                            )
+                            devices.forEach { d ->
+                                ListItem(
+                                    headlineContent = { Text(d.productName ?: locale.str(audioKindName(d))) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    trailingContent = { if (current == d.id) Text("✓", color = NxPalette.Cream) },
+                                )
+                            }
+                        }
+                    },
                 )
-            }
-            // 游戏的文本输入：系统的输入法（宿主那边挂起游戏等着）
-            textReq?.let { req ->
-                key(req.title + req.text) {
-                    TextPrompt(req.title, req.text, req.max,
-                        onOk = { submitText(true, it) },
-                        onCancel = { submitText(false, "") })
-                }
             }
         }
     }
 
+    /** 设备种类的词（上游 AudioChoices 的分法）：扬声器 / 有线 / 蓝牙；外接的给系统给的名字 */
+    private fun audioKindName(d: com.nx.android.game.overlay.AudioOutput): Int = when (d.kind) {
+        com.nx.android.game.overlay.AudioOutputKind.SPEAKER -> R.string.drawer_audio_speaker
+        com.nx.android.game.overlay.AudioOutputKind.WIRED -> R.string.drawer_audio_wired
+        com.nx.android.game.overlay.AudioOutputKind.BLUETOOTH -> R.string.drawer_audio_bluetooth
+        com.nx.android.game.overlay.AudioOutputKind.EXTERNAL -> R.string.drawer_audio_output
+    }
+
+    /** 宿主菜单的「声音输出」：宿主经 JNI 找到游戏页的这个方法（上游前端的约定），App 弹自己的选设备对话框 */
+    fun openAudioMenu() {
+        runOnUiThread { audioMenuOpen = true }
+    }
+
+    /** The default driver: the app's built-in one (the driver it ships), written into the pack when the player
+     * never picked a driver for this game. The row is written once — a driver the player picked (the device's own
+     * one included) stays what it is. */
+    private fun applyDefaultDriver(pack: File) {
+        val builtIn = Drivers.list(this).firstOrNull { it.shipped } ?: return
+        PackEnvStore.ensureDriverDefault(pack, builtIn.library.absolutePath)
+    }
+
+    /**
+     * 导出这局的攻关档案：在环境里跑打包器，把 zip 放进下载目录，再把玩家送到提 issue 的页面。
+     *
+     * 玩家拿去提 issue 用的是这个包（表单里自己附上）。档案本身不动——导出是快照，导出完了还能继续往里记。
+     */
+    private fun exportGamespec(titleId: String) {
+        lifecycleScope.launch {
+            val result = exporter.export(this@GameActivity, titleId)
+            result.onSuccess { target ->
+                toast(locale.str(R.string.agent_gamespec_exported, target.name))
+                openGamespecIssue(this@GameActivity)
+            }.onFailure {
+                toast(locale.str(R.string.agent_gamespec_export_failed, it.message.orEmpty()))
+            }
+        }
+    }
+
+    /** The phone's language changed (configChanges holds it): the app's words are read again */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        locale.configurationChanged()
+    }
+
+    override fun onPause() { super.onPause(); if (gameUiReady) Native.lifecycle(0) }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) immersive()
+        if (gameUiReady) Native.lifecycle(if (hasFocus) 2 else 3)
+    }
+
+    override fun onDestroy() {
+        // 这一局没了：助手看到的页面状态回到主界面那一页
+        pageState.setGame(null)
+        super.onDestroy()
+    }
+
     // ---- the surface: the window passes over owned, and dropping it destroys the swapchain before it returns ----
-    override fun surfaceCreated(h: SurfaceHolder) { Native.setSurface(h.surface); padView.fetchLayout() }
-    override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) { Native.setSurface(h.surface); padView.fetchLayout() }
+    override fun surfaceCreated(h: SurfaceHolder) { Native.setSurface(h.surface) }
+    override fun surfaceChanged(h: SurfaceHolder, format: Int, width: Int, height: Int) { Native.setSurface(h.surface) }
     override fun surfaceDestroyed(h: SurfaceHolder) = Native.setSurface(null)
 
-    // ---- input: the touches are the app's now (it works out what they hit); the keys go to the host ----
+    // ---- input: touches and keys go to the core as raw data (the core does its own hit-testing:
+    //      the gamepad's controls, the host menu, and the game's touchscreen are all its to sort) ----
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (!gameUiReady) return true   // Loading 期：还没有手柄，触摸就地吃掉
-        if (editorOpen) return true   // 编辑器开着：触摸归编辑器
-        padView.onTouch(e)
+        if (!gameUiReady) return true   // Loading 期：还没有宿主，触摸就地吃掉
+        val ids = mutableListOf<Int>(); val xs = mutableListOf<Float>(); val ys = mutableListOf<Float>()
+        for (i in 0 until e.pointerCount) { ids += e.getPointerId(i); xs += e.getX(i); ys += e.getY(i) }
+        Native.motion(e.source, e.deviceId, e.action, ids.toIntArray(), xs.toFloatArray(), ys.toFloatArray(), FloatArray(0))
         return true
     }
 
     override fun onGenericMotionEvent(e: MotionEvent): Boolean {
         if (!gameUiReady) return super.onGenericMotionEvent(e)   // Loading 期：宿主还没载入，别碰它
-        noteController(e.source, e.deviceId)   // 手柄动了：它算「在用」（玩家 1 被占时虚拟手柄让位）
-        Native.motion(e.source, e.deviceId, e.action, IntArray(0), FloatArray(0), FloatArray(0), axes(e))
+        if (!isGamepad(e.deviceId)) return super.onGenericMotionEvent(e)
+        Native.motion(e.source, e.deviceId, e.action, IntArray(0), FloatArray(0), FloatArray(0), com.nx.android.input.PadAxes.read(e))
         return true
     }
 
-    private fun axes(e: MotionEvent): FloatArray = PadAxes.read(e)
-
     /**
-     * everything is consumed here (as the NativeActivity's queue did) — except the volume keys, which belong to
-     * Android (the game's audio is in the media volume group, so the system's volume bar is the game's volume).
-     * Back goes to the frontmost thing:
-     * the drawer closes it, the host's own panel (text entry, layout editor, save picker) steps back in it
-     * (dm_menu_state: -1 closed, else a panel is up), and with nothing up Back opens the drawer.
-     * 游戏暂停时也一样：暂停遮罩吃掉了所有触摸（菜单按钮点不到），Back 是那时唯一能叫出抽屉的入口。
+     * everything is forwarded to the core as raw data (it sorts the gamepad, its menu and the game's touch)
+     * — except the volume keys, which belong to Android. Back is the host menu's key (upstream: Back opens
+     * and closes the menu); the assistant's drawer takes Back and the typing keys while it is open.
      */
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(e: KeyEvent): Boolean {
@@ -1163,60 +669,19 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
             }
             return super.dispatchKeyEvent(e)   // 交给焦点所在的输入框
         }
-        // 游戏的文本输入框开着的时候，编辑键（删除、光标）也归输入框——
-        // 中文输入法的删除键走按键事件这条路，转给宿主就删不掉了。
-        // Back 照旧给宿主：那个提示框是它提的，它自己管。
-        if (textReq != null && e.keyCode != KeyEvent.KEYCODE_BACK) {
-            return super.dispatchKeyEvent(e)
-        }
-        if (e.keyCode == KeyEvent.KEYCODE_BACK) {
-            if (e.action == KeyEvent.ACTION_DOWN) {
-                val hostPanel = !drawerOpen && hostPanelUp()   // 抽屉在前面时，Back 归抽屉
-                when {
-                    editorOpen -> closeEditor()   // 编辑器：Back 是收工（改动早就存好了）
-                    drawerOpen -> drawerOpen = false
-                    hostPanel -> Native.key(e.deviceId, e.source, e.keyCode, e.action, e.metaState, e.repeatCount)   // 宿主的面板在后退一步
-                    else -> openDrawer()
-                }
-            }
-            return true   // Back 只在宿主的面板开着时交给宿主
-        }
         if (e.action == KeyEvent.ACTION_DOWN || e.action == KeyEvent.ACTION_UP) {
-            noteController(e.source, e.deviceId)   // 手柄按了键：它算「在用」（玩家 1 被占时虚拟手柄让位）
-            // 宿主带扫描码（新的运行时）就用带扫描码的那个入口；老运行时只有旧的那个。
-            // 扫描码是位置（出厂字典按它判），丢了它整套面键就会按 Android 的名字走 —— 所以
-            // 这里以「真的发不出去」为准，不靠上面那个标志：标志掉了也照样先试带扫描码的那个。
-            if (scanSupported) {
-                try {
-                    Native.keyScan(e.deviceId, e.source, e.keyCode, e.scanCode, e.action, e.metaState, e.repeatCount)
-                } catch (t: Throwable) {
-                    scanSupported = false   // 老运行时：没有那个入口
-                    Native.key(e.deviceId, e.source, e.keyCode, e.action, e.metaState, e.repeatCount)
-                }
-            } else {
-                Native.key(e.deviceId, e.source, e.keyCode, e.action, e.metaState, e.repeatCount)
-            }
+            Native.key(e.deviceId, e.source, e.keyCode, e.action, e.metaState, e.repeatCount)
         }
         return true
     }
-
-    /** 宿主自己的面板开着吗（文本输入、布局编辑器、存档选择；dm_menu_state: -1 是关着的） */
-    private fun hostPanelUp(): Boolean =
-        runCatching { Native.menuState().substringBefore(' ').toIntOrNull() ?: -1 }.getOrDefault(-1) != -1
 
     // ---- lifecycle: the same dance as the NativeActivity's callbacks ----
     override fun onResume() {
         super.onResume()
         // 助手看得见的页面状态：游戏页在前台时它说了算（这一局是哪一局、跑的是什么参数）
         pageState.setGame(gamePageState())
-        if (!gameUiReady) return   // Loading 期：宿主与手柄都还没就位
+        if (!gameUiReady) return   // Loading 期：宿主还没就位
         Native.lifecycle(1)
-        padView.fetchLayout()
-        // 玩家可能刚在首页改过手柄的档案：重读一遍，再推给宿主
-        if (::padController.isInitialized) {
-            padController.reload()
-            pushPadMapping()
-        }
         pushGameMode()
     }
 
@@ -1245,43 +710,15 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         }.getOrDefault("")
     }
 
-    /**
-     * 导出这局的攻关档案：在环境里跑打包器，把 zip 放进下载目录，再把玩家送到提 issue 的页面。
-     *
-     * 玩家拿去提 issue 用的是这个包（表单里自己附上）。档案本身不动——导出是快照，导出完了还能继续往里记。
-     */
-    private fun exportGamespec(titleId: String) {
-        lifecycleScope.launch {
-            val result = exporter.export(this@GameActivity, titleId)
-            result.onSuccess { target ->
-                toast(locale.str(R.string.agent_gamespec_exported, target.name))
-                openGamespecIssue(this@GameActivity)
-            }.onFailure {
-                toast(locale.str(R.string.agent_gamespec_export_failed, it.message.orEmpty()))
-            }
-        }
+    /** 助手的抽屉打开：游戏照常跑着——助手要看着它抓帧、翻日志，停了就什么都看不到 */
+    private fun openAgentDrawer() {
+        agentDrawerOpen = true
     }
 
-    /** The phone's language changed (configChanges holds it): the app's words are read again */
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
-        locale.configurationChanged()
-    }    override fun onPause() { super.onPause(); if (gameUiReady) Native.lifecycle(0) }
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) immersive()
-        if (gameUiReady) Native.lifecycle(if (hasFocus) 2 else 3)
+    /** 助手抽屉收起：游戏本来就在跑，这里只是把抽屉收走 */
+    private fun closeAgentDrawer() {
+        agentDrawerOpen = false
     }
-
-    override fun onDestroy() {
-        // 这一局没了：助手看到的页面状态回到主界面那一页
-        pageState.setGame(null)
-        ctrlListener?.let { runCatching { inputManager.unregisterInputDeviceListener(it) } }
-        ctrlListener = null
-        externalDisplay?.stop()   // 外接屏：把它收起来，宿主那边也放回手机
-        super.onDestroy()
-    }
-
 
     /**
      * 这一页没了，进程也走：宿主在一个进程里只能跑一次（见类注释）。

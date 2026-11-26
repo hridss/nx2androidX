@@ -15,15 +15,14 @@ typedef struct {
 static void *android_keyboard_worker(void *arg) {
     keyboard_request *request = arg;
     pthread_mutex_lock(&g_win_mu);
-    ANativeActivity *act = g_win || g_external_win ? g_act : NULL;
-    if (!act) { pthread_mutex_unlock(&g_win_mu); return NULL; }
-    JavaVM *vm = act->vm;
+    JavaVM *vm = g_host.vm; jobject host_activity = g_win || g_external_win ? g_host.activity : NULL;
+    if (!vm || !host_activity) { pthread_mutex_unlock(&g_win_mu); return NULL; }
     JNIEnv *env = NULL;
     if ((*vm)->AttachCurrentThread(vm, &env, NULL) != JNI_OK) {
         pthread_mutex_unlock(&g_win_mu); return NULL;
     }
     int result = -1;
-    jobject activity = (*env)->NewLocalRef(env, act->clazz);
+    jobject activity = (*env)->NewLocalRef(env, host_activity);
     pthread_mutex_unlock(&g_win_mu);
     if (activity && !(*env)->PushLocalFrame(env, 12)) {
         jclass cls = (*env)->GetObjectClass(env, activity);

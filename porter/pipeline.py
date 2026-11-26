@@ -85,7 +85,6 @@ class Options:
     romfs_at: str = None               # with install: the folder on the device the app reads the RomFS from (porter/install.py), 'app' for its files folder; None: as the device has it
     romfs_push: bool = False           # with romfs_at: push the pack's RomFS into that folder first
     jobs: int = field(default_factory=lambda: os.cpu_count() or 8)
-    no_lsfg: bool = False              # build the host without the frame generation (the lsfg/ code, dm/android/build.py --no-lsfg): the host is then smaller and the frame generation reports "not in this build"
 
     @classmethod
     def from_args(cls, a, **over):
@@ -807,7 +806,7 @@ class Port:
         """The headless host with null graphics (dm/android/gfx_null.c): the game's own modules and the game's own compiler, run without a window"""
         out = self.aw / ('host-glslc-debug' if self.o.debug else 'host-glslc')
         PROG.set(step='building the headless host')
-        nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--exe', '--gfx', 'null', '--no-lsfg', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release']),
+        nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--exe', '--gfx', 'null', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release']),
                 self.logs / 'android_glslc_host.log', env=self.env)
         return out / 'dmhost'
 
@@ -963,7 +962,7 @@ class Port:
         out = self.aw / ('host-debug' if self.o.debug else 'host')   # the host stage's own folder: its objects serve both
         PROG.set(step="building the host as a tool for the game's Oodle decoder")
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--exe', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
-                + (['--no-lsfg'] if self.o.no_lsfg else []),
+               ,
                 self.logs / 'android_oodle_host.log', env=self.env)
         return out / 'dmhost'
     def device_oodle(self):
@@ -1245,7 +1244,7 @@ class Port:
         # the app's mode runs the game itself: libdmplay.so (the host with the player's JNI entry) instead of the APK's libdmhost.so
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out,
                  '--play' if self.o.app else '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
-                + (['--no-lsfg'] if self.o.no_lsfg else [])
+               
                 + (['--adrenotools'] if not prebuilt_loader() else []), self.logs / 'android_host.log', env=self.env)
         self.so = out / ('libdmplay.so' if self.o.app else 'libdmhost.so')
         if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')
@@ -1270,7 +1269,6 @@ class Port:
             driver = self.so.parent / driver_lib_name(driver); shutil.copyfile(self.o.vulkan_driver, driver)
             say(f'--vulkan-driver: {self.o.vulkan_driver.name} is packed as {driver.name} (Android extracts only lib*.so libraries)')
         nsp.run([PY, DM / 'android/apk/mkapk.py', self.so, self.apk_path, paths.signing_key(), '--package', self.package, '--label', self.app_name, '--lib', 'dmhost',
-                 '--data-root', str(self.data_dir()),
                  '--version-code', str(code), '--version-name', self.display]
                 + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + ([] if self.o.debug else ['--release'])
                 + (['--game-mode-performance'] if getattr(self, 'gl', None) is False else [])   # only NVN implements the mode's pacing policy; GL keeps OEM interventions
@@ -1427,7 +1425,7 @@ class Port:
                     copy_into(lib, lib.name)
                 if self.o.vulkan_driver:   # a driver the player picked for this port loads from the same folder
                     copy_into(self.o.vulkan_driver, driver_lib_name(self.o.vulkan_driver))
-                write_marker(target / 'build.json', build_marker(getattr(self, 'profile_h', None), self.o.no_lsfg))
+                write_marker(target / 'build.json', build_marker(getattr(self, 'profile_h', None)))
             else:
                 host = 'host/libdmplay.so'
                 files[host] = self.so
@@ -1448,7 +1446,6 @@ class Port:
                              + (['DM_MENU_BUTTON=0'] if self.o.no_menu_button else [])
                              + ([f'DM_VK_DRIVER={driver_lib_name(self.o.vulkan_driver)}'] if self.o.vulkan_driver else []), settings=TOUCH_SETTINGS if self.o.touch else None,
                              files=files, text=self.lists(), host=host, icon=icon, drivers=drivers, profile_h=getattr(self, 'profile_h', None),
-                             no_lsfg=self.o.no_lsfg,
                              pack_base=str(dst) if self.o.app else None,   # the app's mode: the pack lives in the app's own folder, not in the app's files folder
                              progress=lambda what, done, total: PROG.set(step=f'linking {what}', done=done, total=total, unit='B'))
         self.data_path = dst; self.result['data'] = str(dst)

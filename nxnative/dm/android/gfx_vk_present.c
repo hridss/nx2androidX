@@ -13,8 +13,6 @@
 #include "pixel_font.h"
 #include "overlay_vert.spv.h"
 #include "overlay_frag.spv.h"
-#include "dm_framegen.h"   // the frame generation's frames (this fork's own: dm_framegen.c)
-void crash_thread_init(void);   // the signal alternate stack is per thread (dm.h): the present thread faults on a bad frame, and without it the crash is silent
 #include "rot_vert.spv.h"
 #include "rot_frag.spv.h"
 
@@ -76,7 +74,7 @@ __attribute__((weak)) int dm_menu_state(void) { return -1; }
 __attribute__((weak)) int dm_menu_audio_available(void) { return 0; }
 __attribute__((weak)) int dm_fps_opts(void) { return FPSO_DEFAULT; }   // front_android.c: the counter's options, packed (overlay_layout.h fpso_*)
 __attribute__((weak)) int dm_overlay_fps(void) { return 0; }   // front_android.c: the pause menu's Show FPS
-__attribute__((weak)) int dm_save_note(char *out, int cap) { if (cap > 0) out[0] = 0; return OVX_IDLE; }   // front_player.c: the save manager's rows
+__attribute__((weak)) int dm_save_note(char *out, int cap) { if (cap > 0) out[0] = 0; return OVX_IDLE; }   // front_android.c: the save manager's rows
 __attribute__((weak)) int dm_save_rows(ov_srow rows[OVM_ROWS]) { (void)rows; return 0; }
 __attribute__((weak)) int dm_overlay_custom(int layout, int ctl, float *x, float *y, float *s) { (void)layout; (void)ctl; (void)x; (void)y; *s = 1; return 0; }
 __attribute__((weak)) int dm_overlay_custom_ver(void) { return 0; }
@@ -218,8 +216,8 @@ static void barrier(VkCommandBuffer cb, VkImage img, VkImageLayout from, VkImage
 // The texture is the static layer (w x h), a strip of sprites under it (sh rows) and the pause menu's panel under that (pw x ph). The sprites: each stick's
 // knob, drawn every frame where the finger holds it; the menu button, drawn on its own at OV_MENU_ALPHA whether the gamepad is shown or not; a white disc, the
 // glow over a pressed round button (a wider one glows in its own shape); a black block, the dimming behind the menu. sp: each sprite in the strip (centre x, y,
-// half width and height, texels; 0 = none). The panel is rasterized again whenever the menu's state (dm_menu_state) changes. The rows under the panel
-// (gh) are the frame rate counter's old characters: the counter is the app's now (the performance HUD), so the rows stay empty and reserved.
+// half width and height, texels; 0 = none). The panel is rasterized again whenever the menu's state (dm_menu_state) changes. Under the panel, the frame rate
+// counter's characters (OV_FPS_CHARS, gh rows: one cell each), from which the counter is put together on every present, so a changing number needs no upload.
 // With a theme in the APK (overlay_theme.c), the gamepad is its sprites instead: an atlas per layout in a texture of its own (g_tt), uploaded once, every
 // control drawn from it on each present; the procedural layer is then only the menu's panel, the dimming and the counter.
 enum { SP_DISC = OV_N, SP_BLACK, SP_WHITE, SP_ACCENT, SP_GREEN, SP_AMBER, SP_RED, SP_GREY, SP_N };   // (black, white, accent: solid blocks, the dimming and the layout editor's frames; green, amber, red, grey: the frame-time graph's bars and target line)
@@ -358,7 +356,7 @@ static void ov_menu_icon(const ov_canvas *cv, const ov_ctl *c, const float b[4])
     float bw = r * 0.50f, bt = fmaxf(2, r * 0.11f), gap = r * 0.30f, cx = b[0], cy = b[1];
     for (int k = -1; k <= 1; k++) cv_rrect(cv, cx - bw, cy + k * gap - bt / 2, cx + bw, cy + k * gap + bt / 2, bt / 2, C_WHITE);
 }
-// the text entry (front_player.c front_text_input), in the pause menu's panel: the game's title for it, the field with the text and a caret, the keyboard
+// the text entry (front_android.c front_text_input), in the pause menu's panel: the game's title for it, the field with the text and a caret, the keyboard
 // (overlay_layout.h ov_kb_*: the same rectangles the touches are tested against) with the highlighted key, and the controller's keys
 static void ov_text_panel(const ov_canvas *cv) {
     char title[128], text[256]; int sel, shift; if (!dm_text_entry(title, sizeof title, text, sizeof text, &sel, &shift)) return;
@@ -557,7 +555,7 @@ static void ov_edit_panel(const ov_canvas *cv, int st, float W, float H) {
     cv_text(cv, pr[0] + (pr[2] - cv_text_w(q, qs)) / 2, pr[1] + pr[3] * 0.27f, q, qs, C_WHITE);
     for (int i = OVE_DISCARD; i <= OVE_KEEP; i++) { float b[4]; ov_ed_button(i, pr, b); cv_button(cv, b, ov_ed_word(i), i == OVE_DISCARD, i == held); }
 }
-// The save picker (overlay_layout.h OVS_*): the menu panel's rows, as front_player.c fills them (dm_save_rows); letters as the menu's (notes a little smaller),
+// The save picker (overlay_layout.h OVS_*): the menu panel's rows, as front_android.c fills them (dm_save_rows); letters as the menu's (notes a little smaller),
 // each kind of row at one size: the largest at which all its rows' two texts fit
 static void ov_save_panel(const ov_canvas *cv, int st) {
     ov_srow rows[OVM_ROWS]; if (!dm_save_rows(rows)) return;
@@ -996,53 +994,6 @@ static int overlay_ready(VkCommandBuffer cb, uint32_t k, int menu) {   // k: thi
 // slack). The pause menu's redraws carry no time. DM_VK_PACE=0 (live) presents without times
 static uint64_t g_refresh_ns, g_pace_target, g_pace_ideal, g_pace_anchor, g_pace_n, g_pace_resync, g_pace_slip; static uint32_t g_pace_id; static int g_pace_on = 1;
 static uint64_t mono_ns(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec; }
-// ---- the frame generation's state, for the paths outside the present thread ----
-// The output stream's period (ns; 0 = the frame generation is off): the rate the window asks the system for, so the panel can carry the extra images. Without it the
-// panel stays at the game's own rate and the extra presents do not fit into its refreshes, which slows the game down (the FIFO swapchain carries one image a refresh)
-// The images presented per game frame (1 = the game alone): the adaptive frame rate judges the game's own wait for the present thread by it (with the frame
-// generation on that wait is longer by design, not a slow frame)
-static _Atomic uint64_t g_fg_out_ns; static _Atomic int g_fg_images = 1; static _Atomic int g_refresh_polls;
-int vk_fg_images(void) { return atomic_load(&g_fg_images); }
-// The rate the window asks the system for: the game's own, or the frame generation's output rate while it is on (the panel has to carry the extra images: with the
-// game's own rate the panel stays at 60 Hz, where two images do not fit into one refresh — the FIFO swapchain carries one a refresh — and the present thread then runs
-// at half the game's rate with the game waiting behind it)
-static double window_fps(double period) { uint64_t out_ns = atomic_load(&g_fg_out_ns); return out_ns ? 1e9 / (double)out_ns : (period > 0 ? 1.0 / period : 60.0); }
-// Whether the window's rate has to be asked for again: a higher rate at once, a lower one only after the current one held for 60 presents (a panel that changes its
-// mode for every vote flickers, and the game that switches its own present interval would send it back and forth)
-static int window_rate_changed(double fps, double *rate_fps, double *want_fps, uint64_t *want_since, uint64_t presents) {
-    if (fps != *want_fps) { *want_fps = fps; *want_since = presents; }
-    if (fps == *rate_fps) return 0;
-    if (fps > *rate_fps) { *rate_fps = fps; return 1; }
-    if (presents - *want_since >= 60) { *rate_fps = fps; return 1; }
-    return 0;
-}
-// ---- the performance HUD's counters (dm_present_sample) ----
-// The game's frames presented, the frame generation's frames presented, and the intervals between the game's frames (their sum and their count)
-// for the average frame time. The app reads two samples a second apart and does the arithmetic.
-static _Atomic uint64_t g_hud_game, g_hud_gen, g_hud_span_ns, g_hud_span_n;
-static _Atomic uint64_t g_hud_last_ns;   // the last game's frame's present time (the present thread's own clock)
-static void hud_count(int with_meta, double period, uint64_t now) {
-    if (with_meta) {
-        if (period >= 0) {   // the game's own frame (a redraw presents the last one again — that is not a frame)
-            atomic_fetch_add_explicit(&g_hud_game, 1, memory_order_relaxed);
-            uint64_t last = atomic_load_explicit(&g_hud_last_ns, memory_order_relaxed);
-            atomic_store_explicit(&g_hud_last_ns, now, memory_order_relaxed);
-            if (last && now > last && now - last < 2000000000ull) {   // the interval to the last frame: the frame time (a pause is not one)
-                atomic_fetch_add_explicit(&g_hud_span_ns, now - last, memory_order_relaxed);
-                atomic_fetch_add_explicit(&g_hud_span_n, 1, memory_order_relaxed);
-            }
-        }
-    } else atomic_fetch_add_explicit(&g_hud_gen, 1, memory_order_relaxed);
-}
-uint64_t vk_refresh_cycle_ns(void);
-void dm_present_sample(uint64_t out[5]) {
-    if (!out) return;
-    out[0] = atomic_load_explicit(&g_hud_game, memory_order_relaxed);
-    out[1] = atomic_load_explicit(&g_hud_gen, memory_order_relaxed);
-    out[2] = atomic_load_explicit(&g_hud_span_ns, memory_order_relaxed);
-    out[3] = atomic_load_explicit(&g_hud_span_n, memory_order_relaxed);
-    out[4] = vk_refresh_cycle_ns();
-}
 static void pace_reset(void) { g_pace_target = g_pace_ideal = g_pace_anchor = g_refresh_ns = 0; }
 static uint64_t pace_snap(uint64_t t) {   // the first vsync at or after t on the grid through the anchor
     uint64_t r = g_refresh_ns, a = g_pace_anchor;
@@ -1052,21 +1003,14 @@ static uint64_t pace_snap(uint64_t t) {   // the first vsync at or after t on th
 static uint64_t pace_desired(double period) {   // the frame's desired present time (0 = none)
     if (!V.has_dtiming || !g_swap) return 0;
     if (g_pace_n % 30 == 0) { const char *e = getenv("DM_VK_PACE"); g_pace_on = !(e && !atoi(e)); }
-    {   // The panel's refresh: a window rate change may take a few frames to follow (read it often for a while), and while the frame generation is on the panel may
-        // change on its own (LTPO, thermal): a slow poll then, too
-        int polls = atomic_load(&g_refresh_polls);
-        int poll = !g_refresh_ns || g_pace_n % 120 == 0;
-        if (!poll && polls > 0 && g_pace_n % 30 == 0) { poll = 1; atomic_store(&g_refresh_polls, polls - 1); }
-        if (!poll && vk_fg_images() > 1 && g_pace_n % 240 == 0) poll = 1;
-        if (poll) {
-            VkRefreshCycleDurationGOOGLE rc; uint64_t was = g_refresh_ns;
-            if (vkGetRefreshCycleDurationGOOGLE(V.dev, g_swap, &rc) == VK_SUCCESS && rc.refreshDuration > 1000000) g_refresh_ns = rc.refreshDuration;
-            // A new period restarts the cadence (a resync: one frame a vsync late). The Legion Y700 (2025) reports its 120 Hz period a few ns differently at each read, so
-            // the cadence restarted every 120 presents: one frame shown for three vsyncs every 2 s in every game (Fire Emblem: Three Houses' idle title, 2.4 ms of GPU, dropped
-            // 2-4 frames of 300). Under 1% the period is taken without a restart; a real mode change (60 / 90 / 120 Hz) still restarts it
-            uint64_t dif = g_refresh_ns > was ? g_refresh_ns - was : was - g_refresh_ns;
-            if (g_refresh_ns && g_refresh_ns != was && (!was || dif * 100 >= was)) { VKLOG("[perf] display timing: refresh %.3f ms", g_refresh_ns / 1e6); g_pace_target = 0; }
-        }
+    if (!g_refresh_ns || g_pace_n % 120 == 0) {
+        VkRefreshCycleDurationGOOGLE rc; uint64_t was = g_refresh_ns;
+        if (vkGetRefreshCycleDurationGOOGLE(V.dev, g_swap, &rc) == VK_SUCCESS && rc.refreshDuration > 1000000) g_refresh_ns = rc.refreshDuration;
+        // A new period restarts the cadence (a resync: one frame a vsync late). The Legion Y700 (2025) reports its 120 Hz period a few ns differently at each read, so
+        // the cadence restarted every 120 presents: one frame shown for three vsyncs every 2 s in every game (Fire Emblem: Three Houses' idle title, 2.4 ms of GPU, dropped
+        // 2-4 frames of 300). Under 1% the period is taken without a restart; a real mode change (60 / 90 / 120 Hz) still restarts it
+        uint64_t dif = g_refresh_ns > was ? g_refresh_ns - was : was - g_refresh_ns;
+        if (g_refresh_ns && g_refresh_ns != was && (!was || dif * 100 >= was)) { VKLOG("[perf] display timing: refresh %.3f ms", g_refresh_ns / 1e6); g_pace_target = 0; }
     }
     // DM_VK_PACE_LOG=1 (live): per 600 frames, the measured lead (each frame's earliest possible present time after its present call) and the driver's present margin,
     // and each resync with the predicted shortfall
@@ -1105,22 +1049,14 @@ static uint64_t pace_desired(double period) {   // the frame's desired present t
     g_pace_target = t;
     return t - g_refresh_ns / 2;
 }
-// One presented image: the source (a game frame's window texture, or one of the frame generation's images),
-// its picture rect inside the source, fitted into the swapchain, with the overlay drawn on top — the gamepad
-// and the menus travel on EVERY presented image, the frame generation's included, or they would flicker at
-// the game's own rate. with_meta: the game frame's extras (the sRGB pick on the first
-// present, the picture-rect report for the touch mapping); a generated frame follows what it chose, and never
-// flips (the chain was fed the texture already upright). period < 0: a redraw (ticket 0).
-static VkFormat im_meta_srgb;   // the game frame's sRGB pick: a generated frame follows it (present_window sets it)
-static void present_one(vkimg_t *im, VkImage src, int cx, int cy, int cw, int ch, int flip, double period, uint64_t ticket, int with_meta) {
-    // The performance HUD's counters: the game's frame (a redraw presents the last one again — not a frame) and the generation's frames
-    hud_count(with_meta, period, mono_ns());
+static void present_window(vkimg_t *im, const int crop[4], double period, uint64_t ticket) {   // period: the game's frame period (s); < 0 for a redraw (ticket 0)
     uint32_t k = g_pi++ % 8;
     // A redraw is not worth a freeze: this device's kgsl or compositor can hold a fence or a buffer for half a second, and waiting it out stalls the whole menu. Wait
     // 30 ms at most and give the frame up; the next redraw, 33 ms on, tries again with the newest state. Game frames still wait without a bound
     uint64_t wt = period < 0 ? 30000000ull : UINT64_MAX;
     if (vkWaitForFences(V.dev, 1, &g_pfence[k], 1, wt) == VK_TIMEOUT) return;
-    if (with_meta && im_meta_srgb != g_want) { g_want = im_meta_srgb; swap_destroy(); if (!swap_make()) return; }   // once, at the first present of the other kind
+    VkFormat want = im->fmt == VK_FORMAT_R8G8B8A8_SRGB || im->fmt == VK_FORMAT_B8G8R8A8_SRGB || im->fmt == VK_FORMAT_A8B8G8R8_SRGB_PACK32 ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
+    if (want != g_want) { g_want = want; swap_destroy(); if (!swap_make()) return; }   // once, at the first present of the other kind
     uint32_t idx; VkResult r = vkAcquireNextImageKHR(V.dev, g_swap, wt, g_acq[k], VK_NULL_HANDLE, &idx);
     if (r == VK_TIMEOUT) return;   // (a redraw that could not get an image in time: the next one presents this state)
     if (r == VK_ERROR_OUT_OF_DATE_KHR) { swap_destroy(); if (!swap_make()) return; r = vkAcquireNextImageKHR(V.dev, g_swap, UINT64_MAX, g_acq[k], VK_NULL_HANDLE, &idx); }
@@ -1134,18 +1070,19 @@ static void present_one(vkimg_t *im, VkImage src, int cx, int cy, int cw, int ch
     barrier(cb, tgt, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     VkClearColorValue black = {{0, 0, 0, 1}}; VkImageSubresourceRange rg = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
     vkCmdClearColorImage(cb, tgt, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &black, 1, &rg);
+    int cx = crop ? crop[0] : 0, cy = crop ? crop[1] : 0, cw = crop && crop[2] ? crop[2] : (int)im->w, ch = crop && crop[3] ? crop[3] : (int)im->h;
     double s = fmin((double)g_sext.width / cw, (double)g_sext.height / ch); int dw = (int)(cw * s), dh = (int)(ch * s), dx = ((int)g_sext.width - dw) / 2, dy = ((int)g_sext.height - dh) / 2;
     { float y0, bh; if (dm_overlay_visible() == 1 && ov_band((float)g_sext.width, (float)g_sext.height, &y0, &bh)) {   // the picture across the top, the gamepad under it (ov_band: never on an external display, whose gamepad stays on the phone)
           s = fmin((double)g_sext.width / cw, (double)y0 / ch); dw = (int)(cw * s); dh = (int)(ch * s); dx = ((int)g_sext.width - dw) / 2; dy = ((int)y0 - dh) / 2; } }
-    if (with_meta) vk_pic_set((float)dx / g_sext.width, (float)dy / g_sext.height, (float)dw / g_sext.width, (float)dh / g_sext.height);
+    vk_pic_set((float)dx / g_sext.width, (float)dy / g_sext.height, (float)dw / g_sext.width, (float)dh / g_sext.height);
     VkImageBlit b = {{VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {{cx, cy, 0}, {cx + cw, cy + ch, 1}}, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1}, {{dx, dy, 0}, {dx + dw, dy + dh, 1}}};
-    if (flip && vk_window_bottom_up()) { b.srcOffsets[0].y = cy + ch; b.srcOffsets[1].y = cy; }   // lower-left origin: the window image is stored bottom-up (gfx_vk_exec.c)
-    if (im && im->layout == VK_IMAGE_LAYOUT_UNDEFINED) { barrier(cb, im->img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); im->layout = VK_IMAGE_LAYOUT_GENERAL; }   // an imported frame buffer, first shown (gl_android.c)
-    vkCmdBlitImage(cb, src, VK_IMAGE_LAYOUT_GENERAL, tgt, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &b, VK_FILTER_LINEAR);
+    if (vk_window_bottom_up()) { b.srcOffsets[0].y = cy + ch; b.srcOffsets[1].y = cy; }   // lower-left origin: the window image is stored bottom-up (gfx_vk_exec.c)
+    if (im->layout == VK_IMAGE_LAYOUT_UNDEFINED) { barrier(cb, im->img, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL); im->layout = VK_IMAGE_LAYOUT_GENERAL; }   // an imported frame buffer, first shown (gl_android.c)
+    vkCmdBlitImage(cb, im->img, VK_IMAGE_LAYOUT_GENERAL, tgt, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &b, VK_FILTER_LINEAR);
     VkImageLayout lay = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     int external = dm_external_active();
     int ovm = external ? 0 : dm_overlay_visible(), menu = external ? -1 : dm_menu_state(), fps = dm_overlay_fps();
-    atomic_store_explicit(&g_fg_on, fps && (fpso_rows(dm_fps_opts()) & FPSO_GRAPH), memory_order_relaxed);   // the graph's samples are taken while its row is shown (fg_note takes them)
+    atomic_store_explicit(&g_fg_on, fps && (fpso_rows(dm_fps_opts()) & FPSO_GRAPH), memory_order_relaxed);
     if ((ovm || menu >= 0 || fps) && overlay_ready(cb, k, menu) && (V.has_dynrender || ov_fb(idx))) {   // without dynamic rendering, only with the image's framebuffer
         barrier(cb, tgt, lay, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL); lay = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         VkRenderingAttachmentInfo ca = {VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO, NULL, tview, lay, 0, NULL, VK_IMAGE_LAYOUT_UNDEFINED, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE};
@@ -1200,11 +1137,6 @@ static void present_one(vkimg_t *im, VkImage src, int cx, int cy, int cw, int ch
         VkSurfaceCapabilitiesKHR c; vkGetPhysicalDeviceSurfaceCapabilitiesKHR(V.pd, g_surf, &c);
         if ((c.currentTransform & (VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR)) != (VkSurfaceTransformFlagsKHR)g_pre) swap_destroy();
     }
-}
-static void present_window(vkimg_t *im, const int crop[4], double period, uint64_t ticket) {   // period: the game's frame period (s); < 0 for a redraw (ticket 0)
-    int cx = crop ? crop[0] : 0, cy = crop ? crop[1] : 0, cw = crop && crop[2] ? crop[2] : (int)im->w, ch = crop && crop[3] ? crop[3] : (int)im->h;
-    im_meta_srgb = im->fmt == VK_FORMAT_R8G8B8A8_SRGB || im->fmt == VK_FORMAT_B8G8R8A8_SRGB || im->fmt == VK_FORMAT_A8B8G8R8_SRGB_PACK32 ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
-    present_one(im, im->img, cx, cy, cw, ch, 1, period, ticket, 1);
 }
 // headless frame shots
 static int shot_wanted(uint64_t n) {
@@ -1270,24 +1202,7 @@ static void *present_thread(void *arg) {
         }
         typeof(g_pq[0]) e = g_pq[g_pq_tail % PQ_N];
         pthread_mutex_unlock(&g_pq_mu);
-        if (e.im) { last = e; pthread_mutex_lock(&g_present_mu);
-            if (swap_make()) {
-                VkImage gen[3] = {0, 0, 0}; double hold = 0, out_period = 0;
-                int ng = e.period >= 0 ? dm_fg_frame(e.im, e.has_crop ? e.crop : NULL, e.period, gen, &hold, &out_period) : 0;
-                int cx = e.has_crop && e.crop[0] ? e.crop[0] : 0, cy = e.has_crop && e.crop[1] ? e.crop[1] : 0,
-                    cw = e.has_crop && e.crop[2] ? e.crop[2] : (int)e.im->w, ch = e.has_crop && e.crop[3] ? e.crop[3] : (int)e.im->h;
-                if (e.period >= 0) {   // a redraw presents the last frame again: the frame generation's state stays as it was
-                    atomic_store(&g_fg_out_ns, out_period > 0 ? (uint64_t)(out_period * 1e9) : 0);
-                    atomic_store(&g_fg_images, ng > 0 ? ng + 1 : 1);
-                }
-                // the generated frames first (each held for its equal share), then the game's own frame — the
-                // overlay travels on every one of them, or the gamepad would flicker at the game's rate
-                for (int g = 0; g < ng; g++) present_one(NULL, gen[g], 0, 0, cw, ch, 0, hold, 0, 0);
-                // The game frame holds its own share of the interval, like the generated ones: stepping by the game's period instead would space the desired
-                // present times unevenly (one image for two refreshes, the next for one)
-                present_one(e.im, e.im->img, cx, cy, cw, ch, 1, ng ? hold : e.period, e.n, 1);
-            }
-            pthread_mutex_unlock(&g_present_mu); }
+        if (e.im) { last = e; pthread_mutex_lock(&g_present_mu); if (swap_make()) present_window(e.im, e.has_crop ? e.crop : NULL, e.period, e.n); pthread_mutex_unlock(&g_present_mu); }
         pthread_mutex_lock(&g_pq_mu); g_pq_tail++; g_pq_done = e.n; pthread_cond_broadcast(&g_pq_cv); pthread_mutex_unlock(&g_pq_mu);
     }
     return NULL;
@@ -1322,23 +1237,13 @@ uint64_t mtl_present(const tex_t *t, double period, const int crop[4]) {
     // DM_VK_WINDOW_GAME_RATE=1 (live, read every 60 presents): the window asks for the game's own rate (nvn_game_fps), not the period a frame-step hold or the adaptive
     // rate lengthened. Held at 2 vsyncs for 60 presents, Breath of the Wild's window asked for 30 fps and a Galaxy S25 Ultra's display went to 30 Hz (refresh 33.3 ms);
     // every trial back to 60 then ran its first frames on that 30 Hz display, showed them late and failed within 5 presents, at 1-2 ms of GPU work a frame on its
-    // title screen, and the game stayed at 30 fps for the run (the display at 30 Hz in each of four 30 fps runs, never in the runs that held 60). This line's frame
-    // generation votes with its output rate instead (window_fps below), so the env only shortens the period before that vote when a player turns it on
+    // title screen, and the game stayed at 30 fps for the run (the display at 30 Hz in each of four 30 fps runs, never in the runs that held 60)
     static int game_rate = -1; static uint64_t game_rate_at; double wperiod = period;
     if (game_rate < 0 || g_presents - game_rate_at >= 60) { game_rate = dm_pacing_window_game_rate(); game_rate_at = g_presents; }
     if (game_rate) { int nvn_game_fps(void); int gf = nvn_game_fps(); if (gf > 0 && 1.0 / gf < wperiod) wperiod = 1.0 / gf; }
-    // The rate asked for is the frame generation's output rate while it is on: the panel has to carry the extra images, and with the game's own rate the panel
-    // stays at 60 Hz, where two images do not fit into one refresh (the FIFO swapchain carries one a refresh) — the present thread then runs at half the game's
-    // rate and the game waits behind it: the game slows down
-    static ANativeWindow *rate_win; static double rate_fps, want_fps; static uint64_t want_since;
-    double fps = window_fps(wperiod);
-    int changed = window_rate_changed(fps, &rate_fps, &want_fps, &want_since, g_presents);
-    if (g_win && (g_win != rate_win || changed)) {
-        rate_win = g_win;
-        if (!changed) rate_fps = fps;
-        dm_perf_window(g_win, fps);
-        atomic_store(&g_refresh_polls, 300);   // the panel follows the vote after a few frames: read its refresh often for a while
-    }
+    static ANativeWindow *rate_win; static double rate_period, want_period; static uint64_t want_since;
+    if (wperiod != want_period) { want_period = wperiod; want_since = g_presents; }
+    if (g_win && (g_win != rate_win || (wperiod != rate_period && (wperiod < rate_period || g_presents - want_since >= 60)))) { rate_win = g_win; rate_period = wperiod; dm_perf_window(g_win, wperiod > 0 ? 1.0 / wperiod : 60); }
     uint64_t n = ++g_presents;
     // without display times (no VK_GOOGLE_display_timing, no window, or none came back) the hand-over time stands in, as before: the governor's late check needs readings
     { int disp = V.has_dtiming && dm_front_window() && (n <= 240 || g_pres_recorded); struct timespec ts; if (!disp) clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1435,7 +1340,6 @@ void mtl_present_wait(uint64_t tk) {   // NVN acquire: the window texture's last
 }
 double mtl_presented_time(uint64_t n) { return present_time_get(n); }
 double vk_refresh_ms(void) { return V.has_dtiming && g_pres_recorded && g_refresh_ns ? g_refresh_ns / 1e6 : 0; }   // perf_android.c's late check: the display's refresh, when display times are what it gets
-uint64_t vk_refresh_cycle_ns(void) { return V.has_dtiming ? g_refresh_ns : 0; }   // dm_framegen.c: the refresh cap (how many presented images fit a game frame)
 uint32_t mtl_present_qos(void) { return 0; }
 int mtl_link_active(void) { return 0; }
 int mtl_link_wait_tick(int vsyncs, uint64_t timeout_ns) { (void)vsyncs; (void)timeout_ns; return 0; }

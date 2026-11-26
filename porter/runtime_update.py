@@ -20,7 +20,7 @@ from porter.revision import PLAYER_API_REVISION
 HOOKS = ('libhook_impl.so', 'libmain_hook.so', 'libfile_redirect_hook.so', 'libgsl_alloc_hook.so')
 
 # Where the runtime lives in a pack: the host in its own folder, the managed hooks beside the drivers.
-HOST = 'host/libdmplay.so'
+HOST = 'host/libdmhost.so'
 HOOK_DIR = 'drivers'
 
 # The files a runtime update owns and replaces in place.
@@ -49,11 +49,11 @@ def runtimes_root():
     return Path(given) if given else None
 
 
-def build_marker(profile_h, no_lsfg):
-    """The build fingerprint the runtime was made with: the player interface it speaks, the profile it was
-    built from (the game_profile.h's hash — the alias headroom is in there), and the lsfg switch. The app
-    compares this against what it expects before it loads the runtime."""
-    return {'player_api_revision': PLAYER_API_REVISION, 'profile_h': profile_h or '', 'no_lsfg': bool(no_lsfg)}
+def build_marker(profile_h):
+    """The build fingerprint the runtime was made with: the player interface it speaks and the profile it was
+    built from (the game_profile.h's hash — the alias headroom is in there). The app compares this against what
+    it expects before it loads the runtime."""
+    return {'player_api_revision': PLAYER_API_REVISION, 'profile_h': profile_h or ''}
 
 
 def embed_profile(pack: Path, title_id: str, profile_dir: Path) -> bool:
@@ -184,7 +184,7 @@ def stage_profile(profile: Path, staged: Path, title_id: str, pack: Path, emit) 
     return names
 
 
-def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=print):
+def rebuild(pack, *, jobs=None, allow_profile_drift=False, emit=print):
     pack = Path(pack).resolve()
     expected = os.environ.get('NX2A_PLAYER_API_REVISION')
     if expected is not None and expected != str(PLAYER_API_REVISION):
@@ -229,7 +229,6 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
             args = [sys.executable, str(DM / 'android/build.py'), '--game', title_id,
                     '--ndk', str(ndk), '--out', str(output), '--play', '--release',
                     '--jobs', str(jobs or os.cpu_count() or 8)]
-            if no_lsfg: args.append('--no-lsfg')
             if not use_prebuilt: args.append('--adrenotools')
             env = dict(os.environ, DM_GAME=title_id, DM_GAMES_DIR=str(profile_root), DM_GAMES_FIRST='1')
             tc_lib = toolchain.toolchain_lib_dirs()
@@ -238,7 +237,7 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
             with subprocess.Popen(args, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace') as process:
                 for line in process.stdout: emit(line.rstrip())
                 if process.wait(): raise RuntimeError('Runtime compilation failed. Retry, or port the game again from its original files.')
-            host = output / 'libdmplay.so'
+            host = output / 'libdmhost.so'
             with host.open('rb') as stream: header = stream.read(20)
             if len(header) < 20 or header[:5] != b'\x7fELF\x02' or struct.unpack_from('<H', header, 18)[0] != 183:
                 raise ValueError('The compiler did not produce an Android ARM64 runtime.')
@@ -262,8 +261,8 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
                 target = target_root / title_id.lower()
                 for name in HOOKS:
                     install(stage / name, target / name)
-                install(stage / 'libdmplay.so', target / 'libdmplay.so')
-                write_marker(target / 'build.json', build_marker(chosen, no_lsfg))
+                install(stage / 'libdmhost.so', target / 'libdmhost.so')
+                write_marker(target / 'build.json', build_marker(chosen))
                 manifest.pop('host', None)
                 manifest.pop('host_front', None)
                 manifest['player_api_revision'] = PLAYER_API_REVISION
@@ -276,7 +275,7 @@ def rebuild(pack, *, no_lsfg=False, jobs=None, allow_profile_drift=False, emit=p
                 # half in place.
                 for name in HOOKS:
                     install(stage / name, pack / HOOK_DIR / name)
-                install(stage / 'libdmplay.so', pack / HOST)
+                install(stage / 'libdmhost.so', pack / HOST)
                 manifest['host'] = HOST
                 manifest['player_api_revision'] = PLAYER_API_REVISION
                 manifest['profile_h'] = chosen   # the profile this runtime was built from (a pack without one gets it now)

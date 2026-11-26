@@ -101,7 +101,6 @@ object LibraryFileScanner {
                       graphics = man.optString("graphics"),
                       lan = if (man.has("lan")) man.getBoolean("lan") else null,
                       hostDeclared = hostDeclared,
-                      noLsfg = if (man.has("no_lsfg")) man.optBoolean("no_lsfg") else null,
                       profileH = man.optString("profile_h"),
                       marker = marker)
     }
@@ -112,7 +111,6 @@ object LibraryFileScanner {
         RuntimeBuildMarker(
             playerApiRevision = o.optInt("player_api_revision", 0),
             profileH = o.optString("profile_h"),
-            noLsfg = if (o.has("no_lsfg")) o.optBoolean("no_lsfg") else null,
         )
     } catch (e: Exception) {
         null
