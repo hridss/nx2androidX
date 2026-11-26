@@ -153,6 +153,42 @@ def oodle_result(tmp, recs, why='', where=''):
         f"{sum(len(e) for _, e in by.values()):,} of them hold shaders")
     return dec
 
+def _android(g):
+    return android_profile.AndroidProfile(g) if (g.dir / 'android.tsv').is_file() else None
+
+
+def entry(g, p):
+    if p: return profiles.Entry(g.id, g.get('name', g.id), True, p.status, p.tested, p.package)
+    return profiles.Entry(g.id, g.get('name', g.id), False, 'not ported', '', f'org.nx2a.t{g.id.lower()}')
+
+
+def by_title(tid):
+    """(game profile, Android profile or None) of a title id: the tree's profiles first (upstream's by_title), then the
+    player's imported ones (the layer) — the app's game card and the profiles list answer for imported games too"""
+    if isinstance(tid, str) and re.fullmatch(r'[0-9A-Fa-f]{16}', tid): tid = int(tid, 16)
+    g, p = profiles.by_title(tid)
+    if g: return g, p
+    d = profiles_layer.layer_profile(tid)
+    g = game.Game(d) if d else None
+    return (g, _android(g)) if g else (None, None)
+
+
+def all_profiles():
+    """(game profile, Android profile or None) of every game the tool knows: the repository's own profiles first, then the ones the player imported"""
+    out, seen = [], set()
+    for g in list(game.all_games()) + [game.Game(d) for d in profiles_layer.layer_profiles()]:
+        if g.id in seen: continue
+        seen.add(g.id); out.append((g, _android(g)))
+    return out
+
+
+def all_entries(android_only=True):
+    rows = [entry(g, p) for g, p in all_profiles()]
+    return [r for r in rows if r.android or not android_only]
+
+
+
+
 def inspect(folder, keys=None):
     """What a game folder holds, without extracting anything: the GUI's game card and `porter inspect`. keys: prod.keys (default: the configured one), which reads the title ID
     of a dump with neither a ticket nor a [title ID] tag (an untagged cartridge dump) from its NCA headers"""
@@ -160,7 +196,7 @@ def inspect(folder, keys=None):
     base = p if p.is_file() else None
     if base is not None: p = p.parent
     app, fam = nsp.scan_nsps(p, dumps.EXTS, keys or config.load().get('keys'), base)
-    g, ap = profiles.by_title(app)
+    g, ap = by_title(app)
     files = [fam['base'], *(p for _, p in fam['updates']), *(p for _, _, p in fam['dlc'])]
 
     def where(f):   # the subfolder it was found in ('' when it sits next to the picked file): the GUI's card and the app say where each file came from
@@ -181,7 +217,7 @@ def inspect(folder, keys=None):
     if not ap:
         info['reason'] = f'{g.get("name", g.id)} has a game profile (iOS) but is not ported to Android yet (an experimental port tries it with that profile)'
         return info
-    info.update(android=profiles.entry(g, ap).as_dict(), supported=True)
+    info.update(android=entry(g, ap).as_dict(), supported=True)
     if ap.status == 'wip': info['reason'] = f'{g.get("name", g.id)} is a work in progress: it plays, but parts of it are missing (its row in docs/PORT_CHECKLIST.md says which)'
     if pack not in builds:
         info['reason'] = (info['reason'] + '; ' if info['reason'] else '') + f'{pack} is not a version the profile was brought up on ({", ".join(builds)}): it is packed from a derived profile, without that version\'s fixes'

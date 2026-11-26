@@ -2,7 +2,7 @@
 import argparse, json, os, sys
 from pathlib import Path
 
-from porter.phone_port import Options, PhonePort, inspect as phone_inspect
+from porter.phone_port import Options, PhonePort, inspect as phone_inspect, all_entries
 
 
 def _parser():
@@ -151,7 +151,7 @@ def cmd_profiles(a):
             print(f'[RED] {e}', file=sys.stderr); return 2
         print(f'imported {rec["count"]} game profile(s) (r{rec["revision"]}, {str(rec["commit"])[:8]}) into {profiles_layer.layer_dir()}')
         return 0
-    rows = profiles.all_entries(android_only=not a.all)
+    rows = all_entries(android_only=not a.all)
     if a.json: _print_json([r.as_dict() for r in rows]); return 0
     for r in rows: print(f'{r.id}  {r.status:12} {r.name}' + (f'  ({r.tested})' if r.tested else ''))
     return 0

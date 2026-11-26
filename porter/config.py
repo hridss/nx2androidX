@@ -8,7 +8,7 @@ KEYS = {
     'keys': 'path of prod.keys',
     'firmware': "folder of the console's system content files (.nca; a firmware dump's NAND SYSTEM Contents/registered), for games that read system data",
     'ndk': 'Android NDK folder (r27c)',
-    'dotnet': 'dotnet executable (.NET 10: the SDK to build with, the runtime to run with)',
+    'dotnet': 'dotnet executable (.NET SDK 10)',
     'adb': 'adb executable (platform-tools)',
     'out': 'folder for the APK and data pack (empty = the game folder)',
     'device': 'adb serial of the device to install on (empty = the only one connected)',

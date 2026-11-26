@@ -92,14 +92,14 @@ class ProfilesLayerFallbackTest(unittest.TestCase):
             (d / 'android.tsv').write_text(f'status\t{status}\n', encoding='utf-8')
 
     def test_by_title_finds_a_profile_only_the_layer_has(self):
-        g, p = profiles.by_title(int(OTHER, 16))
+        g, p = phone_port.by_title(int(OTHER, 16))
         self.assertIsNotNone(g)
         self.assertEqual(g.id, OTHER)
         self.assertIsNotNone(p)
         self.assertEqual(p.status, 'wip')
 
     def test_the_games_the_tool_knows_include_the_layer(self):
-        ids = {e.id for e in profiles.all_entries(android_only=False)}
+        ids = {e.id for e in phone_port.all_entries(android_only=False)}
         self.assertIn(TID, ids)
         self.assertIn(OTHER, ids)
 
@@ -108,8 +108,8 @@ class ProfilesLayerFallbackTest(unittest.TestCase):
         d = profiles_layer.layer_dir() / third
         d.mkdir(parents=True)
         (d / 'game.tsv').write_text(f'title_id\t{third}\nname\t只有 iOS 档案的游戏\n', encoding='utf-8')
-        self.assertEqual([e for e in profiles.all_entries() if e.id == third], [])   # android_only hides it
-        rows = [e for e in profiles.all_entries(android_only=False) if e.id == third]
+        self.assertEqual([e for e in phone_port.all_entries() if e.id == third], [])   # android_only hides it
+        rows = [e for e in phone_port.all_entries(android_only=False) if e.id == third]
         self.assertEqual(len(rows), 1)
         self.assertFalse(rows[0].android)
 
