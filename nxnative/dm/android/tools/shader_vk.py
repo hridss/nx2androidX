@@ -525,7 +525,7 @@ def main():
             if k in failures: raise ValueError(failures[k])
             product = shader_products.output(w, k, STAGES[stages[k]])
             if product is None: raise ValueError(batch_errors[k] or 'no output')
-translated, res = product
+            translated, res = product
             spv = spv_precise.lower(spv_half.lower(spv_texture_offsets.lower(translated)))
             if k in patches:
                 try: spv = spv_post.text_patch(spv, patches[k], a.spirv_tools, w, k); print(f'{k}: patched by the profile (patches.py SPIRV)', flush=True)
