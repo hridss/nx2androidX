@@ -4,6 +4,8 @@
 #   build.py --game <title ID> [--ndk <NDK dir>] [--out <dir>] [--jobs N] [--exe] [--lib] [--only-compile] [--release]
 # --release: no debug information, the library stripped, DM_RELEASE defined (the app ignores DM_CTL), outputs in dm/android/out/<title ID>-release.
 # Outputs in <out> (default dm/android/out/<title ID>): dmhost (an executable for adb shell runs: headless, no window) and libdmhost.so (the app's NativeActivity).
+# The front end depends on the shape: --play (the app's :play process) and --exe link the player's front, --lib links the upstream's APK front
+# (a standalone APK: a NativeActivity of its own). One front per build, never both.
 # Objects are rebuilt when a source or a header it includes changed (clang -MMD dependency files).
 import argparse, concurrent.futures as cf, os, platform, re, subprocess, sys
 from pathlib import Path
@@ -91,10 +93,27 @@ for sh in sorted((DM / 'android/shaders').glob('*.*')):
 def srcs(*globs): return [p for g in globs for p in sorted(DM.glob(g))]
 HOST = [p for p in srcs('host/*.c') if p.name not in ('hle_movie_avc.c',)]   # VideoToolbox: dm/android/movie_avc.c instead
 GFX = srcs('gfx/*.c', 'gfx/nvn/*.c', 'gfx/tex/*.c')
-PORT = [p for p in srcs('android/compat/*.c', 'android/*.c') if not (p.name == 'gfx_null.c' and a.gfx != 'null') and not ((p.name.startswith('gfx_vk') or p.name == 'gl_android.c') and a.gfx != 'vk') and not p.name in ('jni_android.c', 'dm_framegen.c', 'vka_shim.c', 'front_android.c')]   # one graphics backend; GLES presents through Vulkan and is not part of a null NVN tool; jni_android.c goes into --play's link, dm_framegen.c + vka_shim.c into every target's (their list below); front_android.c is upstream's APK front, the player front (front_player.c) replaces it
 ASM = srcs('host/entry.S', 'gfx/nvn/nvn_entry.S', 'gfx/nvn/nvn_thunks.S')
 VPX = srcs('third_party/libvpx/**/*.c')
 ZSTD = srcs('third_party/zstd/zstddeclib.c')   # zstd's decompressor: the shader bundle's SPIR-V (gfx_vk_shader.c bundle_spv)
+
+# The two fronts, one per shape: the player's (the app's :play process: the app draws the gamepad and every
+# panel) and the upstream's APK front (a standalone APK: a NativeActivity of its own, which draws the gamepad
+# itself and finds the folder its data is in). They implement the same interface (dm/host/front.h), so a build
+# links one of them, never both.
+FRONT_PLAYER, FRONT_APK = 'front_player.c', 'front_android.c'
+
+def port_files(front):
+    """The port sources for one shape: the common ones, with that shape's front in the other one's place."""
+    out = []
+    for p in srcs('android/compat/*.c', 'android/*.c'):
+        if p.name == 'gfx_null.c' and a.gfx != 'null': continue   # one graphics backend
+        if (p.name.startswith('gfx_vk') or p.name == 'gl_android.c') and a.gfx != 'vk': continue   # GLES presents through Vulkan and is not part of a null NVN tool
+        if p.name in ('jni_android.c', 'dm_framegen.c', 'vka_shim.c'): continue   # jni_android.c goes into --play's link, dm_framegen.c + vka_shim.c into every target's (their list below)
+        if p.name == FRONT_APK: continue   # the upstream's front comes in the player's place, not in its own
+        if p.name == FRONT_PLAYER: out.append(DM / 'android' / front); continue
+        out.append(p)
+    return out
 
 INC = ['-include', str(DM / 'android/compat/include/darwin_compat.h'), '-include', str(DM / 'android/dm_settings.h'), f'-I{DM / "android/compat/include"}', f'-I{DM / "host"}', f'-I{DM / "gfx/nvn"}', f'-I{DM / "gfx/tex"}', f'-I{DM / "gfx/nvn/include"}',
        f'-I{DM / "third_party/vulkan-headers/include"}', f'-I{gen / a.game}', f'-I{DM / "third_party/libvpx"}', f'-I{DM / "third_party/stb_vorbis"}', f'-I{DM / "third_party/zstd"}', f'-I{DM / "android"}']
@@ -141,13 +160,18 @@ def build(files):
     return objs, failed
 
 # the frame generation travels with every target (the present calls it); its GPL chain only when built in. The null device has no present, so it takes neither
-all_files = HOST + GFX + PORT + ASM + ([] if a.gfx == 'null' else srcs('android/dm_framegen.c')) + (srcs('android/lsfg/*.c', 'android/vka_shim.c') if not a.no_lsfg else [])
+def shape_files(front):
+    """The sources of one shape: the host, the graphics, that shape's front and the frame generation."""
+    return HOST + GFX + port_files(front) + ASM + ([] if a.gfx == 'null' else srcs('android/dm_framegen.c')) + (srcs('android/lsfg/*.c', 'android/vka_shim.c') if not a.no_lsfg else [])
+PLAY_FILES = shape_files(FRONT_PLAYER) if (a.play or a.exe) else []   # the app's :play process and the headless executable
+APK_FILES = shape_files(FRONT_APK) if a.lib else []                   # a standalone APK: the upstream's front
 PLAYS = srcs('android/jni_android.c')   # the player's JNI entry: compiled always (the errors surface here too), linked only for --play
-objs, failed = build(all_files)
+objs, failed = build(PLAY_FILES)
+aobjs, afailed = build(APK_FILES)
 pobjs, pfailed = build(PLAYS)
 vobjs, vfailed = build(VPX + ZSTD)
-failed += pfailed + vfailed
-print(f'compiled {len(all_files) + len(PLAYS) + len(VPX) + len(ZSTD)} sources, {len(failed)} failed' + (': ' + ', '.join(str(f.relative_to(DM)) for f in failed) if failed else ''))
+failed += afailed + pfailed + vfailed
+print(f'compiled {len(PLAY_FILES) + len(APK_FILES) + len(PLAYS) + len(VPX) + len(ZSTD)} sources, {len(failed)} failed' + (': ' + ', '.join(str(f.relative_to(DM)) for f in failed) if failed else ''))
 if failed and not a.keep_going: sys.exit(1)
 if a.only_compile: sys.exit(1 if failed else 0)
 
@@ -176,7 +200,7 @@ if a.exe:
     print(r.stderr.strip() if r.returncode else f'linked {out / "dmhost"}', file=sys.stderr if r.returncode else sys.stdout)
     if r.returncode: sys.exit(1)
 if a.lib:
-    r = link(LDFLAGS + ['-shared', '-Wl,-soname,libdmhost.so', '-o', str(out / 'libdmhost.so')] + [str(o) for o in objs + vobjs] + LIBS, 'libdmhost')
+    r = link(LDFLAGS + ['-shared', '-Wl,-soname,libdmhost.so', '-o', str(out / 'libdmhost.so')] + [str(o) for o in aobjs + vobjs] + LIBS, 'libdmhost')
     print(r.stderr.strip() if r.returncode else f'linked {out / "libdmhost.so"}', file=sys.stderr if r.returncode else sys.stdout)
     if r.returncode: sys.exit(1)
     if a.release:   # the static symbol table goes too (the dynamic one stays: ANativeActivity_onCreate)

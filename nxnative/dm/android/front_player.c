@@ -141,7 +141,7 @@ void dm_pad_prefs(int shown, int opacity) {
     atomic_store(&g_set_overlay, shown != 0);
     atomic_store(&g_set_opacity, opacity < OV_OPACITY_MIN ? OV_OPACITY_MIN : opacity > OV_OPACITY_MAX ? OV_OPACITY_MAX : opacity);
 }
-void dm_haptics_android_start(JNIEnv *E, JavaVM *vm, jobject actctx, int on); void dm_haptics_android_tap(void); void dm_haptics_android_device_player(int player, int id); void dm_haptics_android_set(int on);
+void dm_haptics_android_start_player(JNIEnv *E, JavaVM *vm, jobject actctx, int on); void dm_haptics_android_tap(void); void dm_haptics_android_device_player(int player, int id); void dm_haptics_android_set(int on);
 void dm_haptics_suspend(unsigned reason, int suspended);
 __attribute__((weak)) void dm_overlay_redraw(void) {}   // the backend presents the last frame again (nothing is drawn in the player, but the calls stay)
 
@@ -769,7 +769,7 @@ static void host_start_common(JNIEnv *E, JavaVM *vm, jobject actctx, const char 
     snprintf(p, sizeof p, "%s/env.txt", g_root); env_file(p);
     // the save manager's requests (saves_android.c), before the host mounts the save: an import the player asked for in the drawer, an export porter asks for
     if (dm_saves_start(g_root)) { LOG("[saves] the request asked the app to end: the game is not started"); return; }
-    settings_load(); dm_haptics_android_start(E, vm, actctx, atomic_load(&g_set_rumble));
+    settings_load(); dm_haptics_android_start_player(E, vm, actctx, atomic_load(&g_set_rumble));
     LOG("NX2A host on Android: files %s, saves %s", g_root, internal);
     pthread_t t; pthread_create(&t, NULL, input_thread, NULL); pthread_detach(t);
     // The game's main thread: a 16 MB stack mapped here and handed over whole (pthread_attr_setstack), so the range pthread_getattr_np reports, which

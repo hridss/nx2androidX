@@ -180,7 +180,7 @@ DM_OPMODE	int		app	start	hle_oe.c	the operation mode at launch: 0 handheld, 1 do
 DM_OVERLAY_SPLIT	bool	0	debug	start	overlay_layout.h	1 = on a window narrower than 3:2 the picture across the top and the on-screen gamepad in the band under it. When the display's density is known, a window wider than tall uses the band only where its face buttons stay at least 8 mm wide at that density (a window taller than wide takes it anyway: the gamepad over the picture would meet in the middle). An external display showing the picture disables the band.
 DM_PAD_LABEL	bool		debug	start	front_android.c	a physical controller's face buttons go to the game by their label (an Xbox controller's A is the game's A) instead of by their position (the Switch's: the bottom button is B, the right one A). The game's prompts name the button (A to confirm, B to go back), which an Xbox controller's labels match a
 DM_PAD_LOG	bool	0	debug	?	pad_map.h	logs the physical controller's mapping as the host sees it (the app's controller test)
-DM_PAD_MERGE	bool		debug,ios	?	front_mac.m	
+DM_PAD_MERGE	bool		debug	?	front_android.c front_mac.m	
 DM_PAD_XBOX	bool		debug	start	front_android.c	a physical controller's face buttons go to the game by their label (an Xbox controller's A is the game's A) instead of by their position (the Switch's: the bottom button is B, the right one A). The game's prompts name the button (A to confirm, B to go back), which an Xbox controller's labels match a
 DM_PIN_REPLAY	str	0	profile	?	perf_android.c	pin the replay thread to fast cores: 0 = no, "prime" = the fastest core, "need" = the fastest core only while the replay is slow, other values = the big cores
 DM_PREEMPT	int		debug	?	hle_thread.c	
@@ -255,6 +255,7 @@ DM_TOUCH_DOCKED	str		profile	start	hle_touch.c	touch in docked mode: "screen" = 
 DM_TOUCH_HAPTICS	int		debug,ios	?	DmGamepad.m	
 DM_TOUCH_LOG	str		debug	?	hle_touch.c	DM_TOUCH_LOG=1 also logs each gesture entry (up to 500 lines)
 DM_UDC_SELFTEST	str		debug,ios	?	nvn_mtl.m	
+DM_UI_LANG	str		app	start	front_android.c	overlay UI language: unset follows the device locale (persist.sys.locale / ro.product.locale); any value starting with "z" ("zh", "zh-CN", "zh-TW") gives Chinese, anything else English. The Chinese strings are Simplified, so every zh* locale gets Simplified Chinese
 DM_VK_ASYNC_PIPE	bool	1	profile	live	gfx_vk_exec.c	0 = new pipelines are built on the replay thread, not in the background
 DM_VK_BC_DRAW	int	0	profile	start	gfx_vk_tex.c	BC texture stand-in mode for drivers without BC: 0 = off
 DM_VK_BIND_DUMP	str		debug	start	gfx_vk_exec.c	writes the storage of the texture that binding of that pixel shader really resolved to (at most 8 files) to `$DM_ROOT/bind_<fs>_b<binding>_<w>x<h>_f<format>_s<serial>.bin` (the current folder when `DM_ROOT` is unset); slots alone are polluted by stale entries of earlier draws

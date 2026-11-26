@@ -48,8 +48,11 @@ SYNC_FILES = (
 )
 
 # The paths the sync never takes: the porter's pipeline (this line runs the port on the
-# phone), the upstream's own front (this line has its own), its APK packaging, its iOS
+# phone), the player's own front (this line has its own), the APK packaging, the iOS
 # line, and this line's app, tools and docs.
+# The upstream's APK front (nxnative/dm/android/front_android.c) is not in this list: a
+# standalone APK (a NativeActivity of its own) runs on it, so it comes with the engine's
+# core like the rest of dm/android/.
 SKIP_PREFIXES = (
     'porter/',
     'nxnative/dm/ios/',
@@ -63,7 +66,6 @@ SKIP_PREFIXES = (
     'probes/',
 )
 SKIP_FILES = (
-    'nxnative/dm/android/front_android.c',
     'README.md',
     'README.zh.md',
     'AGENTS.md',
@@ -77,10 +79,11 @@ SKIP_SUFFIXES = ('.pdb',)
 # in docs/PORT_CHECKLIST.md, so the upstream's ones stay upstream's.
 GAME_README = re.compile(r'^nxnative/dm/games/[^/]+/README\.md$')
 
-# The front's own tests, read out of the files themselves: a test that names the front
-# belongs to the front, and the front is ours alone. The same for the porter's pipeline
-# tests, and for a test that needs a module of the porter we do not have.
-FRONT_MARKERS = ('front_android', 'front_player')
+# The player's front's own tests, read out of the files themselves: a test that names the
+# player's front belongs to it, and that front is ours alone. The upstream's APK front
+# comes with the engine's core, so a test of it is synced like the rest. The same for the
+# porter's pipeline tests, and for a test that needs a module of the porter we do not have.
+FRONT_MARKERS = ('front_player',)
 PORTER_MODULE = re.compile(r'(?:from|import)\s+porter\.([A-Za-z0-9_.]+)')
 
 
