@@ -268,7 +268,7 @@ internal fun LibraryContent(
                 onConfigure = { actions.onConfigure(entry) },
             )
         }
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(24.dp))   // the same as the agent entry's 24 dp: its button and the main one sit on one line
     }
     // 右下角这一摞：助手的入口在最下面，贴着角；按键提示在它上面一行。
     // 提示条比入口宽，所以入口靠右对齐（Column 宽的是提示条），右边缘始终在角上。
