@@ -137,6 +137,19 @@ static VkImageAspectFlags aspect_of(const vkfmt_t *f) {
     if (f->depth || f->stencil) return VK_IMAGE_ASPECT_DEPTH_BIT | (f->vk == VK_FORMAT_D24_UNORM_S8_UINT || f->vk == VK_FORMAT_D32_SFLOAT_S8_UINT ? VK_IMAGE_ASPECT_STENCIL_BIT : 0);
     return VK_IMAGE_ASPECT_COLOR_BIT;
 }
+// Which plane of a depth-stencil texture a sampled view reads: the stencil only when the game asks for it (the view's depth-stencil mode is STENCIL, or the texture was
+// built in stencil mode), the depth otherwise. This is the Metal backend's rule. A view's format alone does not make it a stencil read: It Takes Two reads its scene
+// depth as a float through a view whose format is not a depth format, and reading the stencil there gave the post-process a stencil byte instead of a depth value.
+// DM_VK_DS_ASPECT (live): 0 the rule (default), 1 always the depth, 2 always the stencil, 3 the older rule.
+int g_vk_ds_aspect = 0;
+int vk_ds_stencil(const tex_t *t, const view_t *v) {
+    int want_st = (v && v->set_dsmode) ? v->dsmode == 1 : t->stencil;
+    int mode = g_vk_ds_aspect;
+    if (mode == 1) want_st = 0;
+    else if (mode == 2) want_st = 1;
+    else if (mode == 3) { const vkfmt_t *f = vk_fmt(v && v->set_format ? v->format : t->d.format); if (!f) f = vk_fmt(t->d.format); want_st = (!f->depth || t->stencil || (v && v->set_dsmode && v->dsmode == 1)); }
+    return want_st;
+}
 
 // ---------------- images ----------------
 static unsigned layers_of(const nvn_texdesc *d) { return d->target == 4 || d->target == 9 ? (d->depth ? d->depth : 1) : d->target == 8 ? 6 : d->target == 3 ? (d->height ? d->height : 1) : 1; }
@@ -670,7 +683,7 @@ static VkComponentMapping sample_swizzle(const VkComponentMapping *format, const
         apply(swz_comp(sw[2]),format,VK_COMPONENT_SWIZZLE_B),
         apply(swz_comp(sw[3]),format,VK_COMPONENT_SWIZZLE_A)};
 }
-__thread VkFormat vk_view_fmt; __thread uint32_t vk_view_layers; __thread VkImageUsageFlags vk_view_usage;
+__thread VkFormat vk_view_fmt; __thread uint32_t vk_view_layers; __thread VkImageAspectFlags vk_view_aspect; __thread VkImageUsageFlags vk_view_usage;
 VkImageView vk_tex_view(const tex_t *t, const view_t *vw, int dim, int arrayed, int as_attachment, vkimg_t **img_out) {
     return vk_tex_view_as(t, vw, dim, arrayed, as_attachment, img_out, 0);
 }
@@ -757,7 +770,7 @@ VkImageView vk_tex_view_as(const tex_t *t, const view_t *vw, int dim, int arraye
     if (type == VK_IMAGE_VIEW_TYPE_2D || type == VK_IMAGE_VIEW_TYPE_1D || type == VK_IMAGE_VIEW_TYPE_3D) nly = 1;
     VkImageAspectFlags aspect = im->aspect;
     if (aspect == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT) && !as_attachment)
-        aspect = (!f->depth || t->stencil || (vw && vw->set_dsmode && vw->dsmode == 1)) ? VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT;   // (STENCIL8 alone may be stored combined)
+        aspect = vk_ds_stencil(t, vw) ? VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT;   // (STENCIL8 alone may be stored combined)
     VkComponentMapping swz = sample_swizzle(&f->swz,t,vw,as_attachment);
     VkFormat fmt = f->vk;
     const vkfmt_t *imf = vk_fmt(im->nvn_format);   // (a BC format decoded on the CPU counts as compressed: its view keeps the decoded image's format)
@@ -774,7 +787,7 @@ VkImageView vk_tex_view_as(const tex_t *t, const view_t *vw, int dim, int arraye
     pthread_mutex_lock(&g_view_mu);
     vview *head = nvn_hm_get(&g_views, &im);
     for (vview *v = head; v; v = v->next)
-        if (v->type == type && v->fmt == fmt && v->lv0 == lv0 && v->nlv == nlv && v->ly0 == ly0 && v->nly == nly && v->aspect == aspect && v->attach == (as_attachment != 0) && !memcmp(&v->swz, &swz, sizeof swz)) { pthread_mutex_unlock(&g_view_mu); vk_view_fmt = fmt; vk_view_layers = nly; vk_view_usage = v->usage; return v->v; }
+        if (v->type == type && v->fmt == fmt && v->lv0 == lv0 && v->nlv == nlv && v->ly0 == ly0 && v->nly == nly && v->aspect == aspect && v->attach == (as_attachment != 0) && !memcmp(&v->swz, &swz, sizeof swz)) { pthread_mutex_unlock(&g_view_mu); vk_view_fmt = fmt; vk_view_layers = nly; vk_view_usage = v->usage; vk_view_aspect = aspect; return v->v; }
     VkImageViewUsageCreateInfo uci = {VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO, NULL, 0};
     VkFormatProperties fp; vkGetPhysicalDeviceFormatProperties(V.pd, fmt, &fp);
     uci.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -786,7 +799,7 @@ VkImageView vk_tex_view_as(const tex_t *t, const view_t *vw, int dim, int arraye
     vview *nv = calloc(1, sizeof *nv); *nv = (vview){view, type, fmt, lv0, nlv, ly0, nly, swz, aspect, as_attachment != 0, uci.usage, head};
     nvn_hm_put(&g_views, &im, nv);
     pthread_mutex_unlock(&g_view_mu);
-    vk_view_fmt = fmt; vk_view_layers = nly; vk_view_usage = uci.usage;
+    vk_view_fmt = fmt; vk_view_layers = nly; vk_view_usage = uci.usage; vk_view_aspect = aspect;
     return view;
 }
 

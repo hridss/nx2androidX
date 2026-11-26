@@ -123,8 +123,10 @@ static struct { uint64_t epoch, gen; int tid, dim, arr, num, sc; VkImageView v; 
 uint64_t g_tvc_hit, g_tvc_miss, g_tvc_cold;   // lookups the cache answered, ones it did not, and of those the ones only an older submission's entry would have answered
 // what a view's texels are, as gfx_vk_shader.c's integer-texel variants need it: 0 float, 1 uint (unsigned integer formats, a stencil), 2 int
 static int view_num(const tex_t *t, const view_t *v) {
+    const vkfmt_t *imf = vk_fmt(t->d.format);   // the image's own format: its aspect decides which plane a view of it reads
+    if (imf && imf->depth) return (imf->stencil && vk_ds_stencil(t, v)) ? 1 : 0;   // a combined image reads the plane the game asked for
+    if (imf && imf->stencil) return 1;   // a stencil-only image reads the stencil
     const vkfmt_t *f = vk_fmt(v && v->set_format ? v->format : t->d.format); if (!f) return 0;
-    if (f->depth || f->stencil) return f->stencil && (!f->depth || t->stencil || (v && v->set_dsmode && v->dsmode == 1));   // vk_tex_view's aspect
     return f->is_int ? (f->is_sint ? 2 : 1) : 0;
 }
 // the integer class a storage image binding's shader declares, from the SPIR-V image format the translator recorded (dmsv_bind.fmt, shader_vk.py): 1 uint, 2 sint,

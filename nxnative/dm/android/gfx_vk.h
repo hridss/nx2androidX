@@ -39,7 +39,7 @@
     X(vkCreateShaderModule) X(vkDestroyShaderModule) X(vkCreateDescriptorSetLayout) X(vkCreatePipelineLayout) X(vkCreateGraphicsPipelines) X(vkDestroyPipeline) X(vkCreateComputePipelines) X(vkCreatePipelineCache) \
     X(vkGetPipelineCacheData) X(vkCreateDescriptorPool) X(vkResetDescriptorPool) X(vkAllocateDescriptorSets) X(vkUpdateDescriptorSets) \
     X(vkCreateBufferView) X(vkDestroyBufferView) X(vkGetAndroidHardwareBufferPropertiesANDROID) \
-    X(vkCreateQueryPool) X(vkCmdResetQueryPool) X(vkCmdWriteTimestamp) X(vkGetQueryPoolResults) \
+    X(vkCreateQueryPool) X(vkCmdResetQueryPool) X(vkCmdWriteTimestamp) X(vkGetQueryPoolResults) X(vkCmdBeginQuery) X(vkCmdEndQuery) \
     X(vkCreateSwapchainKHR) X(vkDestroySwapchainKHR) X(vkGetSwapchainImagesKHR) X(vkAcquireNextImageKHR) X(vkQueuePresentKHR) \
     X(vkCmdBindTransformFeedbackBuffersEXT) X(vkCmdBeginTransformFeedbackEXT) X(vkCmdEndTransformFeedbackEXT) X(vkCmdDrawIndirectByteCountEXT) X(vkCmdDrawIndirectCount) X(vkCmdDrawIndexedIndirectCount) \
     X(vkGetRefreshCycleDurationGOOGLE) X(vkGetPastPresentationTimingGOOGLE)
@@ -154,7 +154,12 @@ void vk_watch(const vkimg_t *im, const char *what);   // DM_VK_WATCH (gfx_vk_exe
 void vk_draw_ctx(char *out, size_t n);   // the present, pass and programs of the draw whose view is being made (a diagnostic line; gfx_vk_exec.c)
 vkimg_t *vk_tex_by_id(int tid, const view_t **view_out, const tex_t **tex_out);   // registered texture ID → image (NULL if none)
 VkSampler vk_samp_by_id(int sid);
+int vk_ds_stencil(const tex_t *t, const view_t *v);   // a sampled depth-stencil view reads the stencil (1) only when the game asks for it
+extern int g_vk_ds_aspect;   // DM_VK_DS_ASPECT: 0 the rule, 1 always the depth, 2 always the stencil, 3 the older rule
+void vk_occ_reset(void);       // NVN_COUNTER_TYPE_SAMPLES_PASSED: a reset zeroes the counter (the draws after it are counted)
+void vk_occ_report(uint64_t addr);   // a report writes the counter's value: the samples passed since the last reset
 extern __thread VkFormat vk_view_fmt; extern __thread uint32_t vk_view_layers; extern __thread VkImageUsageFlags vk_view_usage;   // the format, layer count and inherited usage of the view vk_tex_view last returned on this thread
+extern __thread VkImageAspectFlags vk_view_aspect;   // the aspect (colour / depth / stencil) of that view
 VkImageView vk_dummy_view(int dim, int arrayed, int ms, int storage, int is_int);
 VkSampler vk_dummy_sampler(void);
 VkBufferView vk_dummy_tbuf(int storage);
