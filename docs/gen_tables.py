@@ -154,9 +154,13 @@ def credit_of(title_id):
         try: cache = json.loads(CREDITS_CACHE.read_text())
         except ValueError: cache = {}
     if sha in cache: return cache[sha]
-    done = subprocess.run(['gh', 'api', f'repos/{GH_REPO}/commits/{sha}', '--jq',
-                           '.author.login + "\\t" + .commit.author.name'], capture_output=True, text=True)
-    login, _, name = (done.stdout.strip() if done.returncode == 0 else '').partition('\t')
+    try:
+        done = subprocess.run(['gh', 'api', f'repos/{GH_REPO}/commits/{sha}', '--jq',
+                               '.author.login + "\\t" + .commit.author.name'], capture_output=True, text=True)
+        raw = done.stdout.strip() if done.returncode == 0 else ''
+    except FileNotFoundError:
+        raw = ''   # no gh on this machine: the credit is left empty until one runs it (the page still generates)
+    login, _, name = raw.partition('\t')
     out = login or (name.strip() if HANDLE.fullmatch(name.strip()) else '')
     cache[sha] = out
     try:

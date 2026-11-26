@@ -13,7 +13,7 @@ with — the game is not missing on Android.
 
 These have an official Android release too, and are ported here anyway: Unpacking.
 
-**83 / 195 ported**
+**84 / 196 ported**
 
 This file is generated: `python3 docs/gen_tables.py` reads the profiles and writes it. The facts
 in a row are the profile's own — the name and the version from `game.tsv`, the status, the note
@@ -92,6 +92,7 @@ the author of the commit that introduced them.
 - [x] Hollow Knight: Silksong · `010013C00E930000` · playable · update 1.0.30000 · 60 fps · ported by @shirai91
 - [ ] Hyrule Warriors: Age of Calamity · `01002B00111A2000` · 1.3.0 · 60 fps
 - [ ] Hyrule Warriors: Definitive Edition · `0100AE00096EA000` · 1.0.1
+- [x] It Takes Two · `010092A0172E4000` · wip · v1 Lenovo Legion Y700 TB322FC (Snapdragon 8 Elite, Adreno 830, Android 16) · ported by @zFitness
 - [x] Kirby and the Forgotten Land · `01004D300C5AE000` · playable · update 1.1.0 · 30 fps (as on Switch) · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver · ported by @DPR
 - [ ] Kirby Star Allies · `01007E3006DDA000` · 4.0.0a
 - [x] Kirby's Return to Dream Land Deluxe · `01006B601380E000` · playable · 60 fps · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver · needs your console's firmware for its fonts (`--firmware`) · ported by @DPR
@@ -214,7 +215,7 @@ the author of the commit that introduced them.
 - [ ] Well Dweller · `0100217023F6C000` · 1.0.0
 - [ ] Xenoblade Chronicles 2 · `0100E95004038000` · 2.1.0
 - [x] Xenoblade Chronicles 3 · `010074F013262000` · wip · update 2.2.0 · 30 fps · **work in progress**: some effects and models don't draw yet · ported by @shirai91
-- [ ] Xenoblade Chronicles X: Definitive Edition · `0100453019AA8000` · 1.0.1 · 60 fps
+- [ ] Xenoblade Chronicles X: Definitive Edition · `0100453019AA8000` · 1.0.2 · 60 fps
 - [x] Xenoblade Chronicles: Definitive Edition · `0100FF500E34A000` · playable · update 2.0.0 · 30 fps · tested on the AYN Odin 2 with a Turnip driver · **tested to Colony 9**, the pause menu and saving: later maps not checked yet · the scene drops to 896x504 in heavy fights · rarely crashes at boot (restart) · ported by @rospec14
 - [ ] Yoshi's Crafted World · `01006000040C2000` · 1.0.1
 - [ ] ŌKAMI HD · `0100276009872000` · 1.0.0

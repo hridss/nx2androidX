@@ -10,7 +10,7 @@
 
 | 🎮 **Games ported** | 🗂️ **Games gallery** | 🤖 **AI assistant** | 📚 **Porting docs** |
 |:---:|:---:|:---:|:---:|
-| **<!-- count:ported -->83 / 195<!-- /count -->**<br><!-- count:playable -->67<!-- /count --> playable · <!-- count:experimental -->8<!-- /count --> experimental · <!-- count:wip -->4<!-- /count --> in progress · <!-- count:boots -->4<!-- /count --> boots<br>[the list](docs/PORT_CHECKLIST.md) | **<!-- count:gallery -->74<!-- /count -->** games shown<br>[the gallery](#games) | Runs on the phone itself<br>[the assistant](#the-assistant-is-in-the-app) | From the dump to the pull request<br>[the guide](docs/PORTING_GUIDE.md) |
+| **<!-- count:ported -->84 / 196<!-- /count -->**<br><!-- count:playable -->67<!-- /count --> playable · <!-- count:experimental -->8<!-- /count --> experimental · <!-- count:wip -->5<!-- /count --> in progress · <!-- count:boots -->4<!-- /count --> boots<br>[the list](docs/PORT_CHECKLIST.md) | **<!-- count:gallery -->74<!-- /count -->** games shown<br>[the gallery](#games) | Runs on the phone itself<br>[the assistant](#the-assistant-is-in-the-app) | From the dump to the pull request<br>[the guide](docs/PORTING_GUIDE.md) |
 
 Port your own Switch games to Android, natively: the game's own arm64 code runs on the device, with the Switch's system services stood in for by a host and NVN graphics replayed on Vulkan. Pick the game's file, click **Port**, and get the game's data pack, which the nx2androidX app on the phone runs. Bring your own game files and keys; this repository holds no game content and no keys.
 
