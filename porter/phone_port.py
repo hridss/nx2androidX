@@ -22,6 +22,20 @@ from porter.upstream import BuildError, PROG, android_profile, game, nacp, nsp, 
 PY = sys.executable
 # The shared font the tools ship: the game's Chinese and Korean text (the console's own shared fonts 1-4; dm/tools/cjk_font.py builds it)
 SHARED_CJK = DM / 'tools/shared_cjk.ttf'
+
+# A progress line of the shader export (shader_vk.py): "progress: <step>: <done>/<total> shaders (<tail>)". The step is the name of the pass (translating, compressing),
+# the tail is what the tool has to add (the batch and the time). The porter turns it into the stage's own count, so the build shows how far the export has come.
+SHADER_PROGRESS_RX = re.compile(r'^progress: (.+): (\d+)/(\d+) shaders(?: \((.*)\))?$')
+
+
+def shader_progress(line):
+    """A shader export's progress line → (step, done, total, note), or None for any other line.
+    The note carries the count (the app shows the fraction of the stage, not the numbers) and the tool's own tail"""
+    m = SHADER_PROGRESS_RX.match(line)
+    if not m: return None
+    step, done, total, tail = m.group(1), int(m.group(2)), int(m.group(3)), m.group(4)
+    note = f'{done:,} of {total:,} shaders' + (f' ({tail})' if tail else '')
+    return step, done, total, note
 # The Vulkan driver loader and its four hooks: the host loads a driver through libadrenotools (dm/android/gfx_vk_core.c,
 # DM_VK_DRIVER). The loader is the app's own: the host dlopens it by name, and the Android linker looks a bare name up in
 # LD_LIBRARY_PATH, in the caller's DT_RUNPATH and in the namespace's default library paths — the app's native library
@@ -924,7 +938,8 @@ class PhonePort(pipeline.Port):
         tmp = self.dmsv.with_name('shaders.dmsv.partial'); nsp.rmtree(tmp)
         report = Path(str(tmp) + '.report.json'); nsp.rmtree(report)
         def line(s):
-            if m := re.match(r'(translating|compressing) (\d+) shaders', s): PROG.set(step=f'{m.group(1)} {int(m.group(2)):,} shaders')   # compressing: the bundle's SPIR-V (dmsv.py)
+            if p := shader_progress(s): PROG.set(step=p[0], done=p[1], total=p[2], note=p[3])   # the export's own count: the stage shows how far it has come
+            elif m := re.match(r'(translating|compressing) (\d+) shaders', s): PROG.set(step=f'{m.group(1)} {int(m.group(2)):,} shaders')   # compressing: the bundle's SPIR-V (dmsv.py)
             elif s.startswith('[RED] '): say(s)
         workers, avail = self.translation_workers()   # read again: the split in front may have taken some memory
         free = 'the device reports no memory' if avail is None else f'{avail:.0f} MB free'
