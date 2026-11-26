@@ -43,7 +43,11 @@ static void start_env(JNIEnv *E, jobjectArray rows) {
 JNIEXPORT jboolean JNICALL
 Java_com_nx_android_game_Native_start(JNIEnv *E, jclass c, jstring pack, jstring internal, jstring title_id, jint dpi,
                                       jobjectArray env, jobject ctx) {
-    (void)c; (void)title_id;
+    (void)c;
+    // 存档与临时目录按游戏分开：title id 进环境，dm_front_boot 的 DM_SAVE/DM_TEMP 子目录用它（settings.tsv 的
+    // DM_GAME_ID 行说的就是它）。上游的 NativeActivity 一包一游戏，没有这个 env，那里的存档就是平铺的。
+    if (title_id) { const char *t = (*E)->GetStringUTFChars(E, title_id, NULL);
+                    if (t) { setenv("DM_GAME_ID", t, 1); (*E)->ReleaseStringUTFChars(E, title_id, t); } }
     start_env(E, env);
     const char *p = pack ? (*E)->GetStringUTFChars(E, pack, NULL) : NULL;
     const char *i = internal ? (*E)->GetStringUTFChars(E, internal, NULL) : NULL;

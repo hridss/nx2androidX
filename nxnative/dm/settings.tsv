@@ -40,6 +40,7 @@ DM_FSLOG_HASH	str		debug	?	hle_fs.c	DM_FSLOG_HASH=1: append a column with the FN
 DM_FULLSCREEN	str		debug,ios	?	front_mac.m	start in fullscreen
 DM_GAME_ARGS_ADD	str		debug	start	main.c	more arguments after the profile's `game_args`, split at spaces: an engine's own options tried without a new port. A shipping Unreal build ignores `-dpcvars=` and `-ini:` (Final Fantasy Resonance: `r.ScreenPercentage=25` changed nothing)
 DM_GAME_ENV	str		debug	?	hle_os.c	
+DM_GAME_ID	str		app	start	front_android.c	the game's title ID, given by the app (the save's and temp's subfolder: the app's one process hosts many games)
 DM_GLSLC_CAPTURE	str		debug	?	hle_glslc.c	
 DM_GL_ACTIVE	str		debug	?	gfx_vk_shader.c	
 DM_GL_CAPTURE	str		debug,ios	?	hle_gl.m	

@@ -1661,6 +1661,9 @@ int dm_front_boot(const char *root, const char *internal, int32_t dpi, int32_t s
                   JavaVM *jvm, JNIEnv *env, jobject activity, AAssetManager *assets) {
     snprintf(g_root, sizeof g_root, "%s", root);
     snprintf(g_host.internal, sizeof g_host.internal, "%s", internal);
+    // 壳给来的 activity 是本次调用的局部引用（NativeActivity 的 clazz 除外）——监视线程与回调在引导返回之后
+    // 还要用它，这里转成全局引用（一个进程一个游戏，引用随之活到进程结束）。
+    if (activity) activity = (*env)->NewGlobalRef(env, activity);
     g_host.vm = jvm; g_host.env = env; g_host.activity = activity; g_host.assets = assets;
     g_dpi = dpi;
     jclass activity_class = (*env)->GetObjectClass(env, activity);
@@ -1677,6 +1680,12 @@ int dm_front_boot(const char *root, const char *internal, int32_t dpi, int32_t s
     snprintf(p, sizeof p, "%s/temp", internal); mkdir(p, 0700); setenv("DM_TEMP", p, 0);
     snprintf(p, sizeof p, "%s/shaders.dmsv", g_root); setenv("DM_VK_SHADERS", p, 0);
     snprintf(p, sizeof p, "%s/env.txt", g_root); env_file(p);
+    // 上游一包一游戏，存档平铺在 internal；手机的一个进程装多个游戏，按 DM_GAME_ID（壳从启动参数设置，
+    // 旧包的 env.txt 也可能带）分开——旧前端的布局，玩家的既有存档就在这些子目录里
+    { const char *gid = getenv("DM_GAME_ID"); char sub[80] = "", q[800];
+      if (gid && gid[0] && strlen(gid) < sizeof sub - 2) snprintf(sub, sizeof sub, "/%s", gid);
+      if (sub[0]) { snprintf(q, sizeof q, "%s%s", getenv("DM_SAVE"), sub); mkdir(q, 0700); setenv("DM_SAVE", q, 0);
+                    snprintf(q, sizeof q, "%s%s", getenv("DM_TEMP"), sub); mkdir(q, 0700); setenv("DM_TEMP", q, 0); } }
     select_game_language(env);   // the game's language from the device's locale (DM_LANG=system follows it)
     { const char *e = getenv("DM_MENU_BUTTON"); if (e && *e && !atoi(e)) { atomic_store(&g_menu_btn, 0); LOG("[overlay] DM_MENU_BUTTON=0: no menu button (Back opens the menu)"); } }
 #ifdef DM_RELEASE
