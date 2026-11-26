@@ -501,7 +501,9 @@ def main():
     (apk / 'font').mkdir(parents=True)
     shutil.copyfile(ui_font, apk / 'font/ui.bin')
     for lic in sorted(p for p in font_d.rglob('*.txt')):
-        shutil.copyfile(lic, apk / 'font' / lic.relative_to(font_d).as_posix())
+        dst = apk / 'font' / lic.relative_to(font_d).as_posix()
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(lic, dst)
 
     payload = Path(a.payload) if a.payload else cache / 'payload-arm64.tar.gz'
     if not payload.exists(): raise SystemExit(f'{payload} is missing (fetch it from the nixport payload release)')
