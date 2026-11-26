@@ -24,7 +24,7 @@ def _parser():
     mode = po.add_mutually_exclusive_group()
     mode.add_argument('--app', action='store_true', dest='app',
                       help="the nx2android app's mode (the default): no APK and no install step — the data pack carries the host "
-                           "(libdmplay.so), the Vulkan drivers and the icon, and the app runs the game itself")
+                           "(libdmhost.so), the Vulkan drivers and the icon, and the app runs the game itself")
     mode.add_argument('--game-apk', action='store_false', dest='app',
                       help="the fork's legacy path: a per-game APK as well (a separate app per game, installed over adb); unmaintained here — "
                            "--install, --replace-signer, --package and --vercode-offset belong to it")
