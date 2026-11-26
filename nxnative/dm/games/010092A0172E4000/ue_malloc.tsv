@@ -1,4 +1,4 @@
 # Build-keyed allocator metadata for hle_uemalloc.c (from the port's bring-up).
 # It Takes Two 1.0.4: no fixed object (obj=0: made by GCreateMalloc, given at the gate), its vtable (20 slots), the cut constructor call.
 # build	what	layout	obj	vtable	cut
-ddd039e882dbcd1ca9509763dda7596b	It Takes Two 1.0.4	UE4_26	0	a566f70	349faf0
+ddd039e882dbcd1ca9509763dda7596b	It Takes Two 1.0.4	UE4_26	0x0	0xa566f70	0x349faf0

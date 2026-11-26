@@ -36,6 +36,9 @@ class Device:
         self.calls.append(('pick',))
         return self.serial
 
+    def pull_new(self, rdir, local, pattern=None):
+        self.calls.append(('pull_new', rdir)); return []   # pull_ue_programs: no captured programs in this fixture
+
     def shell(self, script, **kw):
         self.calls.append(('shell', script, kw))
         if 'timeout ' in script:
@@ -74,7 +77,7 @@ class GlslcCapture(unittest.TestCase):
         (p.game / 'RomFS/file').write_bytes(b'data')
         p.patched = p.aw / 'patched_v0'; p.patched.mkdir(parents=True)
         p.o = pipeline.Options(folder=self.root); p.cfg = {}; p.env = {}; p.app_name = 'Fixture'
-        p.tools = {'adb': 'fixture-adb', 'ndk': 'fixture-ndk'}; p.glslc_why = 'runtime GLSLC outputs'
+        p.tools = {'adb': 'fixture-adb', 'ndk': 'fixture-ndk'}; p.package = 'org.nx2a.test'; p.glslc_why = 'runtime GLSLC outputs'
         self.map = self.root / 'shader_map.tsv'
         self.map.write_text(f'x\t0\tvertex\tkey\t/glslc_capture/{NAME}#GLSLC@0\n', encoding='utf-8')
         p.g = SimpleNamespace(id='0100000000010000', table=lambda _: self.map, words=lambda _: ['main', 'subsdk0', 'sdk'])
