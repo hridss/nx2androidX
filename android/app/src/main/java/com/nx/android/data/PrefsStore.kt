@@ -42,6 +42,9 @@ class PrefsStore @Inject constructor(@ApplicationContext ctx: Context) {
         // the imported packs: the folder's path → the game it holds (the path is its identity)
         const val LIB_IMPORTED = "lib.imported"
         const val LIB_MEMORIES_MIGRATED = "lib.memories.migrated"
+        // title ID → how many times the game was exported as an APK (the versionCode offset: a later export
+        // installs over an earlier one)
+        const val LIB_EXPORTS = "lib.exports"
         // the guided setup
         const val OB_STEP = "ob.step"
         const val OB_LATER = "ob.later"
