@@ -143,7 +143,12 @@ def main():
             if got != p['sha256']: raise SystemExit(f'{name}: the SHA-256 is not the one the index gives')
         extract_deb(data, out)
         print(f'   [{i}/{len(names)}] {name}')
-    size = sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
+    size = 0
+    for f in out.rglob('*'):
+        try:
+            if not f.is_symlink() and f.is_file(): size += f.stat().st_size
+        except OSError:
+            pass   # a symlink Windows cannot follow: it is not counted, and the package is still unpacked
     print(f'>> {out}: {len(names)} packages, {size / 2**20:.0f} MB')
     return 0
 
