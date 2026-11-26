@@ -1281,10 +1281,10 @@ if FS_STATE_OFF:   # the build's stubs (FRAME_STEP of its patches.py)
 # A fix of the game's own code that needs more instructions than its sites hold: STUBS[build ID](ctx) in its patches.py assembles them into the patch area and branches there from
 # its sites, with the frame step's ctx (here / emit / site / put / address, above) and no state page, so the host's pacing does not change (FRAME_STEP would also make the host take
 # the main for one with a frame step). A stub's code must hold nothing the rewriter would rewrite (x18, svc, tpidr, exclusive pairs), since it is not scanned.
-# Ori and the Will of the Wisps 1.2.1 serializes the users of Unity's shared constant-buffer table this way (its patches.py)
+# Ori and the Will of the Wisps 1.2.1 serializes the users of Unity's shared constant-buffer table this way (its patches.py). A far patch area (FAR) is fine: FRONT and BIG_TEXT above
+# keep every text address within the B reach (±128 MB) of the patch area before the base (Ori 2 main: 75.3 MB of text, 126.4 MB of image, patch area 32 MB before the base)
 STUBS = PATCHES['STUBS']
 if BUILD_ID in STUBS:
-    assert not FAR, 'stubs with a far patch area'
     STUBS[BUILD_ID](types.SimpleNamespace(here=here, emit=emit, site=lambda off, orig: stub_site(off, orig, 'stub'),
                                           put=lambda off, words, why: stub_put(off, words, why, 'stub'), address=lambda off: stub_address(off, 'stub')))
 

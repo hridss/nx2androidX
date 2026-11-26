@@ -52,3 +52,4 @@ android/gradle/gradle-daemon-jvm.properties
 # corpus the old pipeline left behind
 .memembed
 /.memembed*/
+.tmp_pr
