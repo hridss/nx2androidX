@@ -214,8 +214,8 @@ class PortService : Service() {
                 intent.getIntExtra(ALIAS, ALIAS_AUTO),
                 intent.getStringExtra(FONT) ?: "", intent.getStringExtra(FIRMWARE) ?: "",
                 intent.getBooleanExtra(MT, false), intent.getStringExtra(PACK_DIR),
-                intent.getBooleanExtra(LOW_MEM, false), intent.getBooleanExtra(CONT, false),
-                proxyPort = proxyPort,
+                intent.getBooleanExtra(LOW_MEM, false), proxyPort = proxyPort,
+                container = intent.getBooleanExtra(CONT, false),
             ) {
                 handler.post {
                     if (runner === taskRunner) {
