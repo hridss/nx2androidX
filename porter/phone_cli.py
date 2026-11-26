@@ -69,6 +69,9 @@ def _parser():
                          '"AllocateAddressRegion refused (0x1803)" before it crashes; it uses no memory (default: 8 for a game version the profile was not '
                          'brought up on, none for one it was)')
     _romfs_at(po, 'with --install: ')
+    po.add_argument('--low-mem', action='store_true',
+                    help='low-memory devices: the shader translation runs with at most two workers (the number follows the memory the device has '
+                         'free anyway; this caps it): slower, but a phone with little memory free survives the build')
     po.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
     po.add_argument('--progress', default='auto', choices=('auto', 'bar', 'lines', 'json', 'off'), help='json: one JSON event per line, for the GUI')
     rt = sub.add_parser('rebuild-runtime', help='rebuild a pack runtime without the original game files')

@@ -91,8 +91,27 @@ It refuses when the game's code on the device was rewritten with other rewriter 
 - `nxnative/`: our fork of nxnative (see [nxnative](#nxnative)), with the Android runtime in `nxnative/dm/android/` and the game profiles in `nxnative/dm/games/`.
 - `packaging/`: the player's bundle (`python packaging/build_bundle.py`).
 - `devtools/`: scripts for bringing up a game on a connected device (`devtools/device.json` names the device: `{"serial": "...", "package": "..."}`).
+- `phone_tools/`: the tools that travel with the app into the player's tool tree (`tool/tools/`), run on the phone with the guest python: `memory_search.py` searches what this phone knows (the upstream's cases, the knowledge documents, the closed issues, the player's own case files), `memory_embed.py` reads the static embedding model.
 - `probes/`, `RESEARCH.md`: the feasibility study and the first on-device probes.
 - `.githooks/`: the commit-msg hook (see [Commit messages](#commit-messages)).
+
+## The local search's model
+
+The search runs on the lexical side alone; the **embedding model** (5.6 MB) adds the semantic
+half. It is not in this repository: it is built and published in the private model repository
+`zFitness/nx2-memory`, published as a release asset of the public
+`zFitness/public-dist` (no token needed to fetch it).
+
+```bash
+python3 devtools/fetch_memory_model.py          # the latest release -> .memembed/memory-embed/
+python3 devtools/check_memory_model.py          # is it a working model?
+```
+
+`packaging/android-apk/build_assets.py` copies `.memembed/memory-embed` into the APK payload
+when it is there, and says "the search runs lexical only" when it is not — **a build without the
+model is not a broken build**. The repository is private, so the download needs a token with read
+access (`GH_TOKEN`, or the gh CLI's own). The model was trained on the public corpus only; a
+player's own case files never enter it.
 
 ## Adding a game
 

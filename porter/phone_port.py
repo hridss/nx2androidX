@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from porter import pipeline
-from porter import config, datapack, dumps, fpslocker, install, paths, product_cache, profiles, profiles_layer, romfs_pack, toolchain
+from porter import config, datapack, dumps, fpslocker, install, memory, paths, product_cache, profiles, profiles_layer, romfs_pack, toolchain
 from porter.pipeline import *   # the shared helpers and constants; the app mode's own constants shadow theirs below
 from porter.revision import PLAYER_API_REVISION
 from porter.adb import NO_ADB, Adb, AdbError
@@ -224,8 +224,10 @@ def inspect(folder, keys=None):
     return info
 
 
+@dataclass
 class Options(pipeline.Options):
     app: bool = False                  # the nx2android app's mode: no APK and no install — the pack carries the host, the drivers and the icon; the app runs the game itself
+    low_mem: bool = False               # a phone with little memory free: the shader translation runs with at most two workers (the number follows the memory the device has free anyway; this caps it): slower, but a phone with little memory free survives the build
     vulkan_driver_dir: Path = None     # a folder of arm64 Vulkan drivers: the pack carries them all and the game's configuration panel lets the player pick one
 
 
@@ -873,11 +875,23 @@ class PhonePort(pipeline.Port):
             except AdbError as e: say(f'the Oodle decoder left on the device ({e}): {self.ODEV}')
         if getattr(self, 'oodle_local', False): nsp.rmtree(self.work / 'tmp/oodle')
 
+    def translation_workers(self):
+        """The translation processes to run: as many as the device's free memory affords, capped by --jobs and by the low-memory mode.
+        The memory is read again when the workers start: the split in front of them may have taken some.
+        No room at all (0) raises: the stage stops with a clear error instead of being killed by the system"""
+        avail = memory.available_mb()
+        n = memory.jobs(avail, os.cpu_count() or 8, forced=self.o.low_mem)
+        if self.o.jobs > 0: n = min(n, self.o.jobs)   # --jobs (a maintenance knob) still caps it
+        if n <= 0:
+            raise BuildError(f'the device has only {avail:.0f} MB of memory free: the shader translation has no room to run; close the other apps and start it again')
+        return n, avail
+
     def shaders(self):
         if getattr(self, 'gl', False):   # an OpenGL ES game: the driver compiles its shaders on the device
             self.dmsv = None
             for st in ('shader split', 'Vulkan shaders'): PROG.stage(st); PROG.end('none: the game renders with OpenGL ES')
             return
+        self.translation_workers()   # no room to translate: say so now, not after the long split
         sv = self.versions
         pkg = self.work / 'shader' / 'pkg'
         try:
@@ -912,7 +926,10 @@ class PhonePort(pipeline.Port):
         def line(s):
             if m := re.match(r'(translating|compressing) (\d+) shaders', s): PROG.set(step=f'{m.group(1)} {int(m.group(2)):,} shaders')   # compressing: the bundle's SPIR-V (dmsv.py)
             elif s.startswith('[RED] '): say(s)
-        nsp.run([PY, DM / 'android/tools/shader_vk.py', pkg, tmp, '--jobs', str(self.o.jobs), '--dotnet', self.tools['dotnet'], '--xlate', xlate, '--capture', cap, '--report', report],
+        workers, avail = self.translation_workers()   # read again: the split in front may have taken some memory
+        free = 'the device reports no memory' if avail is None else f'{avail:.0f} MB free'
+        say(f'shader translation: {workers} worker(s) ({memory.basis(avail, self.o.low_mem)}; {free})')
+        nsp.run([PY, DM / 'android/tools/shader_vk.py', pkg, tmp, '--jobs', str(workers), '--dotnet', self.tools['dotnet'], '--xlate', xlate, '--capture', cap, '--report', report],
                 self.logs / 'android_shaders.log', env=self.env, on_line=line)
         import shader_products
         try:

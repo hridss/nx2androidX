@@ -32,10 +32,11 @@ class PortRunner(
         aliasHeadroom: Int,
         sharedFont: String = "", firmware: String = "", mtReplay: Boolean = false,
         packDir: String? = null,
+        lowMem: Boolean = false,
         onEnd: () -> Unit,
     ): Thread {
         val args = portArgs(gameFile, keys, touch, fps60, experimental, aliasHeadroom,
-            sharedFont, firmware, mtReplay)
+            sharedFont, firmware, mtReplay, lowMem)
         // A file in a netdisk's folder is not there yet in its middle: the port would read it as a broken dump
         GameSource.cloudFolder(gameFile)?.let { onLine(s(R.string.runner_cloud_folder, it)) }
         return start(args, { onEnd() }, if (packDir.isNullOrBlank()) emptyMap() else mapOf("NX2A_PACK_DIR" to packDir))
@@ -57,7 +58,8 @@ class PortRunner(
          */
         fun portArgs(gameFile: String, keys: String, touch: Boolean, fps60: Boolean,
                      experimental: Boolean, aliasHeadroom: Int,
-                     sharedFont: String = "", firmware: String = "", mtReplay: Boolean = false): List<String> {
+                     sharedFont: String = "", firmware: String = "", mtReplay: Boolean = false,
+                     lowMem: Boolean = false): List<String> {
             val args = mutableListOf("-m", "porter.phone_cli", "port", gameFile, "-k", keys, "--progress", "json", "--app")
             if (touch) args += "--touch"
             if (fps60) args += "--fps60"
@@ -69,6 +71,9 @@ class PortRunner(
             // The game's language is the device's, but it is the runtime that picks it: the pack lists the
             // languages the game has (DM_LANG_SUPPORTED) and the front chooses one at launch from the locale.
             args += listOf("--language", "system")
+            // A phone with little memory free: the shader translation runs with at most two workers (the number follows
+            // the free memory anyway; this caps it). Slower, but the build survives.
+            if (lowMem) args += "--low-mem"
             return args
         }
     }
