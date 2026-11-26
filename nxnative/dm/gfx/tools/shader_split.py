@@ -2369,7 +2369,15 @@ def scan_file(args):
         return rel, uniq_keys(found), var_pairs(found), trees
     if head[:8] == b'UnityFS\0':   # a UnityFS bundle: mapped, not read, and unpacked one node at a time (unityfs.bundle_nodes); Ori and the Will of the Wisps' 822 MB data_1.unity3d, read and unpacked whole, ran a 6 GB phone out of memory
         import mmap, unityfs
-        with open(path, 'rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as d:
+        try:
+            with open(path, 'rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as d:
+                try: unity_shaders(d, '/' + rel, found, trees if not TREES else dict(TREES))
+                except unityfs.NoTree: return rel, {}, set(), 'defer'
+        except OSError as e:
+            # A forked child on Android refused the mapping (EBADF seen in a port). Read the file whole instead: read_whole
+            # maps it itself when it does not fit, so a large bundle still is not copied to the heap.
+            print(f'note: {rel}: the mapped read failed ({e}); reading it whole', flush=True)
+            d = read_whole(path)
             try: unity_shaders(d, '/' + rel, found, trees if not TREES else dict(TREES))
             except unityfs.NoTree: return rel, {}, set(), 'defer'
         return rel, uniq_keys(found), var_pairs(found), trees
