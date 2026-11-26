@@ -376,11 +376,12 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         val ported = LibraryFileScanner.portFromPack(pack)
             ?: return PrepareOutcome(reason = locale.str(R.string.main_cannot_run_not_a_pack, pack.name))
         val dir = runtimeStorage.dir(ported.titleId)
+        runtimeStorage.pruneLegacyHost(dir)   // 改名前的旧前端库（libdmplay.so）：见到就删，它不可能再被装载
         // forceRebuild：玩家点名要重建（闪退后的「重新构建」）——目录里那份对不上也不将就，一律重编。
-        // 旧格式的包（清单带 host，运行库在包里）：目录里那份是旧前端的 libdmplay.so，标记的接口版本
-        // 对不上 → 就地重建（重建写的是新名字 libdmhost.so 与新标记，旧文件随之作废）。
+        // 旧格式的包（清单带 host，运行库在包里）：包里那份若还是旧前端的 libdmplay.so，不晋升——
+        // 就地重建（重建写的是新名字 libdmhost.so 与新标记，旧文件随之作废）。
         if (ported.hostDeclared) {
-            if (ported.runnable && !forceRebuild) {
+            if (ported.runnable && !forceRebuild && ported.host.name == "libdmhost.so") {
                 if (runtimeStorage.complete(dir) && runtimeStorage.matches(ported, runtimeStorage.readMarker(dir))) {
                     return PrepareOutcome(ok = true, hostPath = runtimeStorage.hostOf(dir).absolutePath)
                 }

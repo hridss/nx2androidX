@@ -22,7 +22,11 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
 
     companion object {
         const val MARKER_FILE = "build.json"
-        private const val HOST_FILE = "libdmplay.so"
+
+        // 宿主的正名（revision 9 的契约含新前端与新文件名）。libdmplay.so 是旧前端的库：见到即过时，
+        // 不能再被装载或晋升（prepareRuntime 对它就地重建）。
+        private const val HOST_FILE = "libdmhost.so"
+        private const val LEGACY_HOST_FILE = "libdmplay.so"
 
         /** the managed hooks, beside the host (the loader's own library loads them) */
         val HOOKS = setOf("libhook_impl.so", "libmain_hook.so", "libfile_redirect_hook.so", "libgsl_alloc_hook.so")
@@ -52,6 +56,11 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
 
     /** the host this folder's runtime loads (the file must be there: [complete] says whether it is) */
     fun hostOf(dir: File): File = File(dir, HOST_FILE)
+
+    /** 旧前端的运行库（libdmplay.so）还在目录里就删掉：改名后它永远不可能再被装载，留着只会误导 */
+    fun pruneLegacyHost(dir: File) {
+        File(dir, LEGACY_HOST_FILE).delete()
+    }
 
     /** the folder holds a whole runtime: the host and the loader's hooks, nothing half in place */
     fun complete(dir: File): Boolean =
