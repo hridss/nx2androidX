@@ -218,6 +218,18 @@ The PC tool is released upstream, by nx2android; this repository's releases hold
 
    A computer is not needed at all: the app ports the game itself, see route one.
 
+### The game as an APK of its own
+
+A port can leave the phone as a game you install yourself, without this app.
+
+1. **Library tab** → the game → the drawer → **Export this game as an APK**. A box says what will happen and where: the data folder and the APK land in the folder you pick (by default `/storage/emulated/0/NX2A-Games/`), how big the data is, that the data folder is the exported game's home (do not move it, do not delete it), that you install the APK yourself (the first install asks you to allow apps from unknown sources), and that the app also copies the data into the exported game's own directory so that it starts right away and asks for no permission.
+2. The export copies the data, builds the game (the host for a NativeActivity of its own) and packs the APK. The progress is on the screen; the copy of a big game takes minutes.
+3. **Install the APK** with the system's file manager (tap the `.apk` in the folder you picked). The exported game is then a game of its own: it starts, it asks for no permission, and it does not need this app any more.
+
+The app copies the data into the exported game's own directory over its own ADB channel (the same one the app uses to switch off Android's child-process limit), because the platform lets no app write into another app's directory — the shell may. That step needs Wireless debugging on and the app paired once (the box asks for the pairing code when the move did not happen). When it cannot run, the data stays in the folder you picked and the app says which directory to copy it into by hand.
+
+Every exported game is signed with the app's own key (in the app's private folder), so a later export of the same game installs over an earlier one. Reinstalling the app itself changes that key, and the system then refuses to install over the old one — uninstall that first.
+
 ### Common switches
 
 - **A game played by touch**: tick **Touch game** on the Builds tab (phone) or the Port tab (PC, `--touch`). The on-screen gamepad then starts hidden and every touch but one on the menu button goes to the game; the pause menu shows the gamepad again.
