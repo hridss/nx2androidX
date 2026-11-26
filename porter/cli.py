@@ -8,31 +8,21 @@ def _parser():
     sub = ap.add_subparsers(dest='cmd', required=True)
     d = sub.add_parser('doctor', help='check the tools a port needs'); d.add_argument('--json', action='store_true'); d.add_argument('-k', '--keys')
     p = sub.add_parser('profiles', help='list the games the tool can port'); p.add_argument('--all', action='store_true', help='also the iOS profiles not ported to Android'); p.add_argument('--json', action='store_true')
-    p.add_argument('action', nargs='?', choices=('list', 'import'), default='list', help='list the profiles, or import a package of them')
-    p.add_argument('package', nargs='?', help='the profiles package to import (a zip of the game profile folders), with "import"')
-    i = sub.add_parser('inspect', help='what a game holds and whether it can be ported'); i.add_argument('folder', help="the game's folder, or one dump file (a merged NSP / XCI carries the base game, update and DLC)"); i.add_argument('--json', action='store_true')
+    i = sub.add_parser('inspect', help='what a game folder holds and whether it can be ported'); i.add_argument('folder', help="the game's folder, or one dump file (a merged NSP / XCI carries the base game, update and DLC)"); i.add_argument('--json', action='store_true')
     i.add_argument('-k', '--keys', help='prod.keys (default: the configured one): reads the title ID of a dump with no [title ID] in its name')
-    po = sub.add_parser('port', help='make the data pack (the phone app runs the game)')
-    po.add_argument('folder', help="the game's folder, or one dump file: its base game NSP / XCI / NSZ / XCZ, updates and DLC (a merged NSP / XCI carries them all)")
+    po = sub.add_parser('port', help='make the APK and the data pack (and install them)')
+    po.add_argument('folder', help='the game\'s folder, or one dump file: its base game NSP / XCI / NSZ / XCZ, updates and DLC (a merged NSP / XCI carries them all)')
     po.add_argument('-k', '--keys', help='prod.keys (default: the configured one)')
-    po.add_argument('-o', '--out', help='folder for the data pack (default: the game folder)')
+    po.add_argument('-o', '--out', help='folder for the APK and the data pack (default: the game folder)')
     po.add_argument('-p', '--version', default='', help='version to pack, v<N> (default: the newest in the folder)')
     po.add_argument('-l', '--language', default='', help='game language, a code, a name or system (default: English)')
     po.add_argument('--app-name', default='', help='the app\'s name on the device (default: the game\'s name)')
-    mode = po.add_mutually_exclusive_group()
-    mode.add_argument('--app', action='store_true', dest='app',
-                      help="the nx2android app's mode (the default): no APK and no install step — the data pack carries the host "
-                           "(libdmplay.so), the Vulkan drivers and the icon, and the app runs the game itself")
-    mode.add_argument('--game-apk', action='store_false', dest='app',
-                      help="the fork's legacy path: a per-game APK as well (a separate app per game, installed over adb); unmaintained here — "
-                           "--install, --replace-signer, --package and --vercode-offset belong to it")
-    po.set_defaults(app=True)
-    po.add_argument('--install', action='store_true', help='install the APK on the connected device afterwards (with --game-apk)')
-    po.add_argument('--device', default='', help='adb serial of the device to install on (with --game-apk)')
-    po.add_argument('--replace-signer', action='store_true', help='uninstall an app of the same package signed with another key first (deletes its saves) (with --game-apk)')
+    po.add_argument('--install', action='store_true', help='install on the connected device afterwards')
+    po.add_argument('--device', default='', help='adb serial of the device to install on')
+    po.add_argument('--replace-signer', action='store_true', help='uninstall an app of the same package signed with another key first (deletes its saves)')
     po.add_argument('--debug', action='store_true', help='a development build: debug information, debuggable, DM_CTL key presses')
     po.add_argument('--experimental', action='store_true', help='try a game not ported to Android yet (a profile guessed from a survey of its files; it may not start)')
-    po.add_argument('--package', default='', help="the app's package instead of the profile's (a test install beside another build of the game) (with --game-apk)")
+    po.add_argument('--package', default='', help="the app's package instead of the profile's (a test install beside another build of the game)")
     po.add_argument('--native-keyboard', action='store_true', help='use the Android Unicode keyboard (requires JDK and Android SDK platform/build-tools)')
     po.add_argument('--external-display', action='store_true', help='build the external-screen gamepad activity (requires Android SDK platform and build-tools)')
     po.add_argument('--fps60', action='store_true', help='60 fps: the profile\'s own frame-rate cap, else the community\'s FPSLocker-Warehouse config of the game\'s build, fetched from GitHub')
@@ -46,13 +36,10 @@ def _parser():
                     help='multithread replay: the game\'s Vulkan commands are recorded on a thread of their own (DM_VK_MT_REPLAY=1 in env.txt), for a game whose replay '
                          'thread holds its frame rate back; it needs a port again (or env.txt edited) to turn off')
     po.add_argument('--vulkan-driver', default=None, metavar='FILE',
-                    help='an arm64 Vulkan driver library (.so, such as Mesa\'s Turnip for Adreno) to pack in the data pack and use instead of the device\'s own driver '
+                    help='an arm64 Vulkan driver library (.so, such as Mesa\'s Turnip for Adreno) to pack in the APK and use instead of the device\'s own driver '
                          '(DM_VK_DRIVER in env.txt); the app falls back to the device\'s driver when the library does not load. A library not named lib*.so '
                          '(vulkan.purple.so) is packed as lib<name>, the only names Android extracts. A profile with vulkan_driver turnip gets Turnip without it (porter config turnip); '
                          '"system" keeps the device\'s driver')
-    po.add_argument('--vulkan-driver-dir', default=None, metavar='DIR',
-                    help='a folder of arm64 Vulkan driver libraries (.so, such as Mesa\'s Turnip for Adreno): the pack carries them all and the app\'s configuration panel lets '
-                         'the player pick one (the device\'s own driver is the first choice); needs --vulkan-driver or this folder alone')
     po.add_argument('--shared-font', default=None, metavar='FILE',
                     help='a TrueType font (.ttf, one font, not a collection) to pack as the system font the game asks for, instead of the device\'s Roboto: one with CJK '
                          'characters shows the Chinese and Korean text of a game that draws it with the system font (DM_SHARED_FONT in env.txt); never shipped with the tool')
@@ -61,7 +48,7 @@ def _parser():
                          "(android.tsv sysdata: Mario Kart 8 Deluxe's Mii heads come from MiiModel); never shipped with the tool (default: the configured one)")
     po.add_argument('--vercode-offset', type=int, default=None, metavar='N',
                     help='add N (0-65535) to the APK\'s versionCode, so a rebuild of the same game version installs over a build with a higher one and keeps its saves '
-                         '(default: $NX2A_VERCODE_OFFSET, else 0) (with --game-apk)')
+                         '(default: $NX2A_VERCODE_OFFSET, else 0)')
     po.add_argument('--alias-headroom', type=int, default=None, metavar='GB',
                     help='GB (0-48) of extra guest address space (the alias region) for a game with virtual address memory, for a game whose log shows '
                          '"AllocateAddressRegion refused (0x1803)" before it crashes; it uses no memory (default: 8 for a game version the profile was not '
@@ -69,13 +56,6 @@ def _parser():
     _romfs_at(po, 'with --install: ')
     po.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
     po.add_argument('--progress', default='auto', choices=('auto', 'bar', 'lines', 'json', 'off'), help='json: one JSON event per line, for the GUI')
-    rt = sub.add_parser('rebuild-runtime', help='rebuild a pack runtime without the original game files')
-    rt.add_argument('pack')
-    rt.add_argument('--allow-profile-drift', action='store_true',
-                    help='rebuild with the profile the game has now even when it is not the one the pack was built with '
-                         '(that profile is the one a full re-port would use too; the game may behave differently than when it was ported)')
-    rt.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
-    rt.add_argument('--progress', choices=('json', 'lines'), default='lines')
     ins = sub.add_parser('install', help='install a port made earlier'); ins.add_argument('data', help='the data pack folder (<App>-data)'); ins.add_argument('--apk', help='the APK (default: <App>.apk beside the pack)')
     ins.add_argument('--device', default=''); ins.add_argument('--replace-signer', action='store_true'); ins.add_argument('--progress', default='auto', choices=('auto', 'bar', 'lines', 'json', 'off'))
     _romfs_at(ins)
@@ -107,14 +87,6 @@ def _parser():
     hs.add_argument('--package', default='', help='the app (default: the only ported game installed)')
     hs.add_argument('--device', default='', help='adb serial (default: the configured device, else the only one)')
     hs.add_argument('--jobs', type=int, default=os.cpu_count() or 8); hs.add_argument('--json', action='store_true')
-    ex = sub.add_parser('export-apk', help='the game as a standalone APK: the host for a NativeActivity of its own, and the APK that ties it to its data folder')
-    ex.add_argument('data', help='the data folder (a self-sufficient export of the data pack: the manifest, the icon, the theme and the game\'s files)')
-    ex.add_argument('--out', required=True, help='the APK to write')
-    ex.add_argument('--key', required=True, help='the signing key (the app\'s own: every exported game shares it, so a rebuild installs over the one before)')
-    ex.add_argument('--driver', default='', help='the Vulkan driver library the APK carries (the host loads it from the APK\'s own library folder); without one the game runs on the device\'s own driver')
-    ex.add_argument('--vercode-offset', type=int, default=0, help='the versionCode offset (the app counts the exports of the same game, so a later one installs over an earlier one)')
-    ex.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
-    ex.add_argument('--progress', choices=('json', 'lines'), default='lines')
     return ap
 
 
@@ -139,16 +111,7 @@ def cmd_doctor(a):
 
 
 def cmd_profiles(a):
-    from porter import profiles, profiles_layer
-    if a.action == 'import':
-        if not a.package:
-            print('porter profiles import <package.zip>', file=sys.stderr); return 2
-        try:
-            rec = profiles_layer.import_zip(a.package)
-        except profiles_layer.LayerError as e:
-            print(f'[RED] {e}', file=sys.stderr); return 2
-        print(f'imported {rec["count"]} game profile(s) (r{rec["revision"]}, {str(rec["commit"])[:8]}) into {profiles_layer.layer_dir()}')
-        return 0
+    from porter import profiles
     rows = profiles.all_entries(android_only=not a.all)
     if a.json: _print_json([r.as_dict() for r in rows]); return 0
     for r in rows: print(f'{r.id}  {r.status:12} {r.name}' + (f'  ({r.tested})' if r.tested else ''))
@@ -211,28 +174,6 @@ def cmd_port(a):
     except BuildError as e: print(e, file=sys.stderr); return 2
     opts = pipeline.Options.from_args(a, vercode_offset=offset)   # every other field from the argument of its name
     return _with_progress(a.progress, lambda: pipeline.emit_result(pipeline.Port(opts).run()))
-
-
-def cmd_rebuild_runtime(a):
-    from porter.runtime_update import ProfileDrift, rebuild
-    def emit(message):
-        if a.progress == 'json': print(json.dumps({'ev': 'say', 'msg': message}), flush=True)
-        else: print(message, flush=True)
-    try:
-        if a.progress == 'json': print(json.dumps({'ev': 'stage', 'k': 1, 'n': 1, 'name': 'Update runtime'}), flush=True)
-        result = rebuild(a.pack, jobs=a.jobs, allow_profile_drift=a.allow_profile_drift, emit=emit)
-        if a.progress == 'json': print(json.dumps({'ev': 'result', **result}), flush=True)
-        else: emit('Runtime updated: ' + result['data'])
-        return 0
-    except KeyboardInterrupt:
-        emit('[RED] Runtime update cancelled. Check the game status before retrying.'); return 130
-    except ProfileDrift as error:
-        # 档案对不上：App 拿这条事件知道「玩家还可以用当前档案再来一次」
-        if a.progress == 'json': print(json.dumps({'ev': 'profile-drift', 'msg': str(error)}), flush=True)
-        else: emit('Port the game again from its original files, or use --allow-profile-drift to rebuild with the profile the game has now.')
-        emit(f'[RED] {error}'); return 1
-    except Exception as error:
-        emit(f'[RED] {error}'); return 1
 
 
 def cmd_install(a):
@@ -337,29 +278,7 @@ def cmd_driver(a):   # porter driver and porter host: the installed APK rebuilt 
     return 0
 
 
-def cmd_export_apk(a):
-    from porter.export_apk import export
-    def emit(message):
-        if a.progress == 'json': print(json.dumps({'ev': 'say', 'msg': message}), flush=True)
-        else: print(message, flush=True)
-    def stage(k, n, name):
-        if a.progress == 'json': print(json.dumps({'ev': 'stage', 'k': k, 'n': n, 'name': name}), flush=True)
-    try:
-        stage(1, 2, 'Build the host')
-        result = export(Path(a.data), Path(a.out), Path(a.key),
-                        driver=Path(a.driver) if a.driver else None,
-                        vercode_offset=a.vercode_offset, jobs=a.jobs, emit=emit)
-        stage(2, 2, 'Pack the APK')
-        if a.progress == 'json': print(json.dumps({'ev': 'result', **result}), flush=True)
-        else: emit('APK: ' + result['apk'])
-        return 0
-    except KeyboardInterrupt:
-        emit('[RED] The export was cancelled. Nothing was installed.'); return 130
-    except Exception as error:
-        emit(f'[RED] {error}'); return 1
-
-
 def main(argv):
     if hasattr(sys.stdout, 'reconfigure'): sys.stdout.reconfigure(encoding='utf-8', errors='replace')   # game names and progress bars on a Windows console
     a = _parser().parse_args(argv)
-    return {'doctor': cmd_doctor, 'profiles': cmd_profiles, 'inspect': cmd_inspect, 'port': cmd_port, 'rebuild-runtime': cmd_rebuild_runtime, 'install': cmd_install, 'devices': cmd_devices, 'tools': cmd_tools, 'config': cmd_config, 'saves': cmd_saves, 'driver': cmd_driver, 'host': cmd_driver, 'export-apk': cmd_export_apk}[a.cmd](a)
+    return {'doctor': cmd_doctor, 'profiles': cmd_profiles, 'inspect': cmd_inspect, 'port': cmd_port, 'install': cmd_install, 'devices': cmd_devices, 'tools': cmd_tools, 'config': cmd_config, 'saves': cmd_saves, 'driver': cmd_driver, 'host': cmd_driver}[a.cmd](a)

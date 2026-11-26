@@ -64,7 +64,7 @@ class GameApkExporter @Inject constructor(private val guestLauncher: GuestProces
         /** The command line the guest runs. */
         fun args(dataFolder: File, apk: File, key: File, driver: File?, vercodeOffset: Int): List<String> {
             val args = mutableListOf(
-                "-m", "porter", "export-apk", dataFolder.absolutePath,
+                "-m", "porter.phone_cli", "export-apk", dataFolder.absolutePath,
                 "--out", apk.absolutePath,
                 "--key", key.absolutePath,
                 "--vercode-offset", vercodeOffset.toString(),

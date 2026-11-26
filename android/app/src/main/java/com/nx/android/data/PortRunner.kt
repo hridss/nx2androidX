@@ -65,7 +65,7 @@ class PortRunner(
                      experimental: Boolean, aliasHeadroom: Int, noLsfg: Boolean,
                      sharedFont: String = "", firmware: String = "", mtReplay: Boolean = false,
                      deviceLanguage: String = ""): List<String> {
-            val args = mutableListOf("-m", "porter", "port", gameFile, "-k", keys, "--progress", "json", "--app")
+            val args = mutableListOf("-m", "porter.phone_cli", "port", gameFile, "-k", keys, "--progress", "json", "--app")
             if (touch) args += "--touch"
             if (fps60) args += "--fps60"
             if (experimental) args += "--experimental"
@@ -86,7 +86,7 @@ class PortRunner(
      * saved setting). [json] asks for the rows as one JSON array, the form the keys check reads.
      */
     fun doctor(keys: String, json: Boolean, onEnd: () -> Unit): Thread {
-        val args = mutableListOf("-m", "porter", "doctor")
+        val args = mutableListOf("-m", "porter.phone_cli", "doctor")
         if (json) args += "--json"
         if (keys.isNotBlank()) args += listOf("-k", keys.trim())
         val t = Thread {
@@ -111,7 +111,7 @@ class PortRunner(
      * import worked; the porter's own lines say why it did not.
      */
     fun importProfiles(packageFile: String, onEnd: (Int) -> Unit): Thread {
-        val args = mutableListOf("-m", "porter", "profiles", "import", packageFile)
+        val args = mutableListOf("-m", "porter.phone_cli", "profiles", "import", packageFile)
         return start(args, onEnd)
     }
 

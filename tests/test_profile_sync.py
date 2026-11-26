@@ -9,7 +9,7 @@ import types
 import unittest
 from unittest import mock
 
-from porter import pipeline, profiles, profiles_layer
+from porter import pipeline, phone_port, profiles, profiles_layer
 
 TID = '0100B8A026F14000'
 OTHER = '0100999999999000'
@@ -63,15 +63,15 @@ class ProfileSyncTest(unittest.TestCase):
     def test_the_port_copies_the_profile_and_removes_it_when_it_is_done(self):
         port = types.SimpleNamespace(g=None, synced_profile=None)
         with mock.patch.object(profiles_layer, 'DM', self.dm):
-            pipeline.Port.sync_profile(port, TID)
+            phone_port.PhonePort.sync_profile(port, TID)
         self.assertTrue((self.games / TID / 'patches.py').is_file())
-        pipeline.Port.drop_profile(port)
+        phone_port.PhonePort.drop_profile(port)
         self.assertFalse((self.games / TID).exists())
 
     def test_a_failure_to_copy_is_a_warning_not_an_error(self):
         port = types.SimpleNamespace(g=None, synced_profile=None)
         with mock.patch.object(profiles_layer, 'DM', self.dm), mock.patch.object(profiles_layer, 'copy_to_games', side_effect=OSError('read-only')):
-            pipeline.Port.sync_profile(port, TID)   # no exception: the port goes on without the profile's patches
+            phone_port.PhonePort.sync_profile(port, TID)   # no exception: the port goes on without the profile's patches
         self.assertIsNone(port.synced_profile)
 
 

@@ -5,7 +5,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault('NX2A_HOME', tempfile.mkdtemp(prefix='nx2a_test_home_'))
-from porter import pipeline             # noqa: E402
+from porter import pipeline, phone_port             # noqa: E402
 from porter.adb import AdbError         # noqa: E402
 
 
@@ -43,7 +43,7 @@ class PullCaptures(unittest.TestCase):
         self.assertIn('choose one', self.pull(self.port(), 'several devices connected (a, b): choose one')[0])
 
     def test_run_no_longer_gates_on_install(self):
-        src = Path(pipeline.__file__).read_text(encoding='utf-8')
+        src = Path(phone_port.__file__).read_text(encoding='utf-8')   # the fork's _run nests one level deeper than upstream's
         self.assertNotIn('if o.install: self.pull_captures()', src)
         self.assertIn('            self.pull_captures()\n', src)   # unconditional (the app reads its own files folder; a PC pulls over adb). The fork's run() nests one level deeper than upstream's
 

@@ -52,7 +52,7 @@ class RuntimeCompiler @Inject constructor(private val guestLauncher: GuestProces
 
     companion object {
         fun args(pack: String): List<String> {
-            val args = mutableListOf("-m", "porter", "rebuild-runtime", pack, "--progress", "json")
+            val args = mutableListOf("-m", "porter.phone_cli", "rebuild-runtime", pack, "--progress", "json")
             // the profile the game has now is always the one a rebuild uses (no confirmation step)
             args.add("--allow-profile-drift")
             return args

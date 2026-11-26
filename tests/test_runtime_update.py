@@ -166,14 +166,14 @@ for name in ('libhook_impl.so', 'libmain_hook.so', 'libfile_redirect_hook.so', '
         self.assert_preserved()
 
     def test_the_drift_is_reported_as_an_event_the_app_can_act_on(self):
-        from porter import cli
+        from porter import cli, phone_cli
         args = argparse.Namespace(pack=str(self.pack), progress='json', jobs=1,
                                   allow_profile_drift=False)
         with patch.object(runtime_update, 'rebuild',
                           side_effect=runtime_update.ProfileDrift('The game profile changed since this pack was built.')):
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
-                code = cli.cmd_rebuild_runtime(args)
+                code = phone_cli.cmd_rebuild_runtime(args)
         self.assertEqual(code, 1)
         events = [json.loads(line) for line in out.getvalue().splitlines() if line.startswith('{')]
         self.assertTrue(any(event.get('ev') == 'profile-drift' for event in events), events)
