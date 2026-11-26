@@ -78,7 +78,7 @@ if NX2A_ARM_HOST and host_dir('shader-tools', 'glslc') != 'linux-aarch64':   # t
     _glslc = _sh.which('glslc')
     if not _glslc: sys.exit('aarch64 host: glslc not found (install the shaderc tools, or put glslc on PATH)')
     GLSLC = Path(_glslc)
-for sh in GL_SRC:
+for sh in sorted(p for p in (DM / 'android/shaders').glob('*.*') if p.suffix in ('.vert', '.frag', '.comp', '.geom', '.tesc', '.tese')):
     hdr = gen / a.game / f'{sh.stem}_{sh.suffix[1:]}.spv.h'
     if hdr.exists() and hdr.stat().st_mtime >= sh.stat().st_mtime: continue
     spv = gen / f'{sh.name}.spv'
