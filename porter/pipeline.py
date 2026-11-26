@@ -1508,7 +1508,14 @@ class Port:
         translates them too: the shaders of a scene are only known once the game has been there"""
         got = []
         for v in self.versions:
-            got += self.pack_files('', self.dirs[v] / 'ue_programs', pattern=lambda n: n.startswith('program_') and n.endswith('.bin'))
+            dst = self.dirs[v] / 'ue_programs'
+            had = dst.is_dir() and any(dst.iterdir())
+            got += self.pack_files('', dst, pattern=lambda n: n.startswith('program_') and n.endswith('.bin'))
+            # A folder the pull made and none of the game's programs landed in: this is not an Unreal title, and the
+            # split must not read an empty one as a capture that failed (shader_split: "holds no program dump").
+            if not had and dst.is_dir() and not any(dst.iterdir()):
+                try: dst.rmdir()
+                except OSError: pass
         if got: say(f'{len(got):,} program(s) of the app\'s run added to the shaders of {", ".join(self.versions)}')
         return got
 
