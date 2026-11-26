@@ -1,6 +1,6 @@
 # The engine's sub-agent extension: the wait path of get_subagent_result must not hold a session. The build
 # patches the engine's own file when it stages it (packaging/android-apk/build_assets.py).
-import importlib.util, shutil, subprocess, tempfile, unittest
+import importlib.util, shutil, subprocess, tempfile, unittest, zipfile
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / 'packaging' / 'android-apk' / 'build_assets.py'
@@ -12,9 +12,10 @@ spec.loader.exec_module(build_assets)
 # so a patch that changes is a patch that is tested.
 WAIT_DESCRIPTION, WAIT_GUARD, RUNNING_TEXT = (old for old, _ in build_assets.SUBAGENT_PATCHES)
 
-# The engine's file as it is in the staged tree (the build's cache; the test skips when it is not there).
-CACHED = (Path(__file__).resolve().parent.parent / 'packaging' / 'android-apk' / '.cache' / 'assets' / 'agent'
-          / 'runtime' / 'extensions' / 'pi-subagents' / 'dist' / 'index.js')
+# The engine's file as the package carries it (pristine). The staged copy in the build's cache is patched in place,
+# so it is not the input of this test: a build that ran once would leave the patch already applied there.
+CACHED_PACKAGES = sorted((Path(__file__).resolve().parent.parent / 'packaging' / 'android-apk' / '.cache' / 'pi-respack')
+                          .glob('pi-agent-r*.zip'))
 
 
 class EngineSubagentPatch(unittest.TestCase):
@@ -32,6 +33,15 @@ class EngineSubagentPatch(unittest.TestCase):
     def patch(self):
         build_assets.patch_engine_subagents(self.dir)
         return self.file.read_text(encoding='utf-8')
+
+    def pristine_engine_file(self, work: Path) -> Path:
+        """The engine's file as the package carries it (not the patched copy the build leaves in its cache)"""
+        (work / 'extensions' / 'pi-subagents' / 'dist').mkdir(parents=True)
+        out = work / 'extensions' / 'pi-subagents' / 'dist' / 'index.js'
+        with zipfile.ZipFile(CACHED_PACKAGES[-1]) as z:
+            with z.open('extensions/pi-subagents/dist/index.js') as src, out.open('wb') as dst:
+                shutil.copyfileobj(src, dst)
+        return out
 
     def test_the_wait_is_taken_from_a_top_level_agent(self):
         got = self.patch()
@@ -59,24 +69,22 @@ class EngineSubagentPatch(unittest.TestCase):
             build_assets.patch_engine_subagents(self.dir)
         self.assertIn('carries no sub-agent extension', str(e.exception))
 
-    @unittest.skipUnless(CACHED.is_file(), 'the engine is not staged in this checkout')
+    @unittest.skipUnless(CACHED_PACKAGES, 'the engine package is not in this checkout')
     def test_the_real_engine_file(self):
         """The engine's own file, patched: every patch matches once, and the file is still one program."""
         work = self.dir / 'real'
-        (work / 'extensions' / 'pi-subagents' / 'dist').mkdir(parents=True)
-        shutil.copy2(CACHED, work / 'extensions' / 'pi-subagents' / 'dist' / 'index.js')
+        self.pristine_engine_file(work)
         build_assets.patch_engine_subagents(work)
         got = (work / 'extensions' / 'pi-subagents' / 'dist' / 'index.js').read_text(encoding='utf-8')
         self.assertIn('if (params.wait && isTopLevelAgent(record))', got)
         self.assertIn('else if (params.wait && (record.status === "running"', got)
         self.assertNotIn('\n            if (params.wait && (record.status === "running"', got)
 
-    @unittest.skipUnless(CACHED.is_file() and shutil.which('node'), 'the engine is not staged (or node is missing)')
+    @unittest.skipUnless(CACHED_PACKAGES and shutil.which('node'), 'the engine package is not here (or node is missing)')
     def test_the_patched_file_is_still_a_program(self):
         """The patched file has to parse: a patch that breaks the extension breaks the assistant."""
         work = self.dir / 'real'
-        (work / 'extensions' / 'pi-subagents' / 'dist').mkdir(parents=True)
-        shutil.copy2(CACHED, work / 'extensions' / 'pi-subagents' / 'dist' / 'index.js')
+        self.pristine_engine_file(work)
         build_assets.patch_engine_subagents(work)
         patched = work / 'extensions' / 'pi-subagents' / 'dist' / 'index.js'
         as_module = work / 'index.mjs'   # the file is a module: node checks it as one

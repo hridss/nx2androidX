@@ -176,10 +176,10 @@ and directional cap throws and Tears of the Kingdom bow aiming is still required
 before enabling the opt-in in a profile. Host sensor tests verify routing and
 axis preservation, not game recognition or device behavior.
 
-The phone app has the same two switches in the game's drawer (the **Controls** tab): they are
-handed to the host as env rows when the game starts and reach the running game over JNI
-(`motionSet`, the way the frame rate step does), so a change takes effect at once, without
-restarting the game. One game has one pair. The display's rotation comes from the app's Activity
+The phone app keeps the two switches per game and hands them to the host as env rows when the
+game starts (`DM_MOTION`, `DM_MOTION_RAW`); the host reads them live. The in-game drawer that
+carried them is gone, so there is no switch to reach at the moment: the values come from the
+app's own preferences for that game. The display's rotation comes from the app's Activity
 through JNI (`Display.getRotation()`): the app's player front end has no Activity of its own, so
 it asks for it.
 
@@ -442,15 +442,13 @@ Two changes in the tool itself make it run on an ARM64 Linux host:
 - `porter/toolchain.py` finds an NDK that ships with the program (`NX2A_NDK`), and `porter/fetch.py` does not
   fetch adb on an ARM64 Linux host (Google ships platform-tools for Linux as x86-64 only).
 
-The frame generation's switch: the host the app builds links the code of `nxnative/dm/android/lsfg/` by default. Build
-the app with `-PnxLsfg=false` and the host is built without it — a smaller host, with the frame generation reporting
-that it is not in this build; the same host built by the command line is `porter port --no-lsfg`. The switch does not
-change the license of the build: the code it is made from is GPL-3.0-or-later either way.
-[android/NOTICE.md](../android/NOTICE.md) says what that means for the app.
+The frame generation is not in this line: there is no `lsfg/` tree, no switch and no `--no-lsfg`. The host the app
+builds carries no copyleft component beyond the repository's own code, and the license of the build does not change
+with it. [android/NOTICE.md](../android/NOTICE.md) says what that means for the app.
 
 ## Testing the physical controller without a controller
 
-The physical controller's path (the app's gamepad center, the mapping table, the host's dictionary) can be tested
+The physical controller's path (the app's axis roles, the host's dictionary) can be tested
 on a phone without a controller in hand: `devtools/uinput_pad.c` is a virtual gamepad that sends the same kernel
 events a pad sends.
 

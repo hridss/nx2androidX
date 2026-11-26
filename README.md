@@ -18,9 +18,9 @@ This repository is nx2androidX, built on nx2android — the PC tool that ports a
 
 The app is the whole tool on the phone: it ports the game on the device and plays the pack it makes. The game files it shows are the player's own.
 
-![Four screens of the app: starting a port on the Builds tab, the assistant answering beside the game library, the in-game drawer's frame generation, and the Settings tab](docs/images/app-screens.png)
+![Four screens of the app: starting a port on the Builds tab, the assistant answering beside the game library, the in-game menu, and the Settings tab](docs/images/app-screens.png)
 
-*Top left: starting a port on the Builds tab; top right: the assistant answering beside the library — Red Dead Redemption, the game it fixed, is in it; bottom left: the in-game drawer's frame generation; bottom right: the Settings tab (language, environment, keys, Vulkan drivers).*
+*Top left: starting a port on the Builds tab; top right: the assistant answering beside the library — Red Dead Redemption, the game it fixed, is in it; bottom left: the in-game menu (these two screenshots are from before the menu moved into the host); bottom right: the Settings tab (language, environment, keys, Vulkan drivers).*
 
 **This repository's releases hold the phone app itself** (the APK, its file named after the version). The PC tool is released upstream, by nx2android; both routes are in [For players](#for-players-port-a-game-without-programming).
 
@@ -48,14 +48,14 @@ The library got simpler too: it used to take a folder to be the library, and the
 | **Renamed nx2androidX** | The phone app carries the new name; the releases live in `zFitness/nx2androidX` |
 | **Onboarding fixed** | It can be finished now, the progress is not lost, and the keys picked in step three are the ones the port uses |
 | **The game is a page of the app** | Ending the game falls back to the library instead of the home screen, and the recents hold one entry |
-| **The app's own language** | Chinese and English, switchable at any time (the game's own language stays in the library's drawer, one game at a time) |
+| **The app's own language** | Chinese and English, switchable at any time (the game's own language is picked in the game detail page, one game at a time) |
 | **Saves you can share** | An export becomes a package handed to the system share sheet; an import takes one in from anywhere; the save it replaces is backed up first |
-| **An in-game drawer** | The ☰ menu button opens it: performance, HUD, frame generation and controls in the pause menu |
-| **Frame generation** | Available while the game runs; the multiplier and the target frame rate take effect at once |
-| **A steady frame rate** | The drawer's performance page holds the frame rate step (60, 40 or 30 instead of a rate that wanders) and the docked mode |
+| **The game's own menu** | The ☰ button (or the Back key) opens it: the gamepad, the game, the counter and the style, drawn by the host over the picture |
+| **Frame generation is gone** | The port no longer carries it — the port is the one frame the game draws |
+| **One controller, one player** | The multi-player mapping is gone, and with it the gamepad center: a controller's face buttons are one choice for all of them |
 | **Vulkan driver management** | Download (Turnip builds), import from a file or remove, in the Settings tab; one Turnip build ships inside the app |
 | **Update check on start** | The release page is checked quietly; a newer version says so on the home page, and the Settings tab can check again on demand |
-| **Shareable logs** | The library's drawer shares the game's runtime log; the Settings tab clears it |
+| **Shareable logs** | The game detail page shares the game's runtime log; the Settings tab clears it |
 | **APK 460 MB → 272 MB** | The .NET on the phone went from the SDK to the runtime: the two C# tools are pre-built, so the phone only runs them, never builds them |
 
 </details>
@@ -70,23 +70,23 @@ The save actions in the library panel became a backup-and-share affair: an expor
 
 An import is not taken on trust: a package carrying another game's title ID is refused, a path pointing out of the folder is refused, and the unpacked size is capped.
 
-### The in-game drawer and frame generation
+### The in-game menu
 
-The ☰ menu button opens the in-game drawer, with four tabs: **performance**, **HUD**, **frame generation** and **controls**.
+The ☰ button (or the Back key) opens the game's own menu, drawn by the host over the picture: four tabs — **Gamepad**, **Game**, **Counter** and **Style**.
 
-The performance tab holds the two trade-offs: the **frame rate step** — *follow the game* leaves the rate to step between 60, 40 and 30 fps on its own, while 60, 40 or 30 hold that step, so the rate stays steady where the device can hold it (the pick is kept per game and takes effect at once) — and the **docked mode**, which renders at the TV's resolution: a sharper picture that costs more power, and a higher frame rate without it.
+The gamepad tab holds the virtual gamepad: whether it is drawn, its opacity, the layout editor (drag a control, pinch to resize, snap to grid), the sticks' touch area, the rumble, the audio output, and a row that says whether a physical controller's face buttons go to the game by their position (the Switch's) or by their label (an Xbox controller's).
 
-Frame generation uses Lossless.dll: the frames-per-game multiplier, the target frame rate and the optical flow quality are all adjustable, and the switch and the multiplier take effect at once; an updated DLL is copied to the private folder by itself. Lossless Scaling's resources are neither bundled nor downloaded, and the DLL is the player's own file: we do not distribute it and do not link to a download.
+The game tab holds the frame rate counter, the upscaling (SGSR 1.0) and its sharpness, the handheld or docked mode, and the save manager (export and import).
 
-The HUD tab has the on-screen information: the performance line (the frame rate counter), the device line, the fields the line shows and the temperature's unit.
+The counter tab picks the counter's rows — frame rate, SoC, battery, driver — and the frame time graph; the style tab where the counter sits, its colour, its outline and its size.
 
-The controls tab has the virtual gamepad: the layout editor (drag a control, pinch to resize, snap to grid), the pad's opacity and the rumble.
+What is not in the menu any more: the frame generation (the whole feature is gone), the multi-player mapping (one controller, one player), and the gamepad center (the old panel with the per-controller bindings and the calibration).
 
 ### Vulkan drivers on the phone
 
 The drivers are the player's, not the pack's: the **Vulkan driver** section of the Settings tab can download them (Mesa's Turnip builds, from their own addresses), import one from a file, and remove one. One Turnip build — the Adreno 8xx one — ships inside the app: it unpacks itself into the app's own folder when the app starts (no network, no click) and is marked as the built-in one, so it is not the player's to remove.
 
-The driver a game runs with is picked in the library's drawer (**Vulkan driver**), the device's own driver first. The choice is kept in the data pack's `env.txt`, so it lasts, and it takes effect the next time the game starts.
+The driver a game runs with is picked in the game detail page's run options (**Vulkan driver**), the device's own driver first. The choice is kept in the data pack's `env.txt`, so it lasts, and it takes effect the next time the game starts.
 
 ---
 
@@ -126,7 +126,7 @@ That knowledge was never rare — it was scattered across hundreds of pull reque
 
 None of them is in the ported list yet: the profile and the fix live on a case branch, not in the main line. A game that graduates — profile, `android.tsv` and the row in the checklist — moves into the count at the top of this page.
 
-Your game too? The library's drawer → the assistant → **Contribute upstream** packs that game's case file into a zip. Attach it to a [case file issue](https://github.com/zFitness/nx2androidX/issues/new?template=case_file.yml) and the fix can be read, applied and landed.
+Your game too? The game detail page → the assistant → **Contribute upstream** packs that game's case file into a zip. Attach it to a [case file issue](https://github.com/zFitness/nx2androidX/issues/new?template=case_file.yml) and the fix can be read, applied and landed.
 
 ### The documents it points at
 
@@ -227,7 +227,7 @@ The PC tool is released upstream, by nx2android; this repository's releases hold
 
 A port can leave the phone as a game you install yourself, without this app.
 
-1. **Library tab** → the game → the drawer → **Export this game as an APK**. A box says what will happen and where: the data folder and the APK land in the folder you pick (by default `/storage/emulated/0/NX2A-Games/`), how big the data is, that the data folder is the exported game's home (do not move it, do not delete it), that you install the APK yourself (the first install asks you to allow apps from unknown sources), and that the app also copies the data into the exported game's own directory so that it starts right away and asks for no permission.
+1. **Library tab** → the game → the detail page's menu → **Export this game as an APK**. A box says what will happen and where: the data folder and the APK land in the folder you pick (by default `/storage/emulated/0/NX2A-Games/`), how big the data is, that the data folder is the exported game's home (do not move it, do not delete it), that you install the APK yourself (the first install asks you to allow apps from unknown sources), and that the app also copies the data into the exported game's own directory so that it starts right away and asks for no permission.
 2. The export copies the data, builds the game (the host for a NativeActivity of its own) and packs the APK. The progress is on the screen; the copy of a big game takes minutes.
 3. **Install the APK** with the system's file manager (tap the `.apk` in the folder you picked). The exported game is then a game of its own: it starts, it asks for no permission, and it does not need this app any more.
 
@@ -251,7 +251,7 @@ Every exported game is signed with the app's own key (in the app's private folde
 
 ## Saves
 
-**On the phone**: the library page → the drawer → **Saves**. **Export the saves** asks the system file manager where the package goes and writes the save there as a zip; **Import the saves…** takes a zip from anywhere the file manager can see.
+**On the phone**: the library page → the game → the detail page → **Saves**. **Export the saves** asks the system file manager where the package goes and writes the save there as a zip; **Import the saves…** takes a zip from anywhere the file manager can see.
 
 An import replaces the save the game has, so the app asks before it does it: the package's name, and the fact that the progress it replaces cannot be brought back. A package carrying another game's title ID is refused, and the unpacked size is capped. Uninstalling the app deletes its saves: copy them out first.
 
@@ -311,7 +311,7 @@ Everyone who is in this repository's history, and everyone who comes with a pull
 
 The code this repository owns and maintains — the porter, the desktop app, the phone app, the packaging, the docs and the nxnative engine tree this fork maintains — is GPL-3.0-or-later: [LICENSE](LICENSE). [NOTICE.md](NOTICE.md) says what those terms cover, who holds the copyright on what, and which upstream code this repository continues. The third-party code in the tree keeps its own license; every component is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-The phone app's frame generation ([nxnative/dm/android/lsfg/](nxnative/dm/android/lsfg/)) is GPL-3.0-or-later as well, the same terms as the rest of the tree. It can be left out of a build, but that does not change the license of the code the build was made from. What that means for the app is in [android/NOTICE.md](android/NOTICE.md).
+The phone app carries no further copyleft component: the frame generation is not in this build. The third-party components it does use are permissive, and each one is listed with its license text in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). What that means for the app is in [android/NOTICE.md](android/NOTICE.md).
 
 ## Acknowledgements
 
