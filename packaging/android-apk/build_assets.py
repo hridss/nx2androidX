@@ -578,9 +578,9 @@ def main():
         payload_manifest(apk, size, MODULES if not a.no_wheels else [])
         return 0
     shutil.rmtree(out, ignore_errors=True)
-    out.mkdir(parents=True)
+    out.mkdir(parents=True, exist_ok=True)
     shutil.rmtree(apk, ignore_errors=True)
-    apk.mkdir(parents=True)
+    apk.mkdir(parents=True, exist_ok=True)
 
     payload = Path(a.payload) if a.payload else cache / 'payload-arm64.tar.gz'
     if not payload.exists(): raise SystemExit(f'{payload} is missing (fetch it from the nixport payload release)')
