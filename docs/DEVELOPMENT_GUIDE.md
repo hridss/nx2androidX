@@ -1,6 +1,6 @@
 # Development guide
 
-How to run nx2android from the repository, build the player's bundle and send changes. Players need none of this: the [README](../README.md) and [packaging/INSTALL.md](../packaging/INSTALL.md) cover the app. How the pieces fit together: [ARCHITECTURE.md](ARCHITECTURE.md). A new machine starts at [GETTING_STARTED.md](GETTING_STARTED.md).
+How to run nx2android from the repository, build the player's bundle and send changes. Players need none of this: the [README](../README.md) and [packaging/INSTALL.md](../packaging/INSTALL.md) cover the app. How the pieces fit together: [ARCHITECTURE.md](ARCHITECTURE.md). A new machine starts at [GETTING_STARTED.md](GETTING_STARTED.md). Pitfalls and debugging recipes from real sessions: [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Setup from the repository
 
