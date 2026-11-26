@@ -77,11 +77,11 @@ def romfs_sizes(d):   # {path in the RomFS: size} of the pack in d, '/'-separate
 
 
 def build(dst, *, profile, version, display, patched, romfs, shaders, aoc=None, sysdata=None, language='en-US', languages=(), package=None, env=(), settings=None, files=None, text=None,
-          host=None, icon=None, drivers=None, profile_h=None, pack_base=None, romfs_at=None, progress=None):
+          icon=None, drivers=None, profile_h=None, pack_base=None, romfs_at=None, progress=None):
     """Write the pack to dst (replacing it). profile: the AndroidProfile; package: the app's, when not the profile's; env: more env.txt rows, after the profile's; settings: settings.txt values over the profile's;
     languages: supported Switch language codes from the NACP when language is 'system';
     files: {name in the pack: source} (the 60 fps memory writes, fpslock.tsv; the button-icon font; subfolders for the app's mode: host/, drivers/, overlay/, icon.png);
-    text: {name in the pack: its text} (the launcher's lists: languages.txt, drivers.txt); host/icon/drivers: the app's artifacts, named in the manifest;
+    text: {name in the pack: its text} (the launcher's lists: languages.txt, drivers.txt); icon/drivers: the app's artifacts, named in the manifest;
     pack_base: where the pack lives on the device (the app's mode carries it in its own folder; else the app's files folder); profile_h: sha256 of the game_profile.h the host was built with (porter host);
     romfs_at: a folder on the device that holds the game's RomFS (the app's mode: the build folder's own RomFS). The pack does not carry the RomFS then: its env.txt says where the host reads it from,
     and the manifest says the same, so the app knows the pack needs that folder.
@@ -131,16 +131,16 @@ def build(dst, *, profile, version, display, patched, romfs, shaders, aoc=None, 
     if bad := settings_registry.check_env(rows, ('profile', 'porter'), 'env.txt '): raise ValueError('; '.join(bad))   # nxnative/dm/settings.tsv
     (tmp / 'env.txt').write_text('\n'.join(rows) + '\n', encoding='utf-8', newline='\n')
     if sets := {**profile.settings, **(settings or {})}: (tmp / 'settings.txt').write_text(''.join(f'{k}={v}\n' for k, v in sets.items()), encoding='utf-8', newline='\n')
+    # The manifest says what the pack is: the game's identity, its version, what it needs. The rest is read where it
+    # belongs: the profile (status / graphics / lan — the pack carries it in profile/<title id>/), the runtime's own
+    # folder (the host: runtimes/<title id>/libdmhost.so, or host/libdmhost.so inside the pack), and the runtime's
+    # marker (where the game's files live: the RomFS is not in the pack).
     man = dict(title_id=profile.id, name=profile.name, package=package, version=version, display=display, language=language, requires=profile.requires,
-               status=getattr(profile, 'status', ''),   # the profile's own state (playable / wip / boots / experimental): the app tells the player what to expect (empty: the caller does not track it)
-               graphics=getattr(profile, 'graphics', ''), lan=getattr(profile, 'lan', ''),   # what the game needs: its graphics API, and whether it plays over the local network
                files=n, bytes=b, dlc=sorted(int(p.name) for p in aoc.iterdir() if p.is_dir() and p.name.isdigit()) if aoc else [],
                sysdata=sorted(p.name for p in sysdata.iterdir() if p.is_dir()) if sysdata else [], made=time.strftime('%Y-%m-%d %H:%M:%S'))
-    if host: man['host'] = host         # the app's mode: the game's host (libdmplay.so) in the pack, the app copies it into its private folder to run the game
     if icon: man['icon'] = icon
     if drivers: man['drivers'] = list(drivers)
     if profile_h: man['profile_h'] = profile_h
-    if romfs_at: man['romfs_at'] = romfs_at   # the folder the RomFS is read from: the pack does not carry it, so the app checks that folder before the game runs
     man['player_api_revision'] = PLAYER_API_REVISION   # the runtime interface the pack was built against: the app rebuilds the runtime when its own revision differs
     if parts := {p: k for p in SEEDABLE if (k := part_key(tmp, p))}: man['parts'] = parts   # the content keys install's seeding compares
     (tmp / MANIFEST).write_text(json.dumps(man, indent=2), encoding='utf-8')

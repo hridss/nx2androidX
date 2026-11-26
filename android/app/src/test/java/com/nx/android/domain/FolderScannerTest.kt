@@ -30,7 +30,7 @@ class FolderScannerTest {
         val pack = File(out, "HadesIIData-data")
         File(pack, "host").mkdirs()
         File(pack, "nx2a-data.json").writeText("""{"title_id":"0100000000010000","name":"Hades II","package":"org.nx2a.hades"}""")
-        File(pack, "host/libdmplay.so").writeText("ELF")
+        File(pack, "host/libdmhost.so").writeText("ELF")   // the host's place is a convention
         File(pack, "icon.png").writeBytes(byteArrayOf(1))
         // another data pack whose host is gone: it remains visible so it can be rebuilt or deleted
         val orphan = File(out, "Gone-data")
@@ -75,24 +75,30 @@ class FolderScannerTest {
     fun `a pack that reads its files from the work folder needs that folder`() {
         val out = tmpDir()
         val work = tmpDir()
+        val runtimes = tmpDir()
         val romfs = File(work, "extract/v1/RomFS").apply { mkdirs() }
         val pack = File(out, "Game-data")
         File(pack, "host").mkdirs()
         File(pack, "nx2a-data.json").writeText(
-            """{"title_id":"0100000000010000","host":"host/libdmplay.so","player_api_revision":${PlayerApiRevision.CURRENT},"romfs_at":"${romfs.absolutePath}"}""")
-        File(pack, "host/libdmplay.so").writeText("ELF")
+            """{"title_id":"0100000000010000","player_api_revision":${PlayerApiRevision.CURRENT}}""")
+        File(pack, "host/libdmhost.so").writeText("ELF")
+        // where the game's files live is in the runtime's marker, not in the manifest
+        val dir = File(runtimes, "0100000000010000")
+        dir.mkdirs()
+        File(dir, "build.json").writeText(
+            """{"player_api_revision":${PlayerApiRevision.CURRENT},"profile_h":"","romfs":"${romfs.absolutePath}"}""")
 
-        val p = LibraryFileScanner.outIndex(out)["0100000000010000"]!!
+        val p = LibraryFileScanner.outIndex(out, runtimes)["0100000000010000"]!!
         assertEquals(romfs.absolutePath, p.romfsAt)
         assertFalse(p.romfsMissing)
         assertTrue(p.runnable)          // the folder is there
 
         romfs.delete()                  // the player cleared the build cache
-        val gone = LibraryFileScanner.outIndex(out)["0100000000010000"]!!
+        val gone = LibraryFileScanner.outIndex(out, runtimes)["0100000000010000"]!!
         assertTrue(gone.romfsMissing)
         assertFalse(gone.runnable)      // the game cannot run without it
         assertFalse(gone.needsRuntimeUpdate)   // the host is fine: it is the game's files that are gone
-        out.deleteRecursively(); work.deleteRecursively()
+        out.deleteRecursively(); work.deleteRecursively(); runtimes.deleteRecursively()
     }
 
     /** 老的数据包自带 RomFS：没有这一项，删工作区不影响它 */
@@ -102,11 +108,13 @@ class FolderScannerTest {
         val pack = File(out, "Old-data")
         File(pack, "host").mkdirs()
         File(pack, "nx2a-data.json").writeText("""{"title_id":"0100000000010000"}""")
-        File(pack, "host/libdmplay.so").writeText("ELF")
+        File(pack, "host/libdmplay.so").writeText("ELF")   // the old front's host: it cannot run any more
 
         val p = LibraryFileScanner.outIndex(out)["0100000000010000"]!!
         assertEquals("", p.romfsAt)
         assertFalse(p.romfsMissing)
+        assertFalse(p.hasHost)          // the old library is not the host any more: the runtime is rebuilt
+        assertTrue(p.needsRuntimeUpdate)
         out.deleteRecursively()
     }
 
@@ -132,7 +140,7 @@ class FolderScannerTest {
         // 目录里一份标记对得上的完整运行库：能跑
         val dir = File(runtimes, "0100000000010000")
         dir.mkdirs()
-        File(dir, "libdmplay.so").writeText("ELF")
+        File(dir, "libdmhost.so").writeText("ELF")
         for (h in listOf("libhook_impl.so", "libmain_hook.so", "libfile_redirect_hook.so", "libgsl_alloc_hook.so")) {
             File(dir, h).writeText("ELF")
         }

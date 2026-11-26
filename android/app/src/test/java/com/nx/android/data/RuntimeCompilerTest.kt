@@ -11,7 +11,7 @@ class RuntimeCompilerTest {
         val launcher = object : GuestProcessLauncher {
             override fun guestEnv() = mutableMapOf<String, String>()
             override fun guest(args: List<String>, extra: Map<String, String>): Process {
-                assertEquals(listOf("-m", "porter", "rebuild-runtime", "/packs/Game-data", "--progress", "json",
+                assertEquals(listOf("-m", "porter.phone_cli", "rebuild-runtime", "/packs/Game-data", "--progress", "json",
                                     "--allow-profile-drift"), args)
                 assertTrue(extra.isEmpty())
                 return object : Process() {

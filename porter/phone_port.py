@@ -958,12 +958,11 @@ class PhonePort(pipeline.Port):
     def host(self):
         PROG.stage('host', step=f'NDK {self.tools["ndk"].name}')
         out = self.aw / ('host-debug' if self.o.debug else 'host')
-        # the app's mode runs the game itself: libdmplay.so (the host with the player's JNI entry) instead of the APK's libdmhost.so
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out,
                  '--play' if self.o.app else '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
                
                 + (['--adrenotools'] if not prebuilt_loader() else []), self.logs / 'android_host.log', env=self.env)
-        self.so = out / ('libdmplay.so' if self.o.app else 'libdmhost.so')
+        self.so = out / 'libdmhost.so'   # --play (the app's :play runtime, with the app's JNI entry) and --lib (the APK's front) both produce this name
         if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')
         ph = out / 'gen' / self.g.id / 'game_profile.h'   # the profile the host was built from, for the data pack (porter host compares it with its checkout's)
         self.profile_h = hashlib.sha256(ph.read_bytes()).hexdigest() if ph.is_file() else None
@@ -1046,14 +1045,14 @@ class PhonePort(pipeline.Port):
                         os.fsync(dst.fileno())
                     os.replace(pending, target / name)
 
-                copy_into(self.so, 'libdmplay.so')
+                copy_into(self.so, 'libdmhost.so')
                 for lib in self.loader_libs():   # the loader's four hooks, the only managed parts beside the host
                     copy_into(lib, lib.name)
                 if self.o.vulkan_driver:   # a driver the player picked for this port loads from the same folder
                     copy_into(self.o.vulkan_driver, driver_lib_name(self.o.vulkan_driver))
-                write_marker(target / 'build.json', build_marker(getattr(self, 'profile_h', None)))
+                write_marker(target / 'build.json', build_marker(getattr(self, 'profile_h', None), romfs_at or ''))   # the RomFS is not in the pack: the marker says where the host reads it from
             else:
-                host = 'host/libdmplay.so'
+                host = 'host/libdmhost.so'
                 files[host] = self.so
                 for d in self.loader_libs(): files[f'drivers/{d.name}'] = d
                 drivers = sorted({f'drivers/{d.name}' for d in self.loader_libs()})
@@ -1070,7 +1069,7 @@ class PhonePort(pipeline.Port):
         man = datapack.build(dst, profile=self.ap, version=self.pkg_ver, display=self.display, patched=self.patched, romfs=romfs, romfs_at=romfs_at, shaders=self.dmsv,
                              aoc=self.aoc, sysdata=self.sysdata, language=self.lang, languages=getattr(self, 'languages', ()), package=self.package, env=self.fps_env + font_env + zenv + (['DM_VK_MT_REPLAY=1'] if self.o.mt_replay else [])                             + (['DM_MENU_BUTTON=0'] if self.o.no_menu_button else [])
                              + ([f'DM_VK_DRIVER={driver_lib_name(self.o.vulkan_driver)}'] if self.o.vulkan_driver else []), settings=TOUCH_SETTINGS if self.o.touch else None,
-                             files=files, text=self.lists(), host=host, icon=icon, drivers=drivers, profile_h=getattr(self, 'profile_h', None),
+                             files=files, text=self.lists(), icon=icon, drivers=drivers, profile_h=getattr(self, 'profile_h', None),
                              pack_base=str(dst) if self.o.app else None,   # the app's mode: the pack lives in the app's own folder, not in the app's files folder
                              progress=lambda what, done, total: PROG.set(step=f'linking {what}', done=done, total=total, unit='B'))
         self.data_path = dst; self.result['data'] = str(dst)

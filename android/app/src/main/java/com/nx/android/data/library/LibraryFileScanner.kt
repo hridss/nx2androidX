@@ -87,22 +87,40 @@ object LibraryFileScanner {
         }
         val id = man.optString("title_id")
         if (!id.matches(Regex("[0-9A-Fa-f]{16}"))) return null
-        val host = File(pack, man.optString("host", "host/libdmplay.so"))
+        // The host's place is a convention, not a manifest key: inside the pack at host/libdmhost.so (the
+        // desktop tool's pack carries it), or in the runtime folder beside the app's runtimes (the app's layout).
+        val host = File(pack, "host/libdmhost.so")
         if (!host.canonicalFile.toPath().startsWith(pack.canonicalFile.toPath())) return null
-        val hostDeclared = man.has("host")
-        val marker = if (!hostDeclared && runtimes != null) readMarker(File(runtimes, id.lowercase())) else null
+        val hostDeclared = host.isFile
+        val marker = if (runtimes != null) readMarker(File(runtimes, id.lowercase())) else null
+        // The profile travels with the pack (profile/<title id>/): what the game needs is read there, not from
+        // the manifest. A pack without it (made before the profile travelled) falls back to the manifest's rows.
+        val profile = packProfile(pack, id) ?: GameProfile(
+            status = man.optString("status"),
+            graphics = man.optString("graphics"),
+            lan = if (man.has("lan")) man.getBoolean("lan") else false,
+            requires = man.optString("requires").split(' ').filter { it.isNotEmpty() },
+        )
         return Ported(pack = pack, host = host,
                       icon = File(pack, "icon.png").takeIf { it.isFile },
                       titleId = id, name = man.optString("name"),
-                      status = man.optString("status"),
+                      status = profile.status,
                       playerApiRevision = (man.opt("player_api_revision") as? Int)?.takeIf { it > 0 } ?: 0,
                       display = man.optString("display"),
-                      romfsAt = man.optString("romfs_at"),
-                      graphics = man.optString("graphics"),
-                      lan = if (man.has("lan")) man.getBoolean("lan") else null,
+                      romfsAt = marker?.romfs?.takeIf { it.isNotEmpty() } ?: man.optString("romfs_at"),
+                      graphics = profile.graphics,
+                      lan = profile.lan,
                       hostDeclared = hostDeclared,
                       profileH = man.optString("profile_h"),
                       marker = marker)
+    }
+
+    /** the profile the pack carries (profile/<title id>/android.tsv), or null when it carries none */
+    private fun packProfile(pack: File, id: String): GameProfile? = try {
+        val text = File(pack, "profile/$id/android.tsv").takeIf { it.isFile }?.readText() ?: return null
+        parseProfile(text)
+    } catch (_: Exception) {
+        null
     }
 
     /** the build marker a runtime folder carries (build.json), or null without one */
@@ -111,6 +129,7 @@ object LibraryFileScanner {
         RuntimeBuildMarker(
             playerApiRevision = o.optInt("player_api_revision", 0),
             profileH = o.optString("profile_h"),
+            romfs = o.optString("romfs"),
         )
     } catch (e: Exception) {
         null

@@ -49,11 +49,12 @@ def runtimes_root():
     return Path(given) if given else None
 
 
-def build_marker(profile_h):
-    """The build fingerprint the runtime was made with: the player interface it speaks and the profile it was
-    built from (the game_profile.h's hash — the alias headroom is in there). The app compares this against what
-    it expects before it loads the runtime."""
-    return {'player_api_revision': PLAYER_API_REVISION, 'profile_h': profile_h or ''}
+def build_marker(profile_h, romfs=''):
+    """The build fingerprint the runtime was made with: the player interface it speaks, the profile it was
+    built from (the game_profile.h's hash — the alias headroom is in there) and where the game's files live (the
+    RomFS is not in the pack: the host reads it from there). The app compares this against what it expects before
+    it loads the runtime, and checks the folder before it starts the game."""
+    return {'player_api_revision': PLAYER_API_REVISION, 'profile_h': profile_h or '', 'romfs': romfs or ''}
 
 
 def embed_profile(pack: Path, title_id: str, profile_dir: Path) -> bool:
@@ -76,6 +77,14 @@ def embed_profile(pack: Path, title_id: str, profile_dir: Path) -> bool:
         return True
     except OSError:
         return False
+
+
+def read_marker(target: Path) -> dict:
+    """The build marker a runtime folder carries, or an empty dict without one"""
+    try:
+        return json.loads(target.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
 
 
 def write_marker(target: Path, marker: dict):
@@ -262,7 +271,11 @@ def rebuild(pack, *, jobs=None, allow_profile_drift=False, emit=print):
                 for name in HOOKS:
                     install(stage / name, target / name)
                 install(stage / 'libdmhost.so', target / 'libdmhost.so')
-                write_marker(target / 'build.json', build_marker(chosen))
+                # where the game's files live moves from the manifest into the runtime's marker (the RomFS is
+                # not in the pack): a rebuild keeps the folder it had, a first migration takes it from the manifest
+                previous = read_marker(target / 'build.json') if (target / 'build.json').is_file() else None
+                romfs = manifest.pop('romfs_at', '') or (previous.get('romfs') if previous else '')
+                write_marker(target / 'build.json', build_marker(chosen, romfs))
                 manifest.pop('host', None)
                 manifest.pop('host_front', None)
                 manifest['player_api_revision'] = PLAYER_API_REVISION

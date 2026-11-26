@@ -47,6 +47,7 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         RuntimeBuildMarker(
             playerApiRevision = o.optInt("player_api_revision", 0),
             profileH = o.optString("profile_h"),
+            romfs = o.optString("romfs"),
         )
     } catch (_: Exception) {
         null
@@ -62,7 +63,11 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         File(dir, LEGACY_HOST_FILE).delete()
     }
 
-    /** the folder holds a whole runtime: the host and the loader's hooks, nothing half in place */
+    /**
+     * The folder holds a whole runtime: the host and the loader's hooks, nothing half in place.
+     * A folder with only the pre-rename libdmplay.so is NOT complete: that library is the old front (no drawer,
+     * no input), so the runtime is rebuilt rather than loaded.
+     */
     fun complete(dir: File): Boolean =
         dir.isDirectory && hostOf(dir).isFile && HOOKS.all { File(dir, it).isFile }
 
@@ -87,6 +92,7 @@ class RuntimeStorage @Inject constructor(private val paths: AppPaths) {
         pending.writeText(JSONObject().let { o ->
             o.put("player_api_revision", marker.playerApiRevision)
             o.put("profile_h", marker.profileH)
+            o.put("romfs", marker.romfs)
             o.toString()
         })
         if (!pending.renameTo(File(dir, MARKER_FILE))) {

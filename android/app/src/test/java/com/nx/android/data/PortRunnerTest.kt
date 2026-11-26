@@ -19,7 +19,7 @@ class PortRunnerTest {
     fun `Auto passes no address space at all`() {
         val a = args(-1)
         assertFalse("no --alias-headroom on Auto", a.contains("--alias-headroom"))
-        assertEquals(listOf("-m", "porter", "port", "/sdcard/game.nsp", "-k", "/keys/prod.keys",
+        assertEquals(listOf("-m", "porter.phone_cli", "port", "/sdcard/game.nsp", "-k", "/keys/prod.keys",
             "--progress", "json", "--app"), a)
     }
 

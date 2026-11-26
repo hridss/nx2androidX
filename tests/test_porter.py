@@ -203,8 +203,9 @@ class DataPack(unittest.TestCase):
             self.assertIn('DM_LANG=ja', env); self.assertIn(f'DM_AOC_DIR={t / "out-data"}/aoc', env)   # the pack's own folder
             self.assertEqual((o / 'settings.txt').read_text(), 'docked=0\noverlay=1\nrumble=1\n')
             self.assertEqual((man['files'], man['bytes'], man['dlc'], man['requires']), (4, 35, [1], ['bcn']))   # the installer checks requires
-            self.assertEqual(man['status'], p.status)   # the app tells the player what to expect (an experimental port says so)
-            self.assertIn('graphics', man); self.assertIn('lan', man)   # what the game needs: the library page shows it from the pack
+            # the profile's state and what the game needs are not in the manifest: the pack carries the profile
+            # (profile/<title id>/), and the app reads it there (a pack without it falls back to the manifest's rows)
+            self.assertNotIn('status', man); self.assertNotIn('graphics', man); self.assertNotIn('lan', man)
             self.assertEqual(datapack.read_manifest(o)['package'], 'org.nx2a.neo')
             datapack.build(t / 'touch-data', profile=p, version='v196608', display='1.03', patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv',
                            settings=pipeline.TOUCH_SETTINGS)   # --touch: the gamepad starts hidden, the profile's other settings stay
@@ -265,18 +266,19 @@ class DataPack(unittest.TestCase):
             (t / 'patched').mkdir(); (t / 'patched/main.patched.bin').write_bytes(b'x' * 10)
             (t / 'romfs/Data').mkdir(parents=True); (t / 'romfs/Data/a.bin').write_bytes(b'y' * 20)
             (t / 'shaders.dmsv').write_bytes(b'DMSV')
-            (t / 'libdmplay.so').write_bytes(b'ELF'); (t / 'libvulkan_freedreno.so').write_bytes(b'DRV'); (t / 'libadrenotools.so').write_bytes(b'AT')
+            (t / 'libdmhost.so').write_bytes(b'ELF'); (t / 'libvulkan_freedreno.so').write_bytes(b'DRV'); (t / 'libadrenotools.so').write_bytes(b'AT')
             (t / 'theme.tsv').write_text('theme'); (t / 'icon.png').write_bytes(b'PNG')
             p = profiles.load(NEO)
             man = datapack.build(t / 'out-data', profile=p, version='v196608', display='1.03', patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv',
-                                 files={'host/libdmplay.so': t / 'libdmplay.so', 'drivers/libvulkan_freedreno.so': t / 'libvulkan_freedreno.so',
+                                 files={'host/libdmhost.so': t / 'libdmhost.so', 'drivers/libvulkan_freedreno.so': t / 'libvulkan_freedreno.so',
                                         'drivers/libadrenotools.so': t / 'libadrenotools.so', 'overlay/theme.tsv': t / 'theme.tsv', 'icon.png': t / 'icon.png'},
-                                 host='host/libdmplay.so', icon='icon.png', drivers=['drivers/libadrenotools.so', 'drivers/libvulkan_freedreno.so'])
+                                 icon='icon.png', drivers=['drivers/libadrenotools.so', 'drivers/libvulkan_freedreno.so'])
             o = t / 'out-data'
-            self.assertTrue((o / 'host/libdmplay.so').is_file()); self.assertTrue((o / 'drivers/libvulkan_freedreno.so').is_file())   # subfolders are made
+            self.assertTrue((o / 'host/libdmhost.so').is_file()); self.assertTrue((o / 'drivers/libvulkan_freedreno.so').is_file())   # subfolders are made
             self.assertTrue((o / 'overlay/theme.tsv').is_file()); self.assertTrue((o / 'icon.png').is_file())
             man = datapack.read_manifest(o)
-            self.assertEqual(man['host'], 'host/libdmplay.so'); self.assertEqual(man['icon'], 'icon.png')
+            self.assertNotIn('host', man)   # the host's place is a convention (host/libdmhost.so in the pack), not a manifest key
+            self.assertEqual(man['icon'], 'icon.png')
             self.assertEqual(man['drivers'], ['drivers/libadrenotools.so', 'drivers/libvulkan_freedreno.so'])
             datapack.build(t / 'pc-data', profile=p, version='v196608', display='1.03', patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv')
             pc = datapack.read_manifest(t / 'pc-data')   # the PC flow's pack carries none of the app's fields
@@ -296,8 +298,9 @@ class DataPack(unittest.TestCase):
             o = t / 'out-data'
             self.assertFalse((o / 'RomFS').exists())                       # the pack does not carry the game's files
             self.assertIn(f'DM_ROMFS={t / "romfs"}', (o / 'env.txt').read_text())   # the host reads them from there
-            self.assertEqual(man['romfs_at'], str(t / 'romfs'))            # the app checks that folder before the game runs
-            self.assertEqual(datapack.read_manifest(o)['romfs_at'], str(t / 'romfs'))
+            self.assertNotIn('romfs_at', man)   # where the game's files live is in the runtime's marker, not the manifest
+            from porter.runtime_update import build_marker
+            self.assertEqual(build_marker('h', str(t / 'romfs'))['romfs'], str(t / 'romfs'))   # the marker says it
             self.assertNotIn('romfs_at', datapack.build(t / 'pc-data', profile=p, version='v196608', display='1.03', patched=t / 'patched', romfs=t / 'romfs', shaders=t / 'shaders.dmsv'))   # the PC flow's pack carries its own RomFS
         finally: shutil.rmtree(t, ignore_errors=True)
 

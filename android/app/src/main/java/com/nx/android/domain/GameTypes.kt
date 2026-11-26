@@ -169,4 +169,5 @@ data class Ported(
 data class RuntimeBuildMarker(
     val playerApiRevision: Int,
     val profileH: String,
+    val romfs: String = "",   // where the game's files live (the RomFS is not in the pack: the host reads it from there)
 )
