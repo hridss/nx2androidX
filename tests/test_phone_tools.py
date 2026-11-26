@@ -214,7 +214,7 @@ class Card(unittest.TestCase):
         sys.path.insert(0, str(ROOT))
         from porter import dumps
         files = [(f'{t:016x}{i:016x}.tik', bytes(16)) for i, t in enumerate(titles)]
-        data = (dumps.pfs0_header([n for n, _ in files], [len(d) for _, d in files])
+        data = (dumps._pfs0_header([n for n, _ in files], [len(d) for _, d in files])
                 + b''.join(d for _, d in files))
         path = Path(tempfile.mkdtemp(prefix='nx2a_card_')) / name
         path.write_bytes(data)
@@ -293,7 +293,7 @@ class CardSplit(unittest.TestCase):
                   (self.BASE + 0x1001, 'program'), (self.BASE + 0x1001, 'meta')]
         files = [(f'{i:016x}{i:016x}.nca', self.nca(title, 1 if what == 'meta' else 0))
                  for i, (title, what) in enumerate(titles)]
-        data = (dumps.pfs0_header([n for n, _ in files], [len(d) for _, d in files])
+        data = (dumps._pfs0_header([n for n, _ in files], [len(d) for _, d in files])
                 + b''.join(d for _, d in files))
         path = Path(tempfile.mkdtemp(prefix='nx2a_split_')) / 'Card.nsp'
         path.write_bytes(data)
