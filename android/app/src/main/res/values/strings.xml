@@ -384,6 +384,8 @@
     <string name="builds_shared_font_hint">A .ttf font to pack as the system font the game asks for. One with CJK characters shows the Chinese and Korean text of a game that draws it with the system font. Empty: the app\'s own font (it has the CJK glyphs).</string>
     <string name="builds_mt_replay">Multithread replay</string>
     <string name="builds_mt_replay_hint">Record the game\'s Vulkan commands on a thread of their own (faster in busy scenes; port again to turn it off).</string>
+    <string name="builds_low_mem">Low memory mode</string>
+    <string name="builds_low_mem_hint">Translate the shaders with at most two processes (slower, but a phone with little memory free is not killed by the system).</string>
     <string name="builds_alias_hint">Only for a game that crashes with \"AllocateAddressRegion refused (0x1803)\". Auto: 8 GB for a game version the profile was not tested with, none for a tested one. It uses no memory and does not change the speed.</string>
     <string name="builds_need_env">Prepare the environment in the settings first</string>
     <string name="builds_need_storage">Grant the storage access first</string>

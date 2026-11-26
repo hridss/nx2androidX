@@ -7,7 +7,7 @@ import collections, hashlib, importlib.util, json, mmap, os, re, shlex, shutil, 
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from porter import config, datapack, dumps, fpslocker, install, paths, product_cache, profiles, profiles_layer, romfs_pack, toolchain
+from porter import config, datapack, dumps, fpslocker, install, memory, paths, product_cache, profiles, profiles_layer, romfs_pack, toolchain
 from porter.revision import PLAYER_API_REVISION
 from porter.adb import NO_ADB, Adb, AdbError
 from porter.paths import DM, NXNATIVE
@@ -85,6 +85,7 @@ class Options:
     romfs_at: str = None               # with install: the folder on the device the app reads the RomFS from (porter/install.py), 'app' for its files folder; None: as the device has it
     romfs_push: bool = False           # with romfs_at: push the pack's RomFS into that folder first
     jobs: int = field(default_factory=lambda: os.cpu_count() or 8)
+    low_mem: bool = False           # a phone with little memory free: the shader translation runs with at most two workers (slower, but it survives)
     no_lsfg: bool = False              # build the host without the frame generation (the lsfg/ code, dm/android/build.py --no-lsfg): the host is then smaller and the frame generation reports "not in this build"
 
     @classmethod
@@ -1144,6 +1145,17 @@ class Port:
             if self.provisional and profile_guess.heap_check_needed(self.game / 'ExeFS') and not nsp.heap_checked(self.g):
                 say('[RED] no heap check: it boots the game in the Mac host; the provisional profile keeps its guessed heap keys')
 
+    def translation_workers(self):
+        """The translation processes to run: as many as the device's free memory affords, capped by --jobs and by the low-memory mode.
+        The memory is read again when the workers start: the split in front of them may have taken some.
+        No room at all (0) raises: the stage stops with a clear error instead of being killed by the system"""
+        avail = memory.available_mb()
+        n = memory.jobs(avail, os.cpu_count() or 8, forced=self.o.low_mem)
+        if self.o.jobs > 0: n = min(n, self.o.jobs)   # --jobs (a maintenance knob) still caps it
+        if n <= 0:
+            raise BuildError(f'the device has only {avail:.0f} MB of memory free: the shader translation has no room to run; close the other apps and start it again')
+        return n, avail
+
     # ---- shaders: upstream's split, then SPIR-V for the Vulkan backend ----
     def shaders(self):
         if getattr(self, 'gl', False):   # an OpenGL ES game: the driver compiles its shaders on the device
@@ -1152,6 +1164,7 @@ class Port:
             return
         sv = self.versions
         pkg = self.work / 'shader' / 'pkg'
+        self.translation_workers()   # no room to translate: say so now, not after the long split
         try:
             if getattr(self, 'glslc_why', ''): self.glslc_capture()   # shaders the game compiles at boot with its own GLSLC: the game's own compiler, here on the phone app or on the device
             if getattr(self, "ue_why", ""): self.device_ue()   # Unreal's shader code archives, decoded with the game's own Oodle (on the device, or here on the phone app) into <version dir>/ue_shaders before the split reads them
@@ -1184,7 +1197,10 @@ class Port:
         def line(s):
             if m := re.match(r'(translating|compressing) (\d+) shaders', s): PROG.set(step=f'{m.group(1)} {int(m.group(2)):,} shaders')   # compressing: the bundle's SPIR-V (dmsv.py)
             elif s.startswith('[RED] '): say(s)
-        nsp.run([PY, DM / 'android/tools/shader_vk.py', pkg, tmp, '--jobs', str(self.o.jobs), '--dotnet', self.tools['dotnet'], '--xlate', xlate, '--capture', cap, '--report', report],
+        workers, avail = self.translation_workers()   # read again: the split in front may have taken some memory
+        free = 'the device reports no memory' if avail is None else f'{avail:.0f} MB free'
+        say(f'shader translation: {workers} worker(s) ({memory.basis(avail, self.o.low_mem)}; {free})')
+        nsp.run([PY, DM / 'android/tools/shader_vk.py', pkg, tmp, '--jobs', str(workers), '--dotnet', self.tools['dotnet'], '--xlate', xlate, '--capture', cap, '--report', report],
                 self.logs / 'android_shaders.log', env=self.env, on_line=line)
         import shader_products
         try:

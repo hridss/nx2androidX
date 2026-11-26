@@ -71,6 +71,9 @@ def _parser():
                          'brought up on, none for one it was)')
     _romfs_at(po, 'with --install: ')
     po.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
+    po.add_argument('--low-mem', action='store_true',
+                    help='low-memory devices: the shader translation runs with at most two workers (the number follows the memory the device has '
+                         'free anyway; this caps it): slower, but a phone with little memory free survives the build')
     po.add_argument('--no-lsfg', action='store_true',
                     help='build the host without the frame generation (the lsfg/ code): the host is then smaller and the frame generation '
                          'reports "not in this build" (dm/android/build.py --no-lsfg)')

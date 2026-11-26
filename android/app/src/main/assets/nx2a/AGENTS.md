@@ -33,6 +33,13 @@ to a sub-agent.
   build, the run options). Read it before you answer anything that points at the
   player's present situation - "this game", "now", "just now" - and read it again if
   the player changed page while you were working. Never guess which game they mean.
+- **A game the player names outranks the game on the screen.** The page state is the
+  answer for "this one" / "it" / "now"; when the message names a game ("龙珠", "Zelda",
+  "Catherine"), that name decides which game it is. Resolve the name to the title ID
+  in $NX2A_HOME/library.json (the entries carry the name, the title ID and the pack's
+  folder) and work on that one. (On 2026-11-25 "龙珠 一运行就闪退" was answered about the
+  game that happened to be on the screen: the worker got the wrong title ID and the
+  whole case ran on the wrong game.)
 - "Build failed" means the last build: the one the snapshot names. Not any build
   before it, and not a game that happens to be highlighted in the library.
 - The snapshot's storage line says how much room is left on the phone ("2.2G free of
@@ -106,12 +113,35 @@ to a sub-agent.
   conversation (the description is a label the player reads on the card; the prompt itself
   stays English). The task does not need to name the player's language - the sub-agent
   answers in English and you translate for the player.
+- The task names the game, or the worker works on the wrong one: the game's name, its
+  title ID (the one from library.json), and the data pack's own folder
+  (`$(dirname "$NX2A_HOME")/ports/<pack name>/`, the "pack" field in library.json).
+  Write the path as it is, so the worker does not have to find it.
 - When the case sub-agent diagnoses by default: it writes the root cause and the proposed fix
   into that game's case file and changes no code. When it comes back, relay the problem
   and the plan to the player in your answer - the cause, the proposed fix, which game it
   is - and end with one line: ask the player to reply "确认修复" (or their own "确认",
   "就这么修") to start the fix. Only an explicit confirmation reply is the gate: a
   question, a hesitation or a "hmm" is not. If you are not sure, ask again.
+- **You check the proposal before you relay it.** A diagnosis is a proposal only when the
+  case file holds all four: the problem entry, a numbered plan under it (every item one
+  change, with how to verify it), the evidence, and the status "pending approval". If one
+  of them is missing, send the case agent back to fill it in - a prose answer is not a
+  plan, and the fix worker has nothing to execute item by item.
+- **You check the closing before you say "fixed".** When the fix agent reports back, the
+  case file must show all of it: the status changed ("fixed" or "not fixed") with what the
+  verification showed, the changed files in files/ with fix.md listing them, and the
+  lesson in local-cases.md. A status change alone is not a closed case. Say "fixed" only
+  when the rest is there too; otherwise say what is still missing.
+- **You check the case file, not the engine tree.** What the fix agent changed is what the
+  case file says it changed: the plan's ticks, the files in files/ and fix.md. Do not diff
+  the engine tree yourself to find out - that is the fix agent's job, it is a big file
+  tree, and a case file that does not say what changed is a case file that is not finished:
+  send the fix agent back. (On 2026-11-25 the closing check turned into four diffs of the
+  engine tree, because the worker had changed the code without writing it down.)
+  One exception: when you take over a run that died without writing anything down, look
+  once at what is on disk (the case file's orig/ copies against the tool tree), and write
+  that state into the case file - the next run reads it from there, not from the tree.
 - When a case reaches a state the player must act on - it is fixed, it was tried and did
   not work, or a problem is still open - end your answer with one block, and nothing else
   after it:
@@ -149,10 +179,16 @@ to a sub-agent.
   resume it (Agent({ resume: "<agent id>" })) or spawn a new task that carries that
   progress forward. Do not start over from zero without telling the player what the
   interrupted run had already done.
+  Resume first, then check it is alive (get_subagent_result without waiting); only when
+  it did not come back may you spawn the one that takes over.
 - After the player has asked for case work, that game's case file is at
   $NX2A_HOME/gamespec/<title ID>/: the sub-agent writes its findings into spec.md
   there, the app records crashes and rebuilds in events.jsonl there. When the player
-  asks "where were we with this one", read that file.
+  asks "where were we with this one", read that file - but not the whole file. A case
+  file is tens of KB and every tool call pays for it again: read the range the search
+  named and the last lines (the timeline, and the "Lifecycle" section that says which
+  stage of the port the game stands at). The same goes for a run log - log_triage.py
+  or grep, never the whole log.
 - The case file's status markers are the case's own record, not the app's business: the
   app does not read them to decide what to show. What the player sees about a case's
   state is what you say - the `nx-case` block above. The two have to agree: read the
@@ -178,6 +214,13 @@ to a sub-agent.
 - You work in the player's nx2android folder: data packs in ../ports/<game>-data/,
   game profiles in ../profiles/<title ID>/, the porting workspace in $NX2A_WORK, the
   porter's tool tree in $NX2A_REPO.
+- **`../ports/` means next to the nx2android folder, not inside it.** $NX2A_HOME is
+  files/nx2a, so a pack is at `$(dirname "$NX2A_HOME")/ports/<pack name>/` -
+  `/data/user/0/com.nx.android/files/ports/...`. It is NOT $NX2A_HOME/ports. (On
+  2026-11-25 both the main session and the case worker lost several calls to
+  $NX2A_HOME/ports before they found the packs.) The pack's own folder name is in
+  $NX2A_HOME/library.json (the "pack" field), so read it there instead of guessing
+  it from the game's name.
 - The logs live in the data pack folder: log.txt is the latest run, log.prev.txt the one
   before it - the backtrace of a crash is usually in log.prev.txt.
 - /tmp is read-only (that is the porting environment); write to $TMPDIR (writable).
@@ -270,3 +313,5 @@ tool does not do the job, look it up yourself as before - do not get stuck on it
   section (`python3 $NX2A_REPO/tools/memory_search.py search --corpus doc "shared font glyph"`),
   then read that one section. A document read whole costs tens of thousands of tokens, and
   the context is paid again on every tool call that follows.
+- Never read a case file whole and never read a run log whole. Same reason: they are
+  bigger than the answer, and the search already tells you which lines you need.

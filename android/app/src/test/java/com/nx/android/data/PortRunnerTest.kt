@@ -11,9 +11,9 @@ class PortRunnerTest {
     private fun args(aliasHeadroom: Int, touch: Boolean = false, fps60: Boolean = false,
                      experimental: Boolean = false, noLsfg: Boolean = false,
                      sharedFont: String = "", firmware: String = "", mtReplay: Boolean = false,
-                     deviceLanguage: String = ""): List<String> =
+                     deviceLanguage: String = "", lowMem: Boolean = false): List<String> =
         PortRunner.portArgs("/sdcard/game.nsp", "/keys/prod.keys", touch, fps60,
-            experimental, aliasHeadroom, noLsfg, sharedFont, firmware, mtReplay, deviceLanguage)
+            experimental, aliasHeadroom, noLsfg, sharedFont, firmware, mtReplay, deviceLanguage, lowMem)
 
     @Test
     fun `Auto passes no address space at all`() {
@@ -94,5 +94,18 @@ class PortRunnerTest {
     fun `no language means no option`() {
         val a = args(-1)
         assertFalse("no --language-preferred without one", a.contains("--language-preferred"))
+    }
+
+    /** 内存紧张的机器：翻译少开几个进程（默认不传，移植器自己按空闲内存定） */
+    @Test
+    fun `the low memory mode is a switch`() {
+        val a = args(-1, lowMem = true)
+        assertTrue(a.contains("--low-mem"))
+    }
+
+    @Test
+    fun `no low memory mode means no option`() {
+        val a = args(-1)
+        assertFalse("no --low-mem without it", a.contains("--low-mem"))
     }
 }

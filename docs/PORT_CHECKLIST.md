@@ -13,7 +13,7 @@ with — the game is not missing on Android.
 
 These have an official Android release too, and are ported here anyway: Unpacking.
 
-**81 / 194 ported**
+**83 / 195 ported**
 
 This file is generated: `python3 docs/gen_tables.py` reads the profiles and writes it. The facts
 in a row are the profile's own — the name and the version from `game.tsv`, the status, the note
@@ -123,7 +123,7 @@ the author of the commit that introduced them.
 - [x] OCTOPATH TRAVELER · `010057D006492000` · boots · v327680 Red Magic Astra NP05J (Snapdragon 8 Elite, Adreno 830, Android 16) · ported by @sid350
 - [x] OCTOPATH TRAVELER 0 · `01005270232F2000` · playable · update 1.0.5 · 60 fps · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver · ported by @intermission88
 - [x] OCTOPATH TRAVELER 0 (Chinese release) · `01001300232F4000` · playable · update 1.0.5 · 60 fps · the Chinese and Korean release · tested on the Xiaomi 23117RK66C (Android 16) · port with Game language: Chinese (Simplified) (`--language zh-Hans`) · ported by @zFitness
-- [ ] OCTOPATH TRAVELER II · `0100A3501946E000` · 1.1.1 · 60 fps
+- [x] OCTOPATH TRAVELER II · `0100A3501946E000` · playable · update 1.1.1 · 30 fps (the game's own cap) · tested on the Xiaomi 23117RK66C (Android 16, Adreno 750) with a Turnip Vulkan driver · ported by @zfitness
 - [ ] Ori and the Blind Forest: Definitive Edition · `010061D00DB74000` · 1.0.2
 - [ ] Ori and the Will of the Wisps · `01008DD013200000` · 1.2.1
 - [ ] Overcooked! All You Can Eat · `0100F28011892000` · 1.0.12 · 60 fps
@@ -199,6 +199,7 @@ the author of the commit that introduced them.
 - [x] The World Ends with You -Final Remix- · `0100C1500B82E000` · playable · base game 1.0.0 · 60 fps · played by touch · ported by @shirai91
 - [x] Tomodachi Life: Living the Dream · `010051F0207B2000` · playable · update 1.0.4 · 60 fps · ported by @shirai91
 - [ ] Trails in the Sky 2nd Chapter · `01007A2027548000` · 1.0.4
+- [x] Trails in the Sky the 2nd (Korean release) · `0100E8B028B54000` · playable · update 1.0.3a · 60 fps in the opening scene · tested on the Xiaomi 23117RK66C (Android 16, Adreno 750) with a Turnip Vulkan driver
 - [ ] TRIANGLE STRATEGY · `0100CC80140F8000` · 1.1.1 · 60 fps
 - [ ] TUNIC · `0100DA801624E000` · 1.0.3 · 60 fps
 - [x] Ultra Kaiju Monster Rancher · `01008E0019388000` · playable · update 1.0.1 · 30 fps (60 runs the game twice as fast) · tested on the AYN Odin 2 (Adreno 740) with a Turnip Vulkan driver · handheld 3D resolution by default, docked in the app menu · tested through the tutorials and battles · ported by @rospec14
