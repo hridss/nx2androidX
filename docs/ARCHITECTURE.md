@@ -154,9 +154,12 @@ PPE3 invalidates older prewarm records. The effects shader writes PointSize, and
 discarded pipelines invalidate cached stencil state before the next raster draw.
 The split is off unless a profile sets `env DM_VK_GS_SPLIT=1` (NieR:Automata), and runs only on
 Adreno (vendor 0x5143, Qualcomm's driver or Turnip); `DM_VK_GS_SPLIT=0` restores the original path live
-for diagnosis. Likewise the first-use upload of CPU-filled uncompressed 2D textures (`gfx_vk_tex.c`
-`cpu_content_tex`, which also checks the pool for GPU-written aliases) needs `env DM_NVN_CPU_TEX2D_FIRST_USE=1`;
-without it only compressed and 3D textures are uploaded, as before.
+for diagnosis. The first-use upload of CPU-filled uncompressed 2D textures in CPU-accessible pools
+needs `env DM_NVN_CPU_TEX2D_FIRST_USE=1`. With `env DM_NVN_CPU_NO_ACCESS_IMAGE_FIRST_USE=1`, an
+uncompressed 2D colour `IMAGE` can upload initial data from `CPU_NO_ACCESS` storage once without
+CPU write tracking. Both paths check for GPU-written aliases.
+
+**Super resolution** (the pause menu's Game tab, `settings.txt` `sr=`; off by default): a window texture whose picture grows by at least a sixteenth when it is fitted to the window (a Switch game's 1920x1080 picture on a 2560x1600 tablet) is drawn into the swapchain image (or the pre-rotated copy) by Snapdragon Game Super Resolution 1.0's edge-direction fragment shader (`dm/android/shaders/sr.frag`: the base bilinear sample, its 12 taps as four `textureGather` reads, a fast-Lanczos kernel stretched along the direction the taps vote for, and the sharpening step, all in one pass; its taps clamp to the picture's crop, so a window or vi crop never reads the texels beside it) instead of the hardware blit, which only bilinearly enlarges. The upscale is one draw in the present's own submission: it reads the game's picture once and writes the composited image once, the overlay draws in the same rendering scope after it, and no intermediate image holds the upscaled frame. It needs dynamic rendering, a 2D single-sample window texture and a view, sampler and pipeline the device grants, and falls back to the blit (with one `[RED]` line) when any is missing. `DM_VK_SR=0/1` overrides the setting for a device run. The filter works on the stored values of a UNORM window texture and on the linear values of an sRGB one. Its Sharpness slider (the pause menu's row, `sharpness=`; 0 by default) moves the three values the published shader fixes: the edge threshold falls from 8/255 to 2/255, so near-flat texture is refined too, the sharpen multiplier rises from 2.0 to 8.0, and its step may pass the neighbouring texels' range (by up to 35 percent of the overshoot) and widen from 23/255 to 70/255. At 0 none of them moves and the shader is as published, with no halo at an edge; at 100 edges ring the way an emulator's sharpness at 100 does. The shader is BSD-3-Clause (`dm/android/shaders/sgsr1.LICENSE`).
 
 ## Settings
 
@@ -186,7 +189,14 @@ attribute format, including integer remaps and formats from prewarm records.
 Unsupported core formats are reported once per format across replay and prewarm
 workers; out-of-range formats are still reported without indexing the diagnostic
 array. Every unsupported pipeline is cached as failed, so draws that need it are
-skipped before Vulkan can receive an invalid pipeline.
+skipped before Vulkan can receive an invalid pipeline. A profile that sets
+`DM_VK_SCALED_FETCH=1` (off by default) has one exception: a USCALED / SSCALED
+format read by a float input is fetched as the UINT / SINT format of the same
+layout and the vertex shader converts each load to float (`vk_spv_vertex.h`,
+OpConvertUToF / OpConvertSToF), which gives the same values. Toy Story 3 Complete
+Edition sets it: the Adreno 740 has no R8G8B8A8_USCALED, the bone indices of its
+skinned characters, which were all skipped. Without the switch, and for formats
+the device fetches, pipelines are built exactly as before.
 
 ## Frame pacing
 
@@ -215,11 +225,7 @@ A profile is offered for Android when it has an `android.tsv`; the profiles with
 | `tested` | `<version> <device>`: the version and device the status was checked on |
 | `package` | The app's package name (default `org.nx2a.t<title ID in lowercase>`) |
 | `orientation` | `landscape` (default) or `any` |
-| `requires` | Device features the game needs, checked by the installer (the legacy path): `bcn` (BC texture compression) |
-| `graphics` | The graphics API the game itself uses: `vulkan` / `gl` / `nvn` (empty when it is not known). `gl` means the game draws with OpenGL ES: the phone's own EGL/GLES driver draws it (`dm/android/gl_android.c`) instead of the Vulkan replay |
-| `lan` | `1` when the game can be played over the local network with several devices (empty: not known). The library page says it before the port |
-| `sysdata` | System data titles the game reads from the console's firmware, 16-digit hex title IDs (`0100000000000802`: MiiModel, the Mii heads Mario Kart 8 Deluxe builds): the port extracts each from the player's firmware dump (`--firmware`) into the data pack's `sysdata/<title ID>/`, and the host mounts it (`DM_SYSDATA`, `dm/host/hle_fs.c`) in place of its stand-in. Titles `0100000000000811` (FontStandard) and `0100000000000810` (FontNintendoExtension) make the host serve the console's own shared fonts (`nintendo_udsg-r_std_003.bfttf`, `nintendo_ext_003.bfttf`, decoded in `hle_sdk16.c`): the standard font after `DM_SHARED_FONT` and `$DM_FONT_DIR/standard.ttf`, the extension font before porter's generated stand-in. `0100000000000814` (FontChineseSimplified: `nintendo_udsg-r_org_zh-cn_003.bfttf` for type 1, `nintendo_udsg-r_ext_zh-cn_003.bfttf` for type 2), `0100000000000813` (FontChineseTraditional: `nintendo_udjxh-db_zh-tw_003.bfttf`) and `0100000000000812` (FontKorean: `nintendo_udsg-r_ko_003.bfttf`) are shared-font types 1–4 when `DM_SHARED_FONT` is unset; a file that is not in the pack leaves that type on this line's own CJK chain, then the standard font (`hle_sdk16.c`). Never shipped with the tool |
-| `setting` | `<name>=<value>`: the host's defaults on first launch (`rumble`, `docked`, `fps`: the frame rate counter in the top left corner, off by default), written to the data pack's `settings.txt`, where the host also keeps the player's own gamepad layout from the app's layout editor (`ui=` rows) and its Snap to grid (`grid`, off by default). The gamepad's own two values (shown, opacity) are the app's preferences now, not the host's: the host keeps them as runtime state (`dm_pad_prefs`) and never writes them |
+Shaders captured on the device: a game can set shaders whose code is in no game file (Xenoblade Chronicles 3, hundreds: effects and model materials), which the split cannot find. When a draw needs a shader the bundle lacks, the app saves it to `captured_shaders/<key>.bin` in its files folder (`gfx_vk_shader.c` `vk_shader_missing`; the draw is skipped this time). A port first pulls that folder into `<build folder>/android/captured_shaders/` — in the app the porter reads the app's own files folder (no adb needed), on a PC it reaches the device over adb, with or without `--install` — which is kept from port to port, and `shader_vk.py --capture` translates it into the bundle. These shaders are not in the profile's tables: the tables stay what the game files give. So such a game draws everything only after it has been played that far once and ported again.
 | `romfs` | `raw` (default) or `zstd`: the data pack's RomFS files that compress are stored zstd-compressed and read back by the host ("Compressed RomFS" below) |
 | `vulkan_driver` | `system` (default) or `turnip`: the Vulkan driver the profile was tested with. With `turnip` the port packs Mesa's Turnip (`porter config turnip <libvulkan_freedreno.so>`, else a build under `tools/turnip`) as `--vulkan-driver` would, and says so in red when it finds none; `--vulkan-driver system` keeps the device's driver |
 | `pacing` | the frame-pacing policy in one row: `adaptive` (default: the profile's `fps_target`, the governor steps between 60, 40 and 30), `steady` (no governor steps), `fixed60`, `fixed30`, `game` (the game's own limit, no governor). Each is `env` rows before the profile's own (`android_profile.py` `PACING`); a profile may not also set one of them (Frame pacing, above) |
@@ -287,6 +293,15 @@ digest is checked on reuse. A changed input or missing or changed report
 triggers translation. The shader key covers the three Android export helpers
 (`shader_vk.py`, `dmsv.py`, `shader_products.py`), the shared shader tools, profile,
 captures and translator. The new receipt format rebuilds existing ports once.
+
+Shader bundle export keeps validated SPIR-V modules in their translation files
+and loads at most one compression batch of `jobs` modules at a time. Each batch
+is written before the next is loaded; uncompressed export reads one module at
+a time. The sorted entry table and reflection remain in memory; payload memory
+depends on individual module sizes and the job count, rather than the aggregate
+SPIR-V. The private staged bundle is read back one module at a time before atomic
+publication. Version 1/2 layout, compression settings and byte comparison are
+unchanged.
 
 | Stage | What | Output (in `<game folder>/<title ID>_build/`) |
 |---|---|---|
@@ -360,307 +375,3 @@ The save manager keeps its own path for the two callers that cannot work on the 
 
 An Android shader profile can set `android_dynamic_slots` to `on` in `game.tsv` to bind separate texture, sampler and texel buffer arrays from the driver slots (requires `tex_dyn_slots on`; FINAL FANTASY RESONANCE's Niagara particle parameters are texel buffer arrays). `android_subgroup_size` selects the translator's subgroup size; its default is 128. For a packed texture handle read directly from game memory, `android_shader_handles.tsv` gives the shader key, guest handle, replacement slot handle and expected number of sites. The shader builder applies these rules to the translated game shader and checks the site count. Paper Mario: The Thousand-Year Door uses this for the animated save block on Adreno 840.
 
-Shaders captured on the device: a game can set shaders whose code is in no game file (Xenoblade Chronicles 3, hundreds: effects and model materials), which the split cannot find. When a draw needs a shader the bundle lacks, the app saves it to `captured_shaders/<key>.bin` in its files folder (`gfx_vk_shader.c` `vk_shader_missing`; the draw is skipped this time). A port with `--install` (the legacy path) first pulls that folder into `<build folder>/android/captured_shaders/`, which is kept from port to port, and `shader_vk.py --capture` translates it into the bundle. These shaders are not in the profile's tables: the tables stay what the game files give. So such a game draws everything only after it has been played that far once and ported again.
-
-The legacy path's install starts the app once before pushing anything: Android makes the app's files folder, owned by the app with the app's group, when the app first asks for it, and a folder the shell makes first lacks that group underneath FUSE, so the app cannot read what is pushed below it. Files whose path passes Windows' 260 characters are pushed through short hard links (adb.exe is not long-path aware). A file already on the device at its size is skipped; the port's own outputs (everything but `RomFS/` and `aoc/`, which change only with the game's version) are also compared by MD5, because a rewriter cut changes a module without changing its size.
-
-Captured compute code can be headerless: `shader_vk.py` uses the same control-section thread-group rule as `shader_split.py` to identify it. Compute translation jobs take local dimensions and shared-memory size from that control section before applying the profile's facts, so captures without a facts-table row do not silently become `1x1x1` kernels.
-
-Capture coverage is scene-dependent: a first-room check does not cover other maps, and a missing compute shader can leave later rendering inputs unwritten even when every draw has a program. Before promoting a shader bundle, pull the current device captures rather than reusing an earlier snapshot, check that every valid captured key is included, and exercise the affected map transition. Keep the previous bundle for rollback until that scene is verified.
-
-What the port refuses: a game whose `main` renders with Vulkan (the Android host replays NVN and OpenGL ES only so far; a game that draws with OpenGL hands its calls to the device's own GLES driver, `gl_android.c`), and one whose shaders need a step that boots the game in the Mac host (legacy Unreal paks, version 4 — Dragon Quest XI S — and PlatinumGames' PKZ archives). Game Freak's Oodle archives (Pokémon Legends) and Unreal's shader code archives (Octopath Traveler 0, FINAL FANTASY RESONANCE) are not refused: their decoder runs on the Android device the port already uses, or on the phone itself when the porter runs there (`porter/pipeline.py` `device_oodle`, `local_oodle`). The shaders a game compiles at run time with its own GLSLC are not refused either: the game compiles them in a headless host — here on the phone when the porter runs there (`local_glslc`), on the Android device when the porter runs on a desktop (`device_glslc`) — the way it runs the game's own decoder for the Oodle entries (`porter/pipeline.py`, `dm/host/hle_glslc.c`).
-**Oodle on the device.** Shaders that only the game's own Oodle decodes are decoded with that code on the Android device: the host built as an executable (`build.py --exe`) and the rewritten modules go to `/data/local/tmp/nx2a-oodle` once a port, each job file is decoded there (`dm/host/hle_oodle.c` `DM_OODLE_JOB`), and the folder is removed afterwards (`pipeline.device_oodle_job`). So the port needs adb and the device even when it does not install. Game Freak's GFPAKs and Trinity packs go as one job before the split (`device_oodle`). The returned result is indexed by file offset and length, then copied into the split's decoded archives in chunks of at most 1 MiB, without retaining whole payloads or concatenated archives in Python memory. Short headers, record lengths and payloads fail the stage before decoded archives are written. The temporary result is removed after copying and closing it. An IoStore shader library selects the Unreal decode stage even without a version 11 pak. Unreal Engine's shader code archives (version 11 paks, Unreal Engine 5's IoStore shader libraries) go in rounds (`device_ue`): `uepak.job` runs with a decoder that answers from what is decoded so far and notes the rest, the noted streams go to the device as one job, and the next round runs, until a round notes nothing (FINAL FANTASY RESONANCE: one round of 5,919 shader groups, 74,244 shaders in under a minute); the archives land in `<version dir>/ue_shaders` with the NSP script's stamp, where the split reads them, as the Mac's `decode_ue_shaders` leaves them.
-
-The split reads version 1 shader libraries directly from Unreal version 8 paks, including both the one-byte and four-byte compression method layouts. The library holds stored or zlib-compressed shaders. A library in a stored, zlib, or gzip pak entry can be split on the computer without a decoder device. The split reads only shader libraries out of these paks (issue #425). It follows numeric patch priority, and a delete record hides only lower-priority entries so a library can move between chunks in the same patch. Version 4 keeps its existing host-native shader labels, including the backslashes in Windows profile tables.
-
-**Versions.** The newest version in the folder is packed. A version the profile was not brought up on is packed from a derived profile (upstream's `derive_profile`, in `profile-derived/`), without that version's per-build fixes. When another build is packed (GitHub issue #26):
-- a profile that declares virtual address memory (a `sys_resource` row, not 0) gets 8 GB more `mem_alias` and `mem_reserve` in its derived copy (`pipeline.alias_headroom`): the address regions such a game reserves depend on its build (Donkey Kong Country Returns HD's base game reached +7.0 GB of alias region, where its tested update stays under +2.75 GB), the tested build's high-water mark does not bind another one, and the heap and the device's memory stay as they are;
-- a module whose build has no registered patch, where the tested build of it has some (`dm/tools/sdk_patches.py`, the profile's `patches.py`), gets a `[RED]` line that names the patches it goes without (`pipeline.lost_patches`).
-
-`--alias-headroom <GB>` (0 to 48; the GUI's **Extra address space**, Auto when not given) sets that headroom for any port of such a game: the derived copy, or for a version the profile was brought up on a copy in `profile-mem/` (without `patches.py`, which stays in `dm/games`), which every tool takes first. `0` keeps the profile's layout. It is for a game whose log shows `AllocateAddressRegion … refused (0x1803)` before it crashes; a game without virtual address memory keeps its layout whatever the value.
-
-**Experimental ports** (`--experimental`, the GUI's Experimental box): a game without an Android profile. With no profile at all, upstream's survey (`<game folder>/<title ID>_survey/survey.md`) guesses a provisional one; with only an iOS profile, that profile is copied. Either way it goes to `<title ID>_build/profile/<title ID>/` with an `android.tsv` of status `experimental`, and every tool finds it there (`DM_GAMES_DIR`). That folder is where a bring-up starts; a game that works gets its profile into `nxnative/dm/games/`.
-
-For an Unreal NVN game with virtual address memory, the survey expands the guest block by the same amount as the alias region and keeps the 128 MiB provisional heap. If an older provisional profile has `mem_reserve 0x1028000000` and `mem_alias 0x1008000000` with the default 256 MiB stack, set `mem_reserve` to `0x1030000000` in that profile's `game.tsv` to give its startup heap request room (issue #425).
-
-`--package` (the legacy path) installs a port under another package than the profile's, beside the player's other build of the game (a test).
-
-**versionCode** (the legacy path). The APK's versionCode is the packed Switch version number + 1 (v196608 → 196609), so a port of a game update installs over the base game's port. Android installs an APK over one with the same versionCode, but never over a higher one (`INSTALL_FAILED_VERSION_DOWNGRADE`); the only other way past that is an uninstall, which deletes the saves. `--vercode-offset N` (or `NX2A_VERCODE_OFFSET`) adds N, 0 to 65535, so a rebuild of the same version installs over an earlier rebuild with an offset; 65535 at most keeps it below the next version's port, as Switch versions are 65536 apart. A refused downgrade names the installed versionCode.
-
-**Touch games** (`--touch`, the GUI's Touch game box). On Android the game's touch screen takes every touch in both modes, for every game (`hle_hid.c` `touch_on`), but the on-screen gamepad's controls take the touches that go down on them or near them (the app's own hit test, `ui/game/PadModel.kt` `PadHit`, on the geometry the host hands over; about a quarter of a tablet's screen, at its sides), and the gamepad is shown by default. `--touch` writes `overlay=0` into the data pack's `settings.txt` over the profile's settings (`pipeline.TOUCH_SETTINGS`), as Unpacking's profile does: the gamepad starts hidden and every touch is the game's. The app reads that line the first time it sees the game and keeps it as its own preference (`pad.shown.<title ID>`) — the host no longer stores it, so the App's preferences are the only truth about it; the drawer shows the gamepad again. It costs nothing at run time (the host's touch reads are the same with the gamepad shown or hidden). A game that ignores touch while docked needs handheld mode too (the drawer's docked-mode item).
-
-**60 fps** (`--fps60`). A Switch game capped at 30 needs per-build knowledge to run at 60: which memory holds its frame limit, or which code counts frames. A profile that has it (`fps_target`: the rewriter's frame-step stubs or `hle_fpslock.c`'s rows) gets `DM_FPS_TARGET=60` in `env.txt`. Otherwise the port fetches the community's config for the packed `main` build from masagrator's FPSLocker-Warehouse (`porter/fpslocker.py`; GitHub, `SaltySD/plugins/FPSLocker/patches/<title ID>/<build ID>.yaml`) and converts it: the `ALL_FPS` memory writes (pointer chains from `main`, compares; the expressions evaluated for 30 and 60) become `fpslock.tsv` in the data pack, which `hle_fpslock.c` writes on every present (`DM_FPS_LOCKS`); `MASTER_WRITE` bytes become cuts for the rewriter (`patch_nso.py` `DM_PATCHES_EXTRA`, original bytes from the game's `main`); presents follow the display (`DM_PRESENT_INTERVAL=display`), as FPSLocker paces them itself. A config using what the host lacks (`asm_a64`, `DECLARATIONS`, non-`MAIN` regions, `refresh_rate`) is refused whole; 1,160 of the 1,462 configs convert (2026-10-28). A missing, unavailable or refused external config adds no FPSLocker changes; built-in profile patches still apply during the rewrite, independently of `--fps60`. The external-config status does not say whether that device can sustain 60 fps. The warehouse has no license, so its configs are fetched per port and never committed. Whether 60 holds on a device, and whether the config fixes every speed issue, is the config's and the device's: it is the player's choice.
-
-**A game that runs at 60 on the Switch, 30 by default** (`fps_ceiling 30` in its `game.tsv`; Cardfight!! Vanguard Dear Days 2 and Pokémon Mystery Dungeon Rescue Team DX set it). Such a game (Pokémon Mystery Dungeon asks for interval 2 under `present_interval display`, which the display mode ignores) steps by the time that really passed, so presentation can hold it at 30 without slowing it: the adaptive frame rate never steps above 30 (`perf_android.c` `fps_cap_step`, from `gfx_vk_present.c` `dm_fps_ceiling`), and `--fps60` writes `DM_FPS_CEILING=0`, which lifts it. A game whose host frame step is on (`dm_fps_state`) gets no ceiling whatever its profile says. `fps_target` keeps its meaning (the frame step's or the engine limiter's target).
-
-**Compressed RomFS** (a profile's `android.tsv` `romfs zstd`; `raw`, the default, for every other game). A Switch game's NCAs keep their sections compressed, so its extracted RomFS can be larger than the NSPs (Cardfight!! Vanguard Dear Days 2: 21 GB of XCI and update, 30.6 GB of RomFS). For such a profile the port stores each RomFS file of 64 KB or more that comes out at most 92 % of its size as a packed file of the same name in the pack (`porter/romfs_pack.py`: a 32-byte `NXZR` header, a block table, 256 KB blocks, each a zstd frame or stored as it is), written one block at a time into `<build>/android/romfs_zstd/<version>/` and reused by later ports; the other files stay hard links to the extraction. `env.txt` gets `DM_ROMFS_ZSTD=1`, and the Android host reads such a file of a read-only mount as the original (`hle_fs.c` `zf_*`: opens, reads that decompress only the blocks they cover, with decoders from a small shared pool, file sizes, and the sizes in directory listings of read-only mounts). The installer compares and pushes the pack's files as they are, so a port that turns it on pushes the packed files once. Packed files are no RomFS another app can read, so such a pack is refused with `--romfs-push` or an `--romfs-at` folder other than `app` (`install.packed_romfs`), also when an earlier install left one on the device.
-
-Events: with `--progress json`, every line on stdout is one JSON object, the protocol of upstream's NSP script: `stage`, `step`, `progress`, `stage_end`, `say`; `porter` adds `result` (the outputs) at the end. A line starting `[RED] ` in a `say` is an error or warning.
-
-**Local play over the LAN** (`env DM_LAN=1` in a profile's `android.tsv`; off by default). Local wireless play (`nn::ldn`) runs over the Wi-Fi network the device is on, with the protocol of Atmosphère's ldn_mitm (UDP and TCP port 11452: a station broadcasts a scan, each host answers with its NetworkInfo, a station joins over TCP and the host sends every station the node list), so a port plays with Switches that run ldn_mitm and with other ports on the same network. `hle_ldn.c` answers `nn::ldn` and `nn::nifm` (a local-mode request is granted, an internet request stays refused), `hle_socket.c` puts `nn::socket` on the host's own sockets (Horizon's ABI: FreeBSD's sockaddr, option and flag numbers, Linux's error numbers and `O_NONBLOCK`), and `android/lan_android.c` holds a Wi-Fi multicast lock so broadcasts arrive. Parental controls allow free communication and `nn::friends` makes play history keys locally while it is on. With `DM_LAN` off every one of these stays offline, as before. `DM_LAN_TRACE=1` logs every socket call and every `nn::ldn` / `nn::nifm` query with its result. Online play (Nintendo's servers) stays out of scope.
-
-## Android input
-
-**Show gamepad** is saved in `settings.txt`. When enabled, the on-screen controls hide on a mapped controller button press or when stick, D-pad or trigger motion reaches the same activation thresholds as gameplay, from input the game sees as player 1's: player 1's controller, a keyboard or remote (which feed player 1), and in a one-player game every controller, as all of them play as player 1. Another player's input leaves the controls as they are, so a player 1 on touch keeps them while player 2 plays on a controller. A touch restores the controls for the next press, including while a controller is still attached. Button releases still reach the game but leave the restored touch controls visible. The last used controller disconnecting also restores the controls. When **Show gamepad** is off, only the draggable menu button is visible and all other touches go to the game. The menu button stays available in either mode. The controller count (`pad_watch`) is used for vibration routing.
-
-## Installing a port
-
-`porter install` (`porter/install.py`) pushes only what the device does not have: files of another size, the rewritten modules whose MD5 differs, many small files in tar archives. The data pack's manifest (`nx2a-data.json`) has a content key for its RomFS and DLC (`parts`: a hash of their paths and sizes, `porter/datapack.py` `part_key`). When a new install's files folder has neither, and another port of the same game on the device has a manifest with the same key (a test build beside a release build, another package name), the installer copies the part on the device from that app's files folder and checks the copy (files, sizes, the MD5 of a sample against the pack); a copy that differs is deleted and the part is pushed as before. Z-A's 5.6 GB RomFS: 5 s on the device instead of a USB push of minutes. The signing key is one per player (`porter/paths.py` `signing_key`), so every port of theirs installs over the last.
-
-**Motion aiming** (`DM_MOTION`, `DM_MOTION_RAW`, `DM_MOTION_LOG`): the device's own turn moves player 1's six-axis
-sensor (`dm_motion_set`, `hle_hid.c`), as the Joy-Cons turn with the console in handheld mode (The Legend of Zelda:
-Tears of the Kingdom aims its bow by them). The gyroscope's samples are mapped into the screen's frame (the display's
-rotation, read through JNI), the accelerometer's give gravity's direction. The game's drawer has the two
-switches (the **Controls** tab: the motion on or off - the default follows the device's gyroscope - and keeping the
-measured direction of a flick instead of the host's made-up waveform). They are handed to the host as env rows when the
-game starts and reach the running game over JNI (`motionSet`, the same way the frame rate step does), so a change
-takes effect at once, without restarting the game. One game has one pair (like the drawer's other rows).
-
-**The gamepad center** (`com.nx.android.input/`, the app's side; `nxnative/dm/android/pad_map.h`, the host's side):
-a physical controller is a controller, not a game, so what the player changes about it is kept **per controller**
-(`files/pads/profiles.json`, keyed by the controller's fingerprint: its descriptor, its vendor and model and its axes'
-capabilities, hashed; two controllers of the same model get a session of their own). The profile holds the bindings
-(which physical key is which game key), the disabled keys, the stick's dead zone, the trigger's threshold and
-whether the face buttons follow their **position** (the Switch's layout: the bottom button is B, the right one A —
-the default, and what the host did before) or their **label** (an Xbox controller's A is the game's A). The label
-belongs to the controller, not to the game, so the choice is per controller and not per game.
-
-The app pushes the profile to the host as a line-based text (`Native.padMapping`, the host reads it in
-`pad_map.h`: the host has no JSON parser), keyed by the Android input device id, so two controllers of the same model
-keep their own tables. The host looks the event's device up, then the player's own binding (the physical scan code
-first, the key code as the fallback), and falls back to the default dictionary — unchanged for a controller nobody
-touched. The key events carry the scan code now (`dm_java_event`'s `key_scan`, from `KeyEvent.getScanCode()`), which
-is what makes a binding survive a change of phone. The calibration is per controller too: the dead zone is applied
-when the axis event comes in, the trigger's threshold when the button is derived from it.
-
-The face buttons are recognised by **one choice per controller**: by position (the Switch's four
-places: X on top, Y on the left, A on the right, B at the bottom) or by label (the A/B/X/Y the
-controller prints). It is the same model upstream uses (a `labels` bit, with `DM_PAD_LABEL` as the
-default), stored per controller in its profile; the scope in the gamepad center shows what the game
-actually receives, so the player can check it by pressing. There is no per-key remapping: the
-controller's own print and the four positions are what a player has to live with.
-
-One controller family needs a second bit, though: some controllers report their face buttons **by
-their print** (the firmware puts the letter in the code: the button printed X is 307, the one printed
-Y is 308) instead of by position. The same dictionary is then wrong on two of the four buttons, so
-the profile keeps a `printCoded` bit per controller and the gamepad center works it out with one
-press ("press the button printed Y": 307 means it reports by position, 308 by its print). The pushed
-table carries it as `coded=1` in the `dev` line, and the host picks the matching pair of
-dictionaries. The scope always draws the **game's** diamond (the Switch's four places) and lights
-what the game received, so it tells the truth whatever the controller's firmware does.
-
-The pushed table also carries the controller's **axis roles** (`ztrig=1`, `rxstick=1` in the `dev` line): where its
-triggers and its right stick live. Not every family agrees — the NS and the old Android convention put the right
-stick on Z/RZ and the triggers on LTRIGGER/RTRIGGER, while the Xbox family (the USB `xpad`, the Bluetooth XInput
-mode) puts one-directional triggers on Z/RZ and the right stick on RX/RY. The app reads the controller's own axis
-ranges and works the roles out of them (a one-directional Z/RZ pair is a trigger pair), and the host consumes the
-axes by the roles: with no roles a controller plays exactly the way it always did. The motion event carries twelve
-axes now (RX/RY appended), which is what lets a role-swapped controller's right stick reach the game at all.
-
-The center itself is a Compose overlay over the game (`game/overlay/PadCenter.kt`, opened from the drawer's
-**Controls** tab): the controllers that are connected, what the selected one is doing (the scope), the bindings
-(one row per game key: rebind it by pressing the physical key, clear it), the calibration and the vibration test.
-While it is open the game keeps running but the controller's input is muted (the app swallows it), and every key is
-released when it opens and when it closes, so nothing stays pressed in the game.
-
-## A port as a game of its own (the export)
-
-The app can export a finished port as a **standalone game APK**: a game the player installs by hand, with no part of this app in it. The three parts of it:
-
-- **The host for a NativeActivity of its own** (`build.py --lib`, the upstream's APK front `front_android.c`): the same host as the app's `:play` process, but with the front that draws the gamepad itself and reads the game from its own external directory (`/storage/emulated/0/Android/data/<package>/files`). One front per build: `--play` links the player's front, `--lib` the APK one (`nxnative/dm/android/build.py`, `port_files`). The present side (`gfx_vk_present.c`) is **upstream's overlay drawing** — the frame-time counter, the four-tab pause menu, the layout editor, the save picker — because only the upstream front opens those panels; the fork's own work in the same file (the frame generation, the performance HUD's samples, the present pacing) stays, and in the app's `:play` shape the front's answers (`dm_overlay_visible()=0`, `dm_menu_state()=-1`, `dm_overlay_fps()=0`) keep the host from drawing any of it (the app draws the gamepad, the panels and the HUD itself).
-- **The APK** (`porter export-apk`, `porter/export_apk.py`): `mkapk.py` writes it with the Python standard library only (no JDK, no Android SDK) and signs it with the app's own key (one key for every exported game, in the app's private folder: `files/nx2a/export-signing-key.json`), so a later export of the same game installs over an earlier one (the versionCode grows with the app's count of the exports).
-- **The data**: the same self-sufficient folder the folder export writes (the pack's own files, the game's files as plain `RomFS/`, `env.txt` and the manifest rewritten for the exported game's own directory, no `saves/`).
-
-**The data goes into the exported game's own directory.** The platform lets no app write into another app's `Android/data` directory (not even with All-files access), so the app copies the data there over its own ADB channel (`android/.../data/AdbChannels.kt`, the client `AdbWire.kt` the PhantomFix uses): the shell may write there, and the shell cannot read the app's private directory — hence the data is copied out to the folder the player picked first, and that folder is also the shareable copy. The move needs Wireless debugging on and the app's key paired once; when it cannot run, the data stays in the folder the player picked and the app says which directory to copy it into by hand.
-
-The exported game therefore needs **no permission at all** and starts without a dialog: its own directory is the system's own, and the data is already there. The install does not clear it (measured on a device: a file put there before a fresh install and before an overwrite install is still there afterwards), so the order is: move the data, then the player installs.
-
-Two details of the move and the APK:
-- The shell-copied files arrive owned by `shell` with the shell's group, which the exported game (another uid) cannot read: the copy ends with `chmod -R a+rX` on the game's directory.
-- The APK declares the game's own orientation (the profile's `orientation`: landscape by default, `any` for a game that turns with the device — `mkapk.py --landscape`), and its label is the game's name.
-
-The shared font travels with the folder (`standard.ttf`): the app's own copy lies in its private directory, which the exported game cannot read (its Chinese text would draw as "?"). The Vulkan driver travels with the APK when the port was made with one (`DM_VK_DRIVER` in the pack's `env.txt`): the host loads it from the APK's own library folder through `libadrenotools`.
-
-## What the player installs
-
-The player gets the bundle (`dist/nx2android-<version>-<os>-<cpu>.zip` from `python packaging/build_bundle.py`, for Windows and macOS): unzip, start `nx2android.exe` (`nx2android` on a Mac), nothing to install with pip. It does not ship toolchains; the Setup tab (`nx2android.exe -m porter doctor`, or `python -m porter doctor` from the repository) checks them and the free disk space, and its **Download missing tools** button (`porter tools --download`, `porter/fetch.py`) fetches the missing NDK, .NET SDK and platform-tools from Google's SDK repository and Microsoft's release list, checks each archive against the checksum its list gives, and unpacks them into the player's nx2android folder (`toolchains/`), which the finders search:
-- **Android NDK r27c** (`ANDROID_NDK_HOME`, the configured path, or the usual install folders). No Android SDK or JDK: the pack path signs nothing, and the legacy APK path wrote and signed the APK itself (`mkapk.py`). The optional `--external-display` and `--native-keyboard` activities additionally need `javac` and Android SDK platform and build-tools.
-- **.NET SDK 10**: builds `nx_extract` and the shader translator, and runs them.
-- From the repository instead of the bundle: **Python 3.11+** with `requirements.txt` (`lz4`, `capstone`, `pillow`, `fonttools`, and `PySide6` for the GUI): the port runs the engine's own Python tools (the rewriter, the shader split). The bundle carries that Python.
-- **adb** (platform-tools), only for the legacy path's install and for the save manager.
-- Their own **prod.keys**. Keys and game files are never copied into the repository or the app.
-
-The player's settings, the legacy path's APK signing key and the built translator live in their nx2android folder: `%APPDATA%\nx2android` on Windows, `~/Library/Application Support/nx2android` on a Mac, `~/.config/nx2android` elsewhere (`NX2A_HOME` overrides it). The legacy path's app keeps the same signer across ports, so updates install over it.
-
-## Repository layout
-
-```
-nx2android/
-  docs/ARCHITECTURE.md   this file
-  docs/GETTING_STARTED.md   the development setup and the two working loops
-  docs/gen_tables.py     docs/PORT_CHECKLIST.md's list of the games and the READMEs' gallery and counts, all made from the profiles
-  porter/                port pipeline (python -m porter)
-  gui/                   desktop app (python -m gui)
-  devtools/              device bring-up scripts, the release pipeline (devtools/netdisk/)
-  packaging/             the player's bundle: build_bundle.py, build_bootloader.py, nx2android.spec, nx2android.py, INSTALL.md
-  tests/                 unit tests (python -m unittest discover tests); arch_rules.py checks this file's layer rules
-  requirements.txt       the Python modules the tool needs
-  probes/                first on-device probes (research)
-  nxnative/              our fork: engine, Android runtime, profiles
-  RESEARCH.md            feasibility study
-```
-
-The engine is our own fork since 2026-10-29: no subtree pull from upstream, and no `upstream` remote ([DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md#nxnative)).
-
-## Adding a game
-
-1. `python -m porter port <folder> --experimental`: the survey and a provisional profile. Bring it up from there with the upstream tools and `devtools/` (docs in `nxnative/docs/agents`): the profile moves to `dm/games/<title ID>/`, fixes go into the core as general rules.
-2. Add `android.tsv` with `status` and `tested`.
-3. `python -m porter port` on its folder: the data pack is the artifact, and the phone app runs the game from it. Raise `status` to `playable` when it is.
-
-## The phone app
-
-`android/` is an Android app (Kotlin, Gradle) that runs the pipeline **on the phone**. It holds no pipeline logic:
-it unpacks the environment (the rootfs from the nixport payload, the build tools, the tool's own tree), starts the
-porter as a guest program and shows its output. The porter runs with `--app` there: the data pack is the only
-artifact, and a finished port runs inside the app — no per-game APK and no installer step. The player lives in
-the app's own `:play` process (`com.nx.android.game.GameActivity`). A port builds its runtime (the host
-`libdmplay.so`, the host statically linked with its JNI entry, `dm/android/jni_android.c`, and the loader's
-hooks) into the app's private runtimes folder - `files/runtimes/<title ID>/`, one folder per game (the build
-options are compiled into the host, so every game carries its own), with a `build.json` **build marker**
-(player interface revision, profile hash, lsfg switch) beside it; a pack made by an older porter keeps its
-runtime inside the pack, and the app copies it into that folder on its first launch (a promotion) and writes
-the marker itself. sdcard is noexec, so the `.so` files live in that private folder; the game **loads it in
-place with no per-launch copy**, after its own prepare has checked the folder's marker against what the app
-expects (a mismatch - an app upgrade that changed the interface, say - rebuilds the runtime right there, a
-porter subprocess whose stdout feeds the loading page). The surface, input and lifecycle reach the same shared
-core the NativeActivity APK serves (`dm/android/jni_android.h`). The game page keeps the volume keys for Android:
-the game's audio sits in the media volume group, so the system's volume bar is the game's volume - consuming them
-in the app would leave the player with no way to turn the sound up. One game plays at a time; the process ends with
-the game, so a crash takes the game down, not the app or a port that is running.
-
-**Who knows a game is playing: one ledger.** `appstate/PlayerState` is the single source - two states,
-IDLE and RUNNING, and the `:play` process's presence is the only fact it is built on (it polls; `beginPlay`
-and `restore()` ask it once, synchronously). The identity (title ID and name) survives the app's own death
-in the preferences, so a cold start knows which game is running under it. Nothing else scans the process -
-`checkArchitectureBoundaries` holds that rule - and nothing kills a process to start another one: the
-launch gate (`LibraryLogic.launchDecision`, one path for the library cards, the detail panel and the home-
-screen shortcuts) resolves the pack, asks the ledger, and returns start, resume (bring the game's page
-forward, never restart it) or refuse (bring the running game forward and say which one is running). A
-launch refuses rather than kills when the process turns out to be alive (the fail-safe in the ledger).
-
-**Task structure:** the game page is `singleTask` with the default affinity - one instance in the whole
-system, stacked in the app's own task on top of the library page (`singleTask` there buys the single
-instance; the crash isolation comes from the separate `:play` process, and the two are independent tools).
-Ending the game or a crash falls back to the library page underneath; recents stays a single card. The
-shell stays `singleTop`: a home-screen shortcut's intent lands in its `onNewIntent` instead of stacking a
-second library page. Saves, logs and temp go under
-the app's files folder per title id (`DM_GAME_ID`); the game's language and Vulkan driver are picked in the
-library's drawer and written into the pack's `env.txt`. The assets are built by `packaging/android-apk/` and are
-not committed; the app's own layer rules: no game-specific code, no pipeline logic (the CLI does all of it).
-
-Two things the host does on Android that the desktop host gets from its `main.c`: the **crash handlers**
-(`crash_install()`, `dm/host/crash.c`) - without them a SIGSEGV kills the game silently, with no backtrace and no
-tombstone - and the **signal alternate stack** of every thread that can fault (`crash_thread_init()`), the guest
-threads and the host's own alike. The host's **notices to the app** (the drawer steps aside for a panel) go on a
-thread of their own: they are JNI calls into the Activity, and the game's thread must never wait for the app (it
-blocked there once, and the game froze with its keyboard never coming up).
-
-### Android source boundaries
-
-| Package | Responsibility |
-|---|---|
-| `app/` | Root navigation, tab shell and Activity action boundary. `MainActivity` owns Android permissions, intents and system UI. |
-| `feature/<name>/` | Routes, Compose screens, ViewModels and UI state. Features call domain contracts rather than own file/network implementations. |
-| `domain/` | Platform-independent models, rules and repository/capability contracts. It must not import Android, Compose, `data/` or `feature/`. |
-| `data/<name>/` | Repository implementations, platform adapters, persistence and file operations. |
-| `core/` | Cross-feature primitives: DI bindings, dispatchers, app paths and shared UI/theme components. |
-| `game/{input,hud,overlay}/` | The `:play` process UI grouped by concern. `GameActivity` and `Native` keep their JNI-facing class and method names. |
-| `appstate/` | Application-scoped state/coordinators shared across screens and the foreground service; screen presentation state belongs in a feature ViewModel. |
-
-Hilt is the dependency source: application-scoped repositories and state have one binding, Android entry points
-inject only the capabilities they use, and Composables receive explicit state/action parameters. The `:play`
-process must not start library scans, update checks or port recovery. Long-running work has an explicit owner
-(a ViewModel for screen-scoped work, or a service/coordinator for background porting) and a cancellation or recovery path.
-
-`./gradlew :app:check` runs `checkArchitectureBoundaries`: only the player ledger (`appstate/PlayerState.kt`) may
-ask whether the `:play` process is alive; no other file scans the process itself. The package directions in the
-table above (`domain/` stays free of Android, Compose, `data/` and `feature/`; `feature/` reaches for `data/`
-through domain contracts) are design rules kept by review, not by the build. The process-shared state in
-`appstate/` remains application-scoped because the foreground service, the Activity and multiple feature
-ViewModels observe the same in-flight work.
-
-### The app's own language
-
-The app's words live in its own resources: `res/values/strings.xml` is English (the default bundle) and
-`res/values-zh/strings.xml` is Chinese. The phone picks the bundle — a phone set to Chinese gets the Chinese
-one, every other phone the English one — and the player can pick one in the settings (`界面语言` /
-**App language**), which takes effect at once and is remembered (`lang` in the app's preferences). The app's
-language is not the game's language: the game's own is a per-game setting in the library's drawer, written
-into the pack's `env.txt`.
-
-`AppLocale` (`data/AppLocale.kt`) holds the choice and hands out the resources the words are read from. The
-screens read them with `stringResource` (the resources are handed to the composition by `core/ui/Locale.kt`), and
-the code that has no screen — the state holders, the service, the activity — reads them with
-`AppLocale.str()`. Both read the same resources, so a word is the same word wherever it is shown. The data
-layer stays free of Android and says what went wrong in a code, not a sentence (`Drivers.Refused`,
-`SaveBackup.Refused`); `core/ui/Failures.kt` turns a code into the app's own words.
-
-`tests/test_app_text.py` holds the two tables to each other and the sources to the tables: the same keys on
-both sides, no Chinese left in the Kotlin sources, every `R.string` in the table, and every
-`stringResource(...)` passing as many arguments as the string has placeholders. It runs in CI, with the rest
-of the Python suite.
-
-### The app's own update check
-
-The app on the phone looks for a newer release: once on a cold start (quietly — nothing is said when there is
-no network, no release, or nothing newer) and again when the player asks for it in the settings. A newer
-release is a notice on the home page and a link to the release page; the app does not download or install
-anything itself.
-
-It does not ask the GitHub API for that: an unauthenticated API gives 60 requests per hour per address, and
-the phones sit behind the same address more often than not (the driver catalogue stopped using the API for
-the same reason). The release page redirects to the newest release's tag, so following that redirect and
-reading the last piece of the address is enough.
-
-The three layers, as everywhere else in the app: `domain/UpdateVersion.kt` holds the fork's versions and
-their comparison (free of Android, so the tests run on the JVM), `domain/UpdateFeed.kt` reads the
-repository's release feed (GitHub's Atom feed: every release with its own notes, already rendered into HTML —
-also a plain page, so no API's rate limit), `data/UpdateChecker.kt` asks for the tag and the feed, and
-`appstate/UpdateState.kt` holds the state the screens read — the popup on a cold start and the entry in the
-settings (`feature/updates/`).
-
-One platform quirk is worth knowing: a locale **with** a region (`en_US`, `zh_CN`) overrides the phone's own
-locale, a locale with only a language (`en`) does not — on Android 16 the configuration keeps the phone's
-own (`zh_CN`) and the words stay in the phone's language. `AppLocale.locale` therefore gives both languages
-a region (`Locale.US`, `Locale.SIMPLIFIED_CHINESE`).
-
-### The Vulkan drivers
-
-A game runs on the device's own Vulkan driver unless the player picks another one in the library's drawer. The
-drivers the player picks are **the app's**, not the pack's: they live in the app's own folder, one folder each
-(`files/drivers/<id>/`), and the drawer writes the chosen one's **absolute path** into the pack's `env.txt`
-(`DM_VK_DRIVER`). The host reads that row (`dm/android/gfx_vk_core.c`), splits it at the last slash and hands the
-directory to `libadrenotools`, which loads the library from it in a linker namespace of its own — so a driver may
-live anywhere the app can read. One folder per driver because every Turnip build's library is called
-`libvulkan_freedreno.so`. The app downloads the drivers (fixed addresses, no release listing: the GitHub API
-allows 60 requests an hour per address and a phone shares its address), ships one of them in its assets
-(`drivers/Turnip_Gen8_V39.zip`, unpacked into the app's own folder by the app itself when it starts — no network,
-no click — and marked as the built-in one, so it is the app's own and not the player's to remove) and imports any
-other from the device's files.
-
-In the Android app, `domain/drivers/` owns the driver model and `DriverRepository` contract. `data/drivers/`
-owns the app-private directory, archive parsing, fixed download catalogue, import, removal and built-in driver
-setup. `feature/drivers/` owns the download route, screen, `DriverViewModel` and its UI state. Hilt binds one
-application-scoped repository; Activity and feature entry points inject that same instance. Settings
-subscribes to its driver flow for the installed list and sends import/removal actions to the repository. The
-library's run options receive that same list from the app root, so all three surfaces observe one source of
-installed driver state. New features should keep UI resource selection in `feature/`, storage and network work
-in `data/`, and shared models/contracts in `domain/`.
-
-The **loader** (`libadrenotools.so`) is the app's own native library, and it has to be: the host `dlopen`s it **by
-name**, and the Android linker looks a bare name up in `LD_LIBRARY_PATH`, in the caller's `DT_RUNPATH` and in the
-namespace's default library paths — the app's native library folder is the only one of those the app controls (the
-app's private host folder, where the host itself lives, is none of them, so a loader copied there is never found).
-Its four hooks travel with the host instead: the host hands the loader the folder it sits in, and the loader looks
-the hooks up there.

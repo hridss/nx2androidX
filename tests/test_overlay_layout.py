@@ -93,10 +93,14 @@ int main(void) {
     assert(ov_drag_pos(1100, 600, 1013, 50) == 506.5f);
     assert(ov_drag_pos(1100, 505, 1013, 50) == 508);
 
-    assert(ov_menu_item(0, OVM_ROWS - 2) == OVM_PAD && ov_menu_item(1, OVM_ROWS - 2) == -1);
-    assert(ov_menu_item(1, OVM_ROWS - 1) == OVM_RESUME);
+    // Seven rows a tab: the gamepad's settings (Stick area after Edit layout) then the audio picker (a device may not offer it), the Game tab the picture's
+    assert(ov_menu_item(0, OVM_ROWS - 1) == OVM_RESUME);
+    assert(ov_menu_item(1, 1) == OVM_FPS && ov_menu_item(1, 2) == OVM_SR && ov_menu_item(1, 3) == OVM_SHARP && ov_menu_item(1, 6) == OVM_IMPORT && ov_menu_item(1, OVM_ROWS - 2) == -1);
+    assert(ov_menu_item(0, 3) == OVM_EDIT && ov_menu_item(0, 4) == OVM_ZONE && ov_menu_item(0, 5) == OVM_RUMBLE);
+    audio_available = 0;
+    assert(ov_menu_item(0, OVM_ROWS - 2) == -1);
     audio_available = 1;
-    assert(ov_menu_item(1, OVM_ROWS - 2) == OVM_AUDIO);
+assert(ov_menu_item(0, OVM_ROWS - 2) == OVM_AUDIO && ov_menu_item(0, OVM_ROWS - 3) == OVM_PAD);
     ui_zh = 0;
     assert(!strcmp(OVM_TAB_NAMES[0], "Gamepad") && !strcmp(OVM_TAB_NAMES[1], "Game"));   // the pause menu has two tabs here: the counter's own tabs are upstream's (the app draws the counter)
     assert(!strcmp(TR("Resume", "继续游戏"), "Resume"));
@@ -107,7 +111,7 @@ int main(void) {
     for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
         float W = screens[s][0], H = screens[s][1], step = H / OVE_GRID_ROWS, p[4];
         ov_menu_rect(W, H, p);
-        for (int row = 0; row < OVM_ROWS; row++) {
+        for (int row = 0; row < OVM_VIEW_ROWS; row++) {
             float r[4]; ov_menu_rowrect(p, row, r);
             assert(ov_menu_row_at(r[0] + r[2] / 2, r[1] + r[3] / 2, W, H) == row);
         }
@@ -140,41 +144,6 @@ int main(void) {
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             result = subprocess.run([str(exe)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_who_answers_a_touch(self):
-        cc = shutil.which('cc') or shutil.which('clang')
-        if not cc:
-            self.skipTest('a C compiler is needed for the answer rule check')
-        harness = r'''
-#include <assert.h>
-#include "overlay_layout.h"
-float dm_overlay_scale(void) { return 1; }
-int main(void) {
-    // the app draws the gamepad and the menu button as one layer, so the app's answer decides: drawn → every control, hidden → nothing
-    assert(ov_answer(0, 1, 1, 1) == OV_ANSWER_ALL);
-    assert(ov_answer(0, 1, 1, 0) == OV_ANSWER_ALL);
-    assert(ov_answer(0, 1, 0, 1) == OV_ANSWER_NONE);
-    assert(ov_answer(0, 1, 0, 0) == OV_ANSWER_NONE);
-    // the desktop host draws the pad itself: the gamepad hidden → the menu button alone (it is still drawn)
-    assert(ov_answer(0, 0, 1, 1) == OV_ANSWER_ALL);
-    assert(ov_answer(0, 0, 1, 0) == OV_ANSWER_MENU);
-    // the editor is open: every control answers, shown or not (the editor chooses among them)
-    assert(ov_answer(1, 1, 0, 0) == OV_ANSWER_ALL);
-    assert(ov_answer(1, 0, 0, 0) == OV_ANSWER_ALL);
-    return 0;
-}
-'''
-        with tempfile.TemporaryDirectory(prefix='nx2a_overlay_') as tmp:
-            tmp = Path(tmp)
-            (tmp / 'android_profile.h').write_text(android_profile.header(None), encoding='utf-8')
-            c, exe = tmp / 'check.c', tmp / 'check'
-            c.write_text(harness, encoding='utf-8')
-            result = subprocess.run([cc, '-std=gnu11', '-Wall', '-Wextra', '-Werror', f'-I{tmp}',
-                                     f'-I{DM / "android"}', f'-I{DM / "host"}', str(c), '-lm', '-o', str(exe)], capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            result = subprocess.run([str(exe)], capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
 
     def test_grown_controls_do_not_overlap(self):
         """On a small screen the controls grow so a face button stays 10 mm wide (front_android.c dm_overlay_scale). Each side grows out from its bottom

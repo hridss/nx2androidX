@@ -17,10 +17,7 @@ def _parser():
     po.add_argument('-k', '--keys', help='prod.keys (default: the configured one)')
     po.add_argument('-o', '--out', help='folder for the data pack (default: the game folder)')
     po.add_argument('-p', '--version', default='', help='version to pack, v<N> (default: the newest in the folder)')
-    po.add_argument('-l', '--language', default='', help='game language, a code or a name (default: English)')
-    po.add_argument('--language-preferred', default='',
-                    help="the language the device is set to (zh-CN, ko, ...): the pack follows it when the game has it. A wish, not a demand: "
-                         "the port never fails for it, and the game's own first language is packed when it does not have it")
+    po.add_argument('-l', '--language', default='', help='game language, a code, a name or system (default: English)')
     po.add_argument('--app-name', default='', help='the app\'s name on the device (default: the game\'s name)')
     mode = po.add_mutually_exclusive_group()
     mode.add_argument('--app', action='store_true', dest='app',

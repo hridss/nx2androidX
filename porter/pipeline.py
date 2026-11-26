@@ -60,8 +60,7 @@ class Options:
     keys: Path = None                  # prod.keys
     out: Path = None                   # where the APK and the data pack go (default: the game folder)
     version: str = ''                  # v<N> to pack (default: the newest in the folder)
-    language: str = ''                 # a code or a name (default: English)
-    language_preferred: str = ''       # the language the device is set to: the pack follows it when the game has it (a wish, not a demand)
+    language: str = ''                 # a code, a name or system (default: English; system: the pack lists the game's languages and the front picks one at launch)
     app_name: str = ''                 # the launcher label (default: the game's name in its control data)
     app: bool = False                  # the nx2android app's mode: no APK and no install — the pack carries the host (libdmplay.so), the drivers and the icon; the app runs the game itself
     install: bool = False              # install on the device after packing
@@ -195,26 +194,6 @@ def alias_headroom(tsv, gb=None):
     lines.insert(min(rows['mem_alias'], rows['mem_reserve']), f'# porter: {add >> 30} GB more alias region than the tested build\'s ({alias:#x}), and the block with it, for this build\'s address regions')
     tsv.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     return alias, alias + add
-
-
-def pick_language(asked, preferred, have):
-    """The language to pack: the one that was asked for (--language / the settings: a demand, the build stops when the game lacks it), else the phone's own language when the game has
-    it (a wish: the port never fails for it), else the game's first language. have: the game's languages (empty: unknown).
-    → (code, notes): the notes say what became of a wish that went nowhere, so the player sees why the phone's language did not follow"""
-    notes = []
-    if asked:
-        want = nsp.language_code(asked)
-        if not want: raise BuildError(f'unknown game language {asked!r}')
-        return nsp.game_language(want, True, have), notes
-    want = nsp.language_code(preferred) if preferred else None
-    if not want:
-        lang = nsp.game_language('en-US', False, have)
-        if preferred: notes.append(f"the phone's language {preferred!r} is not a language code the porter knows: the pack keeps {lang}")
-        return lang, notes
-    lang = nsp.game_language(want, False, have)
-    if have and want not in have and nsp.LANG_NEAR.get(want) not in have:
-        notes.append(f'the game has no {want} ({dict(nacp.LANGUAGES)[want]}): the pack keeps {lang}')
-    return lang, notes
 
 
 def registered_patches():
@@ -459,7 +438,8 @@ class Port:
             self.check_graphics()
             self.fps_unlock()
             self.rewrite()
-            if o.install: self.pull_captures()
+            # captures are pulled whatever --install says: the app reads its own files folder, a PC pulls them over adb
+            self.pull_captures()
             self.shaders()
             self.host()
             self.apk()
@@ -474,7 +454,6 @@ class Port:
             for x in self.lost: say(f'[RED] {x}')
             return self.result
         finally: self.drop_profile()   # the copy of the imported profile goes when the port is done
-
     # ---- inputs: the folder's games and versions, the profile, the version to pack ----
     def inputs(self):
         o = self.o
@@ -667,13 +646,13 @@ class Port:
         self.app_name = o.app_name or nacp.name(self.base / 'control.nacp') or self.g.get('name', self.g.id)
         self.display = nacp.version(self.game / 'control.nacp') or nacp.version(self.base / 'control.nacp') or '1.0'
         lang_in = o.language or self.cfg.get('language')
-        # The language the phone is set to is a wish, not a demand: the pack follows it when the game has it, and the
-        # port never fails for it (a Chinese phone and a Chinese game: without this the pack fell back to the game's
-        # first language, which is Korean in the Asian releases)
-        have = nacp.languages(self.game / 'control.nacp') or nacp.languages(self.base / 'control.nacp')
-        self.langs = have or ['en-US']
-        self.lang, notes = pick_language(lang_in, o.language_preferred, have)
-        for n in notes: say(n)
+        self.languages = nacp.languages(self.game / 'control.nacp') or nacp.languages(self.base / 'control.nacp')
+        if lang_in and lang_in.strip().lower() == 'system':
+            self.lang = 'system'   # the pack lists the game's languages (DM_LANG_SUPPORTED) and the front picks one at launch (the device's locale)
+        else:
+            want = nsp.language_code(lang_in) if lang_in else 'en-US'
+            if not want: raise BuildError(f'unknown game language {lang_in!r}')
+            self.lang = nsp.game_language(want, bool(lang_in), self.languages)
         say(f'app: {self.app_name} {self.display} ({self.package}), game language {self.lang}')
 
     def mem_profile(self):
@@ -741,6 +720,11 @@ class Port:
         self.oodle_why = src['oodle_packs'][1] if src['oodle_packs'][0] and ('GFPAK' in src['oodle_packs'][1] or 'Trinity' in src['oodle_packs'][1]) else ''
         # Unreal paks (version 11) and IoStore containers: their shader code archives are decoded with the game's own Oodle too (device_ue)
         self.ue_why = src['ue_decode'][1] if src['ue_decode'][0] else ''
+        # Legacy Unreal paks with LZ5 blocks (DRAGON QUEST XI S): the files decoded by the game's own LZ5 on the device (device_ue_legacy), for a profile that opts in (ue_legacy_decode device)
+        uld = self.g.get('ue_legacy_decode', '')
+        if uld not in ('', 'device'): raise BuildError(f'{self.g.id}: ue_legacy_decode must be device or absent: {uld}')
+        self.uel_why = src['ue_legacy'][1] if src['ue_legacy'][0] and uld == 'device' else ''
+        uel_cached = self.uel_why and all(self.uel_stamp_ok(v) for v in self.versions)
         # Already decoded UE archives need no device: rebuilding an APK's keyboard or host must also work after the player disconnects adb.
         ue_cached = self.ue_why and all((self.dirs[v] / 'ue_shaders/stamp').is_file() and
                                       (self.dirs[v] / 'ue_shaders/stamp').read_text() == nsp.ue_stamp(self.dirs[v]) for v in self.versions)
@@ -884,32 +868,46 @@ class Port:
         cap, backup, dst = staging / 'capture', staging / 'previous', d / 'glslc_capture'
         log = self.logs / 'android_glslc.log'
         log.write_text('Android shader capture started; complete device log not retrieved.\n', encoding='utf-8')
+        aoc_dir = getattr(self, 'aoc', None)
+        if not (aoc_dir and aoc_dir.is_dir()): aoc_dir = None
+        def stage_tree(src_root, dst_root):
+            dst_root.mkdir()
+            big_files = []
+            for src in sorted(src_root.rglob('*')):
+                if not src.is_file(): continue
+                rel = src.relative_to(src_root)
+                size = src.stat().st_size
+                if size > self.GLSLC_SMALL and src.suffix.lower() not in ('.nro', '.nrr'):
+                    big_files.append((rel.as_posix(), size)); continue
+                dest = dst_root / rel; dest.parent.mkdir(parents=True, exist_ok=True)
+                try: os.link(src, dest)
+                except OSError: shutil.copyfile(src, dest)
+            return big_files
         try:
-            adb.shell(f'mkdir -p {dev}/mods {dev}/RomFS {dev}/save {dev}/temp {dev}/capture', retries=1)
+            dirs = f'{dev}/mods {dev}/RomFS {dev}/save {dev}/temp {dev}/capture' + (f' {dev}/aoc' if aoc_dir else '')
+            adb.shell(f'mkdir -p {dirs}', retries=1)
             PROG.set(step='copying the game for its compiler')
             adb.push_file(host / 'dmhost', f'{dev}/dmhost')
             adb.push_tree(self.patched, f'{dev}/mods')
-            rom, small = d / 'RomFS', staging / 'romfs'
-            small.mkdir()
-            big = []
-            for src in sorted(rom.rglob('*')):
-                if not src.is_file(): continue
-                rel = src.relative_to(rom)
-                size = src.stat().st_size
-                if size > self.GLSLC_SMALL:
-                    big.append((rel.as_posix(), size)); continue
-                dest = small / rel; dest.parent.mkdir(parents=True, exist_ok=True)
-                try: os.link(src, dest)
-                except OSError: shutil.copyfile(src, dest)
-            adb.push_tree(small, f'{dev}/RomFS')
+            small = staging / 'romfs'
+            big = stage_tree(d / 'RomFS', small)
+            if any(small.iterdir()): adb.push_tree(small, f'{dev}/RomFS')
+            aoc_small = staging / 'aoc' if aoc_dir else None
+            aoc_big = stage_tree(aoc_dir, aoc_small) if aoc_dir else []
+            if aoc_small and any(aoc_small.iterdir()): adb.push_tree(aoc_small, f'{dev}/aoc')
             adb.push_file(self.g.table('shader_map.tsv'), f'{dev}/shader_map.tsv')
-            for start in range(0, len(big), 50):
-                adb.shell('; '.join(f'mkdir -p {shlex.quote(os.path.dirname(f"{dev}/RomFS/{rel}"))}; '
-                                    f'truncate -s {size} {shlex.quote(f"{dev}/RomFS/{rel}")}'
-                                    for rel, size in big[start:start + 50]), retries=1)
+            sparse_roots = [(f'{dev}/RomFS', big)]
+            if aoc_dir: sparse_roots.append((f'{dev}/aoc', aoc_big))
+            for remote_root, files in sparse_roots:
+                for start in range(0, len(files), 50):
+                    adb.shell('; '.join(f'mkdir -p {shlex.quote(os.path.dirname(f"{remote_root}/{rel}"))}; '
+                                        f'truncate -s {size} {shlex.quote(f"{remote_root}/{rel}")}'
+                                        for rel, size in files[start:start + 50]), retries=1)
             # No live save data, shader bundle or installed application environment enters this boot.
-            env = {f'DM_{key}': f'{dev}/{value}' for key, value in
-                   (('ROOT', '.'), ('ROMFS', 'RomFS'), ('SAVE', 'save'), ('TEMP', 'temp'), ('GLSLC_CAPTURE', 'capture'), ('NVN_SHMAP', 'shader_map.tsv'))}
+            env_pairs = [('ROOT', '.'), ('ROMFS', 'RomFS')]
+            if aoc_dir: env_pairs.append(('AOC_DIR', 'aoc'))
+            env_pairs += [('SAVE', 'save'), ('TEMP', 'temp'), ('GLSLC_CAPTURE', 'capture'), ('NVN_SHMAP', 'shader_map.tsv')]
+            env = {f'DM_{key}': f'{dev}/{value}' for key, value in env_pairs}
             command = ' '.join(f'{k}={shlex.quote(v)}' for k, v in env.items())
             PROG.set(step='capturing run-time shaders')
             say(f'booting {self.app_name} on the Android device to capture its run-time shaders (up to {self.GLSLC_SECS} seconds)')
@@ -985,6 +983,7 @@ class Port:
         bnsh: only the entries that hold a BNSH shader come back (DM_OODLE_JOB_BNSH)"""
         if getattr(self, 'oodle_local', False): return self.local_oodle_job(job, out, bnsh)
         return self.device_oodle_job(job, out, bnsh)
+
     def device_oodle_job(self, job, out, bnsh=False):
         """The job, decoded on the device: the host as an executable and the rewritten modules go to the device once a port (device_oodle_end removes them)"""
         adb = getattr(self, 'oodle_adb', None)
@@ -1206,12 +1205,16 @@ class Port:
     def pull_captures(self):
         """Shaders whose code no game file holds: the app saves each one the bundle lacks on the device (gfx_vk_shader.c vk_shader_missing), and they are
         pulled here into <build folder>/android/captured_shaders, kept from port to port, for shader_vk.py to translate into the bundle (Xenoblade Chronicles 3: effect and model shaders).
-        Only for an install, which has the device; a device that cannot be reached leaves the captures already pulled"""
+        Whenever adb can reach the device, also for a port that does not install (the GUI ports first and installs with its own button, issue #512). A device that cannot be
+        reached leaves the captures already pulled, and a port without --install needs no device, so it does not mention one that is not connected"""
+        if not self.tools.get('adb'): return   # optional for a port that does not install (toolchain.require)
         adb = Adb(self.tools['adb'], self.o.device or self.cfg.get('device'), log=say)
         try:
             adb.pick()
             got = adb.pull_new(f'{datapack.files_folder(self.package)}/captured_shaders', self.aw / 'captured_shaders', pattern=lambda n: re.fullmatch(r'[0-9a-f]{16}\.bin', n))
-        except AdbError as e: say(f'shaders captured on the device not pulled ({e})'); return
+        except AdbError as e:
+            if self.o.install or 'no device connected' not in str(e): say(f'shaders captured on the device not pulled ({e})')
+            return
         if got: say(f'{len(got)} shader(s) missing from the bundle, captured on the device: {" ".join(n[:16] for n in got)}')
 
     def translator(self):
@@ -1442,8 +1445,7 @@ class Port:
             for d in self.drivers(): files[f'drivers/{d.name}'] = d
             if self.drivers(): drivers = sorted({f'drivers/{d.name}' for d in self.drivers()})
         man = datapack.build(dst, profile=self.ap, version=self.pkg_ver, display=self.display, patched=self.patched, romfs=romfs, romfs_at=romfs_at, shaders=self.dmsv,
-                             aoc=self.aoc, sysdata=self.sysdata, language=self.lang, package=self.package, env=self.fps_env + font_env + zenv + (['DM_VK_MT_REPLAY=1'] if self.o.mt_replay else [])
-                             + (['DM_MENU_BUTTON=0'] if self.o.no_menu_button else [])
+                             aoc=self.aoc, sysdata=self.sysdata, language=self.lang, languages=getattr(self, 'languages', ()), package=self.package, env=self.fps_env + font_env + zenv + (['DM_VK_MT_REPLAY=1'] if self.o.mt_replay else [])                             + (['DM_MENU_BUTTON=0'] if self.o.no_menu_button else [])
                              + ([f'DM_VK_DRIVER={driver_lib_name(self.o.vulkan_driver)}'] if self.o.vulkan_driver else []), settings=TOUCH_SETTINGS if self.o.touch else None,
                              files=files, text=self.lists(), host=host, icon=icon, drivers=drivers, profile_h=getattr(self, 'profile_h', None),
                              pack_base=str(dst) if self.o.app else None,   # the app's mode: the pack lives in the app's own folder, not in the app's files folder
@@ -1455,7 +1457,7 @@ class Port:
         """The launcher's lists: the languages the game supports (languages.txt) and the drivers the APK carries (drivers.txt).
         The device's own driver is the first choice: a driver in the folder is only used when the player picks it (the page)"""
         langs = []
-        for code in self.langs:
+        for code in self.languages:
             name = next((n for c, n in nacp.LANGUAGES if c == code), '')
             langs.append(f'{code}\t{name}')
         return {'languages.txt': '\n'.join(langs) + ('\n' if langs else ''),

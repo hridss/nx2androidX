@@ -74,6 +74,7 @@ def _settings_names():
 _settings_names()
 
 # the backend's own small shaders (dm/android/shaders): compiled with the NDK's glslc, embedded as gen/<name>_<stage>.spv.h
+GL_SRC = sorted(p for p in (DM / 'android/shaders').iterdir() if p.suffix in ('.vert', '.frag', '.comp'))   # (the folder also keeps a third-party shader's license)
 GLSLC = Path(a.ndk) / 'shader-tools' / host_dir('shader-tools', 'glslc') / ('glslc.exe' if os.name == 'nt' else 'glslc')
 if NX2A_ARM_HOST and host_dir('shader-tools', 'glslc') != 'linux-aarch64':   # the NDK's shader-tools are host binaries for x86-64: the phone's own glslc
     _glslc = _sh.which('glslc')
