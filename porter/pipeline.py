@@ -453,7 +453,7 @@ class Port:
             break
 
         try:
-try:
+            try:
                 self.inputs()
                 PROG.plan(1 + len(self.versions) + bool(self.fam['dlc']) + bool(o.firmware and self.ap.sysdata) + bool(o.fps60) + (5 if o.app else 6) + bool(o.install))   # nx_extract, the versions, the DLC, the system data, 60 fps, rewrite / split / Vulkan shaders / host / data (the app's mode makes no APK), install (unpack adds its own)
                 self.extract()
