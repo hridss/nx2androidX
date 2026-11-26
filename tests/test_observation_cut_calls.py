@@ -16,12 +16,12 @@ def word(value):
 
 
 def rewrite(previous=BL, replacement=NOP, *, original=None, gate_word=MOV,
-            kinds=None, starts=(0,)):
+            kinds=None, starts=(0,), tail=RET):
     """Run production cut validation and observation emission on synthetic code."""
     source = REWRITER.read_text(encoding='utf-8')
     bid = '00' * 16
     cuts = [] if replacement is None else [(4, word(previous if original is None else original), word(replacement), 'synthetic cut')]
-    scope = dict(IMG=bytearray(struct.pack('<4I', NOP, previous, MOV, RET)),
+    scope = dict(IMG=bytearray(struct.pack('<4I', NOP, previous, MOV, tail)),
                  TEXT_END=16, BUILD_ID=bid, PATCHES={'CUTS': {bid: cuts},
                  'OBS': {bid: [(8, 21, f'{gate_word:08x}', 'synthetic allocator gate')]}},
                  PATCH_OFF=0x10000, KEY_PAGE_OFF=0x8000,
@@ -53,14 +53,23 @@ class ObservationCutCalls(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'cut original bytes mismatch'):
             rewrite(previous=NOP, original=BL)
 
-    def test_nop_without_original_call_is_not_a_boundary(self):
-        for previous in (NOP, 0x14000002):  # NOP or B, never a call.
+    def test_nop_without_original_call_is_a_boundary_when_the_gate_ends_the_function(self):
+        # A NOP or B before the gate is not a call, but scratch_dead accepts the gate when the code that
+        # follows ends in ret: the caller may not read x9-x17 past the function's own return (It Takes Two's
+        # gate sits on the mov x0, x19 that ends GCreateMalloc).
+        for previous in (NOP, 0x14000002):
+            with self.subTest(previous=hex(previous)):
+                self.assertEqual(rewrite(previous=previous)['stats'], {'obs': 1})
+
+    def test_gate_with_no_ret_and_no_written_registers_is_not_a_boundary(self):
+        # Same NOP/B before the gate, but the code after it reads x9 before writing it: not dead, not a boundary.
+        for previous in (NOP, 0x14000002):
             with self.subTest(previous=hex(previous)), self.assertRaisesRegex(AssertionError, 'observation gate neither'):
-                rewrite(previous=previous)
+                rewrite(previous=previous, tail=0xaa0903e0)   # mov x0, x9
 
     def test_call_replaced_by_non_nop_is_not_a_boundary(self):
         with self.assertRaisesRegex(AssertionError, 'observation gate neither'):
-            rewrite(replacement=0xaa0003e9)  # mov x9, x0 can introduce a live value.
+            rewrite(replacement=0xaa0003e9, tail=0xaa0903e0)  # mov x0, x9 reads it before it is written
 
     def test_original_gate_instruction_must_match(self):
         with self.assertRaisesRegex(AssertionError, 'observation gate original instruction mismatch'):

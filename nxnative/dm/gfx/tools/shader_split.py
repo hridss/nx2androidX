@@ -2412,7 +2412,7 @@ def main():
             if not names: red(f'the RomFS has Unreal shader archives, but there are no decoded copies in {ued} (the NSP script writes them)')
             # Shader code sharing is chosen for the cook. An ordinary package in a sibling pak does not establish an inline shader source.
             archive_paks.update(p for p, _ in version_files if p.endswith('.pak'))
-        elif not inline and not os.path.isdir(progs) and uepak.unreal_paks(romfs, legacy=False):
+        if not names and not inline and not os.path.isdir(progs) and uepak.unreal_paks(romfs, legacy=False):
             red(f'the RomFS has Unreal paks, but there are no decoded shaders in {ued} or {inl} (the porter writes them)')
         for nm in names:
             # the archive mapped, not read: its shaders are read one by one (FINAL FANTASY RESONANCE's libraries hold 74,244 of them)

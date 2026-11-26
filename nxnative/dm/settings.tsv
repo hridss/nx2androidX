@@ -4,6 +4,7 @@
 #        debug = for bring-up and diagnosis only (a profile may not set it; promote it to profile first). ",ios" = read only by the iOS host.
 # when: start = read once at start-up; live = re-read while the game runs (a ctl.txt `env` line changes it); ? = not documented yet.
 # tests/test_settings.py checks that every getenv("DM_...") in the core has a row here and that profiles and porter set only rows they may.
+
 DM_ADAPTIVE_FPS	bool	1	profile	start	perf_android.c	the adaptive frame-rate governor (perf_android.c); 0 = off, the game runs at its own rate
 DM_ADAPT_UP_PCT	int	90	profile	?	perf_android.c	the governor steps up a rate when frames fit in this percent of the faster rate's budget (1..99)
 DM_ALIAS_WINDOWS	bool		debug	?	hle_svc.c	
@@ -234,6 +235,7 @@ DM_SLEEP_BT	float		debug	?	hle_thread.c
 DM_SLOWFRAME	str		debug	start	hle_nvn.c	one `[slowframe]` line per dropped frame with a breakdown (frame, work, NVN, wait, thread and process CPU)
 DM_SPIN	bool		debug	?	hle_thread.c	
 DM_SPIN_POLL	str		debug	?	hle_thread.c	
+DM_SSL_FAKE	bool		profile	start	host/hle_net.c	build the SSL context as if the network were there (handshake and I/O still fail): a game whose online library asserts when it cannot create a TLS context takes its offline branch
 DM_STEADY_REALTIME	bool	0	profile	?	hle_time.c	1 = the steady clock follows real time also when the host fixes the time
 DM_SVC	str		debug	?	main.c	
 DM_SVC_SPIN	bool		debug	live	hle_thread.c	the SVC layer's lock G and guest waits sleep at once, as before (default: taking G spins a few microseconds before sleeping, and a guest thread that waits on a lock, condition variable, address or synchronization object spins on its wake flag first, `DM_SVC_SPIN_US`, before it parks; a thread whose 
@@ -271,6 +273,7 @@ DM_VK_CRUMBS	bool		debug	start	gfx_vk_exec.c	for a device lost (GPU hang): each 
 DM_VK_DBG_DRAW	int		debug	live	gfx_vk_exec.c	bisection aids: skip command kinds; 1 no draw calls, 2 no vertex buffers, 4 no descriptor sets
 DM_VK_DQ_SPIN	bool		debug	start	gfx_vk_dq.c	the two-stage replay's threads wait for each other in sched_yield loops, as before they spun briefly and then slept (A/B)
 DM_VK_DRIVER	str		porter	start	gfx_vk_core.c	the Vulkan driver library in the APK (porter --vulkan-driver, e.g. Turnip)
+DM_VK_DS_ASPECT	int		debug	live	android/gfx_vk_exec_state.inc	which plane a sampled depth-stencil view reads: 0 the rule (default), 1 always the depth, 2 always the stencil, 3 the older rule
 DM_VK_DYN_UBO	bool		debug	start	gfx_vk_shader.c	no dynamic uniform-buffer offsets (descriptor reuse drops)
 DM_VK_FDZ	bool	1	profile	live	gfx_vk_exec.c	no fragment-depth variants: draws that test a depth buffer a fragment shader wrote through `gl_FragDepth` (in the last two presents) normally get a variant of their fragment shader that writes `gl_FragDepth = gl_FragCoord.z`, the same depth tested after the shader, out of Adreno's early culling, whi
 DM_VK_FG_REFRESH_CAP	bool	1	debug	?	dm_framegen.c	0 = the frame generator ignores the display's refresh cycle cap (diagnosis of pacing against the display)
@@ -297,6 +300,7 @@ DM_VK_NOCULL	str		debug	start	gfx_vk_exec.c	no face culling (test for winding bu
 DM_VK_NOPCACHE	str		debug	start	gfx_vk_pipeline_cache.inc	start with an empty Vulkan pipeline cache (the saved one is ignored; app-owned files cannot be deleted over adb)
 DM_VK_NOPREWARM	str		debug	start	gfx_vk_exec.c	no pipeline prewarm, and no compute pipelines made ahead at the first submission
 DM_VK_NO_ZEROCOPY	str		debug	?	gfx_vk_core.c	DM_VK_NO_ZEROCOPY (set at all): every pool copied
+DM_VK_OCCL_LOG	bool		debug	?	android/gfx_vk_core.c	log each NVN occlusion query's samples passed and the counter's reset
 DM_VK_ORDER_KEEP	int		debug	?	gfx_vk_exec.c	
 DM_VK_ORD_PARTS	int	15	profile	live	gfx_vk_exec.c	the ordinary command buffer cuts per submission (15): the frame is split every DM_VK_CB_DRAWS draws, and the parts share the 32 command buffers with the pass splits. A title whose frame is heavier than 15 x the draws per cut gets an unbounded tail; raise it for that title alone
 DM_VK_PACE	bool		debug	live	gfx_vk_present.c	present without desired times (`VK_GOOGLE_display_timing`): frames go out at the first vsync after they are latched, as before. On, each frame is timed at the last one's plus the game's period on the display's vsync grid; the log's `[perf] display timing` line counts resyncs (a longer frame where th
