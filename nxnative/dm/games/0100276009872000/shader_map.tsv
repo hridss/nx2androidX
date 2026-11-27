@@ -1,5 +1,5 @@
-# kind: evidence  ŌKAMI HD shaders (BNSH / BAHS in RomFS + main) → control section + code area keys (dm/gfx/tools/shader_split.py)
-# column 5 records where each key first appears; no PC shader pairing supplied
+# kind: evidence  ŌKAMI HD shaders (provisional profile) (BNSH / BAHS in RomFS + main) → control section + code area keys (dm/gfx/tools/shader_split.py)
+# column 5 records where each key first appears; this game has no PC version to pair with
 package	index	stage	dm_ctl_sha16	source
 vs_main.bin	0	vertex	b555f7058434e1fa	main#BNSH@0x73cbb8#var0
 ps_main.bin	0	pixel	06151815fb07f2cf	main#BNSH@0x73ed34#var0

@@ -15,6 +15,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import tracemalloc
 import time
 from types import SimpleNamespace
@@ -222,6 +223,39 @@ void main(){d.smallest=min(d.a.x,d.a.y);d.packed=packHalf2x16(d.a);}
         with dmsv.Bundle(str(self.out)) as b:
             self.assertEqual([(x[0], x[1]) for x in b.entries], [(1, 5)])
 
+    def test_translation_reports_its_progress(self):   # a translation of minutes is not a silence: the count grows line by line
+        self.run_export()
+        lines = self.log.getvalue().splitlines()
+        self.assertIn('progress: translating 1 shaders: 0/1 shaders', lines)
+        self.assertTrue(any(l.startswith('progress: translating 1 shaders: 1/1 shaders (1 of 1 batches,') for l in lines), lines)
+        self.assertTrue(any(l.startswith('translating 1 shaders: 1 batches,') for l in lines), lines)   # the time the pass took
+
+    def test_every_progress_line_means_something_to_the_porter(self):   # the porter reads these lines: a line it cannot read is a lost count
+        sys.path.insert(0, str(ROOT))
+        from porter.pipeline import shader_progress
+        self.shader_count = 2; self.jobs = 2
+        self.run_export()
+        progress = [l for l in self.log.getvalue().splitlines() if l.startswith('progress:')]
+        self.assertTrue(progress, self.log.getvalue())
+        for line in progress:
+            parsed = shader_progress(line)
+            self.assertIsNotNone(parsed, line)
+            self.assertEqual(parsed[2], 2, line)   # the count of the shaders of the pass
+
+    @unittest.skipUnless(dmsv.zstd_mod(), 'no zstd in this Python')
+    def test_compression_reports_its_progress(self):   # the bundle's SPIR-V is compressed after the translation: that wait is not a silence either
+        sys.path.insert(0, str(ROOT))
+        from porter.pipeline import shader_progress
+        self.shader_count = 2; self.zstd = 3
+        self.run_export()
+        lines = [l for l in self.log.getvalue().splitlines() if l.startswith('progress: compressing')]
+        self.assertTrue(lines, self.log.getvalue())
+        for line in lines:
+            parsed = shader_progress(line)
+            self.assertIsNotNone(parsed, line)
+            self.assertEqual(parsed[0], 'compressing 2 shaders'); self.assertEqual(parsed[2], 2)
+        self.assertTrue(any(re.search(r'/2 shaders \(\d+s\)$', l) for l in lines), lines)
+
     def test_export_does_not_retain_all_translated_modules(self):
         # One 256 KiB OpSourceContinued per module: retaining all 64 products
         # adds 16 MiB even with compression off and a single translation job.
@@ -260,14 +294,14 @@ void main(){d.smallest=min(d.a.x,d.a.y);d.packed=packHalf2x16(d.a);}
             self.assertEqual(struct.unpack_from('<I', spv, 12)[0], 36)
         translated = next(self.root.glob('shvk_*/0000000000000001.spv'))
         self.assertEqual(translated.read_bytes(), self.spv_override)
-    def test_translation_reports_its_progress(self):   # a translation of minutes is not a silence: the count grows line by line
+    def test_translation_reports_its_progress_phone_port(self):   # a translation of minutes is not a silence: the count grows line by line (the phone porter's own subclass)
         self.run_export()
         lines = self.log.getvalue().splitlines()
         self.assertIn('progress: translating 1 shaders: 0/1 shaders', lines)
         self.assertTrue(any(l.startswith('progress: translating 1 shaders: 1/1 shaders (1 of 1 batches,') for l in lines), lines)
         self.assertTrue(any(l.startswith('translating 1 shaders: 1 batches,') for l in lines), lines)   # the time the pass took
 
-    def test_every_progress_line_means_something_to_the_porter(self):   # the porter reads these lines: a line it cannot read is a lost count
+    def test_every_progress_line_means_something_to_the_porter_phone_port(self):   # the porter reads these lines: a line it cannot read is a lost count
         sys.path.insert(0, str(ROOT))
         from porter.phone_port import shader_progress
         self.second_shader = True; self.jobs = 2
@@ -280,7 +314,7 @@ void main(){d.smallest=min(d.a.x,d.a.y);d.packed=packHalf2x16(d.a);}
             self.assertEqual(parsed[2], 2, line)   # the count of the shaders of the pass
 
     @unittest.skipUnless(dmsv.zstd_mod(), 'no zstd in this Python')
-    def test_compression_reports_its_progress(self):   # the bundle's SPIR-V is compressed after the translation: that wait is not a silence either
+    def test_compression_reports_its_progress_phone_port(self):   # the bundle's SPIR-V is compressed after the translation: that wait is not a silence either
         sys.path.insert(0, str(ROOT))
         from porter.phone_port import shader_progress
         self.second_shader = True; self.zstd = 3
