@@ -270,13 +270,13 @@ internal fun LibraryContent(
         }
         Spacer(Modifier.height(24.dp))   // the same as the agent entry's 24 dp: its button and the main one sit on one line
     }
-    // 右下角这一摞：助手的入口在最下面，贴着角；按键提示在它上面一行。
-    // 提示条比入口宽，所以入口靠右对齐（Column 宽的是提示条），右边缘始终在角上。
-    // 按键提示：接了手柄才浮出来，靠右下角（不占地方：插上手柄时页面别的东西也不挪）
+    // 右下角这一行：助手的入口和按键提示并排、底部对齐——与左下角的主按钮同一条线。
+    // 提示条比入口宽，所以整行靠右排（右边缘始终在角上）。
+    // 按键提示：接了手柄才浮出来（不占地方：插上手柄时页面别的东西也不挪）
     Box(Modifier.align(Alignment.BottomEnd).padding(24.dp)) {
-        Column(
-            horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             AnimatedVisibility(
                 visible = navActive && padConnected && entries.isNotEmpty(),
