@@ -164,7 +164,7 @@ the author of the commit that introduced them.
 - [x] Silver Pines · `0100D5B026844000` · playable · v65536 Xiaomi 23117RK66C (Redmi K70 Pro, Snapdragon 8 Gen 3, Adreno 750, Android 16) · ported by @zfitness
 - [ ] Sonic Superstars · `01008F701C074000` · 1.1.8
 - [x] South Park: The Stick of Truth · `010043600B6A6000` · playable · base game 1.0.0 · 30 fps · a Vulkan 1.3 driver is needed (Turnip packed on the Adreno 640) · ported by @Absenti
-- [x] STAR OCEAN First Departure R · `0100EBF00E702000` · experimental · v0 AYN Odin 2 (Snapdragon 8 Gen 2 QCS8550, Adreno 740, Android 13; Mesa Turnip KIMCHI v26.0.0_R8)
+- [x] STAR OCEAN First Departure R · `0100EBF00E702000` · experimental · v0 AYN Odin 2 (Snapdragon 8 Gen 2 QCS8550, Adreno 740, Android 13; Mesa Turnip KIMCHI v26.0.0_R8) · ported by @rospec14
 - [ ] SteamWorld Dig · `01009320084A4000` · 1.12.0
 - [ ] SteamWorld Dig 2 · `0100CA9002322000` · 4.1.1
 - [ ] SteamWorld Heist II · `010089C01E9CA000` · 1.5.1
@@ -221,7 +221,7 @@ the author of the commit that introduced them.
 - [ ] Well Dweller · `0100217023F6C000` · 1.0.0
 - [ ] Xenoblade Chronicles 2 · `0100E95004038000` · 2.1.0
 - [x] Xenoblade Chronicles 3 · `010074F013262000` · wip · update 2.2.0 · 30 fps · **work in progress**: some effects and models don't draw yet · ported by @shirai91
-- [ ] Xenoblade Chronicles X: Definitive Edition · `0100453019AA8000` · 1.0.1 · 60 fps
+- [ ] Xenoblade Chronicles X: Definitive Edition · `0100453019AA8000` · 1.0.2 · 60 fps
 - [x] Xenoblade Chronicles: Definitive Edition · `0100FF500E34A000` · playable · update 2.0.0 · 30 fps · tested on the AYN Odin 2 with a Turnip driver · **tested to Colony 9**, the pause menu and saving: later maps not checked yet · the scene drops to 896x504 in heavy fights · rarely crashes at boot (restart) · ported by @rospec14
 - [ ] Yoshi's Crafted World · `01006000040C2000` · 1.0.1
-- [x] ŌKAMI HD · `0100276009872000` · experimental · 1.0.0 AYN Odin 2 (Adreno 740, Android 13, Turnip)
+- [x] ŌKAMI HD · `0100276009872000` · experimental · 1.0.0 AYN Odin 2 (Adreno 740, Android 13, Turnip) · ported by @rospec14
