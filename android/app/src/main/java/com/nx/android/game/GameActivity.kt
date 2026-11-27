@@ -730,4 +730,10 @@ class GameActivity : ComponentActivity(), SurfaceHolder.Callback {
         finish()
         Handler(Looper.getMainLooper()).postDelayed({ Process.killProcess(Process.myPid()) }, 300)
     }
+
+    /**
+     * 宿主菜单的「退出游戏」（libdmhost 从 :play 的输入线程经 JNI 调来）：主动结束这一局，
+     * 与本页自己的按钮同一条路——finish，随后进程带走（一个进程一个游戏）。
+     */
+    fun exitGame() = endProcess()
 }

@@ -38,6 +38,7 @@ const uint8_t *dm_overlay_font(void) { return font; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_custom(int l,int c,float*x,float*y,float*s) {(void)l;(void)c;(void)x;(void)y;*s=1;return 0;}
 int dm_menu_audio_available(void) { return 0; }
+int dm_menu_exit_armed(void) { return 0; }
 int dm_overlay_stick_zone(void) { return 0; }   // (the Stick area row's segments)
 int dm_save_note(char *s,int n) { if(n)s[0]=0;return OVX_IDLE; }
 ''' + draw + menu + r'''
@@ -101,7 +102,7 @@ int main(int argc,char **argv) {
         if not cc:
             self.skipTest('a C compiler is required')
         front = (DM / 'android/front_android.c').read_text(encoding='utf-8')
-        state = csrc.between(front, 'static _Atomic int g_menu_hi', 'static _Atomic int g_tx_ver')
+        state = csrc.between(front, 'static _Atomic int g_menu_hi', 'static _Atomic int g_tx_ver')   # carries dm_menu_exit_armed with it
         code = r'''
 #include <assert.h>
 #include <stdatomic.h>

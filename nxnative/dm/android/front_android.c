@@ -62,6 +62,7 @@ static struct {
 } g_host;
 static jmethodID g_audio_menu_method;
 int dm_menu_audio_available(void) { return g_audio_menu_method != NULL; }
+static jmethodID g_exit_method;   // the App shell's exitGame (GameActivity.endProcess: finish, then the process); NULL in the standalone shell, where the menu finishes g_na_act itself
 AAssetManager *dm_front_assets(void) { return g_host.assets; }   // the APK's assets (overlay_theme.c: the gamepad's theme)
 static pthread_mutex_t g_win_mu = PTHREAD_MUTEX_INITIALIZER;
 static ANativeWindow *g_win, *g_external_win;
@@ -220,7 +221,8 @@ static void immersive(ANativeActivity *a) {
 static void on_window_focus(ANativeActivity *a, int focused) { if (focused) immersive(a); if (atomic_load(&g_running) && !atomic_load(&g_bg)) dm_focus_set(focused ? 1 : 2); }
 // A save manager's request, or a RomFS the app cannot read (romfs_readable), asked the app to end (ANativeActivity_onCreate): Activity.finish() when it is resumed, through JNI on the main thread.
 // ANativeActivity_finish, from onCreate or from here, left the activity on the screen (Y700, Android 16), and porter's am start -W waited out its timeout
-static int g_quit;
+static _Atomic int g_quit;   // the menu's Exit and the boot's quit requests write it from their threads; on_resume reads it on the main one
+static ANativeActivity *g_na_act;   // the standalone shell's activity (the App shell keeps g_host.activity): the menu's Exit finishes it
 static void act_finish(ANativeActivity *a) {
     JNIEnv *E = a->env; jclass c = (*E)->GetObjectClass(E, a->clazz); jmethodID m = c ? (*E)->GetMethodID(E, c, "finish", "()V") : NULL;
     if (m) (*E)->CallVoidMethod(E, a->clazz, m);
@@ -661,6 +663,8 @@ static void *temp_watch(void *a) {
 static _Atomic int g_menu_hi = -1, g_menu_tab;   // the highlighted row (a controller's selection, or the row a finger is on), -1 none; the open tab
 static _Atomic int g_menu_scroll;
 int dm_menu_scroll_position(void) { return atomic_load(&g_menu_scroll); }
+static _Atomic int g_menu_exit_armed;   // Exit game asked once (the bottom row's left half): the draw shows "Exit game?" and the next press on it ends the game
+int dm_menu_exit_armed(void) { return atomic_load(&g_menu_exit_armed); }
 static int g_menu_ptr = -1, g_menu_row = -2;
 static float g_menu_down_y; static int g_menu_down_scroll, g_menu_scrolled, g_menu_can_scroll;
 static _Atomic int g_tx_ver;   // the text entry's edit count: the panel is drawn again when it changes
@@ -715,6 +719,7 @@ static void menu_close(void) {
     if (atomic_load(&g_sp_on)) { sp_back(); return; }    // the save picker: back a step
     if (!atomic_exchange(&g_menu, 0)) return;
     g_menu_ptr = -1; atomic_store(&g_menu_t, 0);
+    atomic_store(&g_menu_exit_armed, 0);   // an armed Exit game goes back to plain when the menu closes any other way (a touch outside, Back, +)
     hold_sync(); dm_haptics_suspend(4, 0); dm_overlay_redraw();
     LOG("[menu] closed: the game goes on (gamepad %s, opacity %d%%, sticks %s, rumble %s, face buttons by %s, frame rate %s %#x, super resolution %s (%d%% sharp), %s)", atomic_load(&g_set_overlay) ? "on" : "off", atomic_load(&g_set_opacity),
         atomic_load(&g_set_zone) ? "half screen" : "circle",
@@ -742,7 +747,30 @@ static void menu_audio(void) {
     if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[menu] audio selection is unavailable"); }
     if (attached) (*g_host.vm)->DetachCurrentThread(g_host.vm);
 }
+// Exit game (the pause menu's bottom row's left half): the App shell's exitGame ends the page and the process the way the app's own buttons do
+// (GameActivity.endProcess — one game per process). The standalone shell finishes its NativeActivity instead; a resume before destroy finishes
+// again (g_quit, on_resume). The menu runs on the input thread: attach like menu_audio. Only when no finish is possible does the process end itself.
+static void menu_exit(void) {
+    if (!g_host.vm || (!g_host.activity && !g_na_act)) { LOG("[RED] [menu] no activity to finish: the process ends itself"); _exit(0); }
+    JNIEnv *e = NULL; int attached = 0;
+    if ((*g_host.vm)->GetEnv(g_host.vm, (void **)&e, JNI_VERSION_1_6) != JNI_OK) {
+        if ((*g_host.vm)->AttachCurrentThread(g_host.vm, &e, NULL) != JNI_OK) { LOG("[RED] [menu] cannot attach for the exit: the process ends itself"); _exit(0); }
+        attached = 1;
+    }
+    if (g_host.activity && g_exit_method) {
+        (*e)->CallVoidMethod(e, g_host.activity, g_exit_method);
+        if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[RED] [menu] exitGame failed: the process ends itself"); _exit(0); }
+    } else {
+        jclass c = (*e)->GetObjectClass(e, g_na_act->clazz); jmethodID m = c ? (*e)->GetMethodID(e, c, "finish", "()V") : NULL;
+        if (m) (*e)->CallVoidMethod(e, g_na_act->clazz, m);
+        if (!m || (*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[RED] [menu] Activity.finish() failed: the process ends itself"); _exit(0); }
+        atomic_store(&g_quit, 1);
+    }
+    if (attached) (*g_host.vm)->DetachCurrentThread(g_host.vm);
+    LOG("[menu] exit game: the activity finishes");
+}
 static void menu_do(int item) {
+    if (item != OVM_EXIT) atomic_store(&g_menu_exit_armed, 0);   // any other row's press takes an armed Exit game back to plain
     if (item == OVM_OVERLAY) { atomic_store(&g_set_overlay, !atomic_load(&g_set_overlay)); atomic_store(&g_overlay, 1); settings_save(); }
     else if (item == OVM_RUMBLE) { int on = !atomic_load(&g_set_rumble); atomic_store(&g_set_rumble, on); dm_haptics_android_set(on); settings_save(); }
     else if (item == OVM_FPS) { atomic_store(&g_set_fps, !atomic_load(&g_set_fps)); settings_save(); }
@@ -758,6 +786,10 @@ static void menu_do(int item) {
     else if (item == OVM_EXPORT) { if (atomic_load(&g_sv_st) == OVX_BUSY) return; save_export(); }
     else if (item == OVM_IMPORT) { dm_haptics_android_tap(); sp_open(); return; }
     else if (item == OVM_AUDIO) { menu_audio(); }
+    else if (item == OVM_EXIT) {   // two presses: the first arms ("Exit game?"), the second ends the game (menu_exit)
+        if (atomic_exchange(&g_menu_exit_armed, 1)) menu_exit();
+        dm_haptics_android_tap(); dm_overlay_redraw(); return;
+    }
     if (item >= 0 && item < OVM_N) dm_haptics_android_tap();
     if (item == OVM_RESUME) menu_close(); else dm_overlay_redraw();
 }
@@ -811,6 +843,10 @@ static void menu_touch(const struct dm_front_input *in, float W, float H) {   //
         int down = g_menu_row; g_menu_ptr = -1; atomic_store(&g_menu_hi, -1);
         if (g_menu_scrolled) { atomic_store(&g_menu_scroll, ov_menu_scroll_drag(tab, g_menu_down_scroll, (g_menu_down_y - y) / vr[3])); dm_overlay_redraw(); return; }   // no snapping or activation on release
         if (down >= 0 && (ov_menu_item(tab, down) == OVM_OPACITY || ov_menu_item(tab, down) == OVM_SHARP)) { settings_save(); dm_overlay_redraw(); }
+        else if (row == down && item == OVM_RESUME) {   // the bottom row: Exit game on its left half, Resume on its right — split at the same midline the draw centres its labels on
+            float rr[4]; ov_menu_scroll_rowrect(p, tab, offset, row, rr);
+            menu_do(x < rr[0] + rr[2] / 2 ? OVM_EXIT : OVM_RESUME);
+        }
         else if (row == down && item >= 0 && item != OVM_TAB) menu_do(item);
         else if (row == down && (row == -2 || row == -3)) { dm_haptics_android_tap(); menu_close(); }
         else dm_overlay_redraw();
@@ -1668,6 +1704,7 @@ int dm_front_boot(const char *root, const char *internal, int32_t dpi, int32_t s
     g_dpi = dpi;
     jclass activity_class = (*env)->GetObjectClass(env, activity);
     if (activity_class) g_audio_menu_method = (*env)->GetMethodID(env, activity_class, "openAudioMenu", "()V");
+    if (activity_class) g_exit_method = (*env)->GetMethodID(env, activity_class, "exitGame", "()V");   // the pause menu's Exit game (menu_exit); absent in the standalone shell
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     if (activity_class) (*env)->DeleteLocalRef(env, activity_class);
     char p[700];
@@ -1717,6 +1754,7 @@ __attribute__((visibility("default"))) void ANativeActivity_onCreate(ANativeActi
     act->callbacks->onNativeWindowCreated = on_window_created; act->callbacks->onNativeWindowDestroyed = on_window_destroyed;
     act->callbacks->onInputQueueCreated = on_queue_created; act->callbacks->onInputQueueDestroyed = on_queue_destroyed;
     act->callbacks->onPause = on_pause; act->callbacks->onResume = on_resume; act->callbacks->onWindowFocusChanged = on_window_focus; act->callbacks->onDestroy = on_destroy;
+    g_na_act = act;   // kept before the started guard: a configuration change's new activity replaces the finishing one
     ANativeActivity_setWindowFlags(act, AWINDOW_FLAG_KEEP_SCREEN_ON | AWINDOW_FLAG_FULLSCREEN, 0);
     static int started; if (started++) return;   // a second onCreate (configuration change) keeps the running game
     JNIEnv *env = act->env;
