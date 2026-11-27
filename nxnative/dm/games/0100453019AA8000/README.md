@@ -35,8 +35,13 @@ commits 128 KB for bookkeeping. Shrinking only the outer region makes that
 arena fail, followed by a null `memset`. Six coordinated cuts reserve a 4 GB
 outer region and a 512 MB + 128 KB first arena, adjusting the bump increment,
 subtraction and stored capacity together. Exact cuts are retained for main build
-`3f2425864cf226844511065f77aa3e36`; other builds require the atomic function
-match described below. At the first controllable field, the arena
+`3f2425864cf226844511065f77aa3e36` (1.0.1) and
+`2a720c7ce5c84905c1c6847211f670fb` (1.0.2, whose NACP still reports
+v65536). Other builds require the atomic function match described below.
+
+On Android the profile's game.tsv bakes in 8 GB of alias headroom (`mem_alias 0x318000000`, `mem_reserve 0x340000000`), so a normal build needs no Extra address space flag: the 4 GB cut region does not fit the tested 4.375 GB alias and `AllocateAddressRegion` would still refuse with 0x1803. The 12.375 GB region costs no physical memory (the host reserves it MAP_NORESERVE); the porter adds another 8 GB automatically for an unregistered build, and a larger `--alias-headroom` is only needed if that still refuses. Because the pack's NACP still reports v65536, the port is derived and its shader tables come from 1.0.1: the first run captures shaders the bundle lacks into `captured_shaders/`, and copying those into the build's `android/captured_shaders` before porting again translates them. Delete the run's `vk_pipeline_cache.bin` and `vk_pipelines.bin` after changing the shader bundle; a stale cache crashes the host at the first gameplay pipelines.
+
+At the first controllable field, the arena
 has committed 95 MB (`0x5f00000`) of its `0x20020000`-byte capacity; the outer
 region's bump reaches `0xe95a0000` inside its 4 GB capacity. Later-game
 occupancy remains open.

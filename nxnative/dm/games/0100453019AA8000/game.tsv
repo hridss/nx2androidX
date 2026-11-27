@@ -14,6 +14,7 @@ pad_layout	full
 
 # ---- Versions ----
 build	v65536	1.0.1	main=3f2425864cf226844511065f77aa3e36	subsdk0=99f9fc3860de320166ad07a6442a64f4	sdk=cff74470477c5fc65bb2538fd4a72441
+build	v131072	1.0.2	main=2a720c7ce5c84905c1c6847211f670fb	subsdk0=99f9fc3860de320166ad07a6442a64f4	sdk=cff74470477c5fc65bb2538fd4a72441
 package	v65536
 shader_versions	v65536
 
@@ -26,8 +27,9 @@ zip_store	.ard:.arh:.pck:.webm:.metallib
 # ---- Memory ----
 # A 5 GB reservation, with 4.375 GB alias memory for Monolith's page allocator.
 # patches.py adapts its outer region and first arena to this layout.
-mem_reserve	0x140000000
-mem_alias	0x118000000
+# Android: 8 GB of headroom is baked in so registered builds get the layout Xeno X needs without --alias-headroom (the 4 GB cut region does not fit the tested 4.375 GB alias).
+mem_reserve	0x340000000
+mem_alias	0x318000000
 mem_stack	0x10000000
 app_pool	0xCD500000
 # the NPDM declares 32 MB of system resource
