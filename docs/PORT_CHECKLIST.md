@@ -13,7 +13,7 @@ with — the game is not missing on Android.
 
 These have an official Android release too, and are ported here anyway: Unpacking.
 
-**90 / 201 ported**
+**92 / 202 ported**
 
 This file is generated: `python3 docs/gen_tables.py` reads the profiles and writes it. The facts
 in a row are the profile's own — the name and the version from `game.tsv`, the status, the note
@@ -164,6 +164,7 @@ the author of the commit that introduced them.
 - [x] Silver Pines · `0100D5B026844000` · playable · v65536 Xiaomi 23117RK66C (Redmi K70 Pro, Snapdragon 8 Gen 3, Adreno 750, Android 16) · ported by @zfitness
 - [ ] Sonic Superstars · `01008F701C074000` · 1.1.8
 - [x] South Park: The Stick of Truth · `010043600B6A6000` · playable · base game 1.0.0 · 30 fps · a Vulkan 1.3 driver is needed (Turnip packed on the Adreno 640) · ported by @Absenti
+- [x] STAR OCEAN First Departure R · `0100EBF00E702000` · experimental · v0 AYN Odin 2 (Snapdragon 8 Gen 2 QCS8550, Adreno 740, Android 13; Mesa Turnip KIMCHI v26.0.0_R8)
 - [ ] SteamWorld Dig · `01009320084A4000` · 1.12.0
 - [ ] SteamWorld Dig 2 · `0100CA9002322000` · 4.1.1
 - [ ] SteamWorld Heist II · `010089C01E9CA000` · 1.5.1
@@ -205,7 +206,7 @@ the author of the commit that introduced them.
 - [x] Tomodachi Life: Living the Dream · `010051F0207B2000` · playable · update 1.0.4 · 60 fps · ported by @shirai91
 - [x] Toy Story 3 Complete Edition · `01001DC025BC4000` · playable · v196608 Samsung Galaxy S23 Ultra SM-S918B (Snapdragon 8 Gen 2, Adreno 740, Android 17) · ported by @christianoguedes
 - [ ] Trails in the Sky 2nd Chapter · `01007A2027548000` · 1.0.4
-- [x] Trails in the Sky the 2nd (Korean release) · `0100E8B028B54000` · playable · update 1.0.3a · 60 fps in the opening scene · tested on the Xiaomi 23117RK66C (Android 16, Adreno 750) with a Turnip Vulkan driver
+- [x] Trails in the Sky the 2nd (Korean release) · `0100E8B028B54000` · playable · update 1.0.3a · 60 fps in the opening scene · tested on the Xiaomi 23117RK66C (Android 16, Adreno 750) with a Turnip Vulkan driver · ported by @zFitness
 - [ ] TRIANGLE STRATEGY · `0100CC80140F8000` · 1.1.1 · 60 fps
 - [ ] TUNIC · `0100DA801624E000` · 1.0.3 · 60 fps
 - [x] Ultra Kaiju Monster Rancher · `01008E0019388000` · playable · update 1.0.1 · 30 fps (60 runs the game twice as fast) · tested on the AYN Odin 2 (Adreno 740) with a Turnip Vulkan driver · handheld 3D resolution by default, docked in the app menu · tested through the tutorials and battles · ported by @rospec14
@@ -223,4 +224,4 @@ the author of the commit that introduced them.
 - [ ] Xenoblade Chronicles X: Definitive Edition · `0100453019AA8000` · 1.0.1 · 60 fps
 - [x] Xenoblade Chronicles: Definitive Edition · `0100FF500E34A000` · playable · update 2.0.0 · 30 fps · tested on the AYN Odin 2 with a Turnip driver · **tested to Colony 9**, the pause menu and saving: later maps not checked yet · the scene drops to 896x504 in heavy fights · rarely crashes at boot (restart) · ported by @rospec14
 - [ ] Yoshi's Crafted World · `01006000040C2000` · 1.0.1
-- [ ] ŌKAMI HD · `0100276009872000` · 1.0.0
+- [x] ŌKAMI HD · `0100276009872000` · experimental · 1.0.0 AYN Odin 2 (Adreno 740, Android 13, Turnip)
