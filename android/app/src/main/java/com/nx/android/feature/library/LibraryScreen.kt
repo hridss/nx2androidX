@@ -174,6 +174,7 @@ fun LibraryScreen(lib: LibraryState, port: PortState, actions: AppActions,
         padConnected = padConnected,
         onOpenAgent = onOpenAgent,
         agentVisible = agentVisible,
+        heroActionsVisible = lib.selected == null,
     )
 
     // 配置面板不在这里画：它要盖住顶栏，所以由页面的根（MainScreen）在最上层画（见 ui/App.kt）
@@ -217,6 +218,7 @@ internal fun LibraryContent(
     padConnected: Boolean = false,
     onOpenAgent: () -> Unit = {},
     agentVisible: Boolean = true,
+    heroActionsVisible: Boolean = true,
 ) {
     val sel = entries.getOrNull(heroIndex)
     // 提示条上确认键那一项写的文案：与左下角主按钮完全一样（同一个 mainActionOf）
@@ -266,6 +268,7 @@ internal fun LibraryContent(
                 onRun = { actions.onRun(entry) },
                 onViewBuild = { actions.onViewBuild(entry) },
                 onConfigure = { actions.onConfigure(entry) },
+                showActions = heroActionsVisible,
             )
         }
         Spacer(Modifier.height(24.dp))   // the same as the agent entry's 24 dp: its button and the main one sit on one line

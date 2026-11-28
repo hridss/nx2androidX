@@ -1,0 +1,22 @@
+# kind: input  Hand-written translation facts the machine code cannot give (dmsh_facts.py merges them over the split's generated table): key <TAB> fact JSON
+# These four read texture slot 136 as a 1D fetch while a texture buffer is bound there (the host's RED; 1f2f8f46 answered 2026-11-28 and stopped red-ing on the next run, the other three joined it as the game drew further into its menus and camp)
+1f2f8f466c29ac30	{"tex":{"136":"buffer"}}
+0de8529e13ee3bcd	{"tex":{"136":"buffer"}}
+16c8f73389c7befe	{"tex":{"136":"buffer"}}
+74a3a9c2f4742ac3	{"tex":{"136":"buffer"}}
+08c177d1510e68d2	{"tex":{"136":"buffer"}}
+266e2e3da4286bf3	{"tex":{"136":"buffer"}}
+28d1a22e58462998	{"tex":{"136":"buffer"}}
+2bb60596c8e6a3b1	{"tex":{"136":"buffer"}}
+316637a45d955037	{"tex":{"136":"buffer"}}
+376e6f424556bbb4	{"tex":{"136":"buffer"}}
+3b80699d4c66bc34	{"tex":{"136":"buffer"}}
+4089133a25aa70a5	{"tex":{"136":"buffer"}}
+83365fcb02fc4a9a	{"tex":{"136":"buffer"}}
+896712638d46f294	{"tex":{"136":"buffer"}}
+b552c52761c56c04	{"tex":{"136":"buffer"}}
+bb22d15967d465e9	{"tex":{"136":"buffer"}}
+c5044fbffc70db7e	{"tex":{"136":"buffer"}}
+e95d61a4f83affe7	{"tex":{"136":"buffer"}}
+ef9d3f20355b40dd	{"tex":{"136":"buffer"}}
+ff866f6df1acf449	{"tex":{"136":"buffer"}}

@@ -4,7 +4,7 @@
 // --exefs: only ExeFS (and the control data) is written; the RomFS is left unread. A container port reads the player's own file through dm_romfs instead (dm/tools/romfs.py mounts it).
 // A damaged NSP (a file whose data fails the NCA's hash check, e.g. a copy cut short or a broken download) stops the extraction with exit code 3 after listing every damaged file;
 //   --allow-damaged writes those files as read instead and only lists them (Super Mario Galaxy's base NSP with 147 MB zeroed: its two prologue WebM movies).
-// Integrity failures outside the individual-file handlers (e.g. RomFS metadata) stop immediately with exit code 3 and the LibHac reason, even with --allow-damaged.
+// Integrity failures outside the individual-file handlers (e.g. RomFS metadata) stop immediately with exit code 3 and the LibHac reason, even with --allow-damaged; --aoc is the exception: a damaged DLC is reread ignoring the broken blocks and reported (a DLC is auxiliary: a licence, cosmetics, and a corrupt one should not stop a port).
 // An unreadable NCA header stops with exit code 4, naming the input container and its NCA entry; --allow-damaged does not bypass it.
 // A prod.keys that lacks an NCA's key stops with exit code 5, naming the key (never its value).
 // Add-on content: nx_extract <prod.keys> --aoc <DLC NSP> <output dir> writes the RomFS of the DLC's data NCA to <output dir> (the packing script puts it at aoc/<index>/, the host mounts it through DM_AOC_DIR).
@@ -75,7 +75,7 @@ static class P {
             kept.Add(a[i]);
         }
         a = kept.ToArray();
-        if (a.Length < 4) { Console.Error.WriteLine("usage: nx_extract <prod.keys> <base.nsp> <update.nsp|-> <out dir> [base RomFS dir] [--manifest|--exefs] [--allow-damaged]\n       nx_extract <prod.keys> --merged <dump> <out dir> [--version N] [base RomFS dir] [--manifest|--exefs] [--allow-damaged]\n       nx_extract <prod.keys> --aoc <dlc.nsp> <out dir>\n       nx_extract <prod.keys> --aoc <dump> <out dir> <DLC title id hex>\n       nx_extract <prod.keys> --sysdata <firmware dir> <title id> <out dir>\n       nx_extract <prod.keys> --serve <base.nsp|base.xci> <update.nsp|->"); return 2; }
+        if (a.Length < 4) { Console.Error.WriteLine("usage: nx_extract <prod.keys> <base.nsp> <update.nsp|-> <out dir> [base RomFS dir] [--manifest|--exefs] [--allow-damaged]\n       nx_extract <prod.keys> --merged <dump> <out dir> [--version N] [base RomFS dir] [--manifest|--exefs] [--allow-damaged]\n       nx_extract <prod.keys> --aoc <dlc.nsp> <out dir>\n       nx_extract <prod.keys> --aoc <dump> <out dir> <DLC title id hex> [--allow-damaged]\n       nx_extract <prod.keys> --sysdata <firmware dir> <title id> <out dir>\n       nx_extract <prod.keys> --serve <base.nsp|base.xci> <update.nsp|->"); return 2; }
         KeySet ks = ExternalKeyReader.ReadKeyFile(a[0]);
         if (a[1] == "--aoc") return Aoc(ks, a[2], a[3], a.Length > 4 ? a[4] : null);
         if (a[1] == "--serve") { if (a.Length < 4) { Console.Error.WriteLine("usage: nx_extract <prod.keys> --serve <base.nsp|base.xci> <update.nsp|->"); return 2; } return Serve(ks, a[2], a[3] == "-" ? null : a[3]); }
@@ -158,8 +158,23 @@ static class P {
         } else data = Pick(pkg, NcaContentType.PublicData) ?? Pick(pkg, NcaContentType.Data) ?? throw new Exception("no data NCA in the DLC NSP");
         Console.WriteLine($"add-on content {data.Header.TitleId:x16}");
         Directory.CreateDirectory(outDir);
-        Copy(new RomFsFileSystem(data.OpenStorage(NcaSectionType.Data, IntegrityCheckLevel.ErrorOnInvalid)), outDir, null);
-        return 0;
+        g_lenient = () => new RomFsFileSystem(data.OpenStorage(NcaSectionType.Data, IntegrityCheckLevel.IgnoreOnInvalid));   // Copy's per-file handler, as ExtractTitles does; reset the cached one: a run extracts several DLC one after another
+        g_lenientFs = null;
+        try {
+            try { Copy(new RomFsFileSystem(data.OpenStorage(NcaSectionType.Data, IntegrityCheckLevel.ErrorOnInvalid)), outDir, null); }
+            catch (HorizonResultException x) when (g_allow && HashError(x)) {
+                // the DLC's RomFS itself fails the integrity check (the error escapes Copy's per-file handlers): reread it ignoring the broken blocks, every file written as read and named
+                Console.WriteLine($"[RED] {x.Message}: the DLC's data fails the integrity check; read as is (--allow-damaged)");
+                Copy(g_lenient(), outDir, null);
+            }
+        } catch (Exception x) when (g_allow) {
+            // the DLC's RomFS is damaged beyond reading even with the checks off (LibHac cannot build its tables): the pack takes no DLC from it. A licence-only DLC loses nothing;
+            // a content DLC stays missing in the game — this red line is where the port says so
+            Directory.Delete(outDir, true);
+            Console.WriteLine($"[RED] {x.GetType().Name}: {x.Message}: the DLC cannot be read even with the hash checks off; the pack takes no DLC from it");
+            return 0;
+        }
+        return Damaged();
     }
 
     // System data from a firmware dump: every .nca in the folder (a file, or a folder of 00, 01... parts as the NAND keeps large ones), the data NCA whose title ID matches

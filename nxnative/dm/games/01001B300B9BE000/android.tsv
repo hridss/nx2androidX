@@ -1,0 +1,19 @@
+# Diablo III: Eternal Collection on Android (keys in docs/ARCHITECTURE.md "Game profiles on Android")
+# Blizzard's own engine (not Unreal: the survey's Unreal 4 marker is a false one) on SDK 8.2.0, NVN; update 2.7.7.92380 (v1441792). README.md has the Mac routes.
+# Tested 2026-11-27 on the OnePlus PKX110 (Snapdragon 8 Elite SM8750, Adreno 830v1, Android 17 / SDK 37, locale zh-Hans) with Turnip (Mesa 27.0.0-devel, driver 26.99.99,
+# Vulkan 1.4.367, the app's Turnip_Gen8_V39): the title screen (its "press any key" prompt), then, a key pressed, hero creation with every label, the class list, the
+# class preview movies and the class descriptions. 60 fps (frame p50 16.6 / p95 18.0 ms, GPU p50 9.6 / p95 10.0 ms, 1 of 300 frames dropped, footprint 930 MiB),
+# six-channel sound; the only red lines are the two this device shows for every game (nvnCommandBufferSetStencilCullCriteria is unimplemented on both backends, and the
+# window's sRGB pick falls back to RGBA8_UNORM, which is this game's own window format).
+# Why every label was blank before this profile's row (the bring-up's finding): the game fills its glyph atlases and UI textures from the CPU into CPU-visible pools with
+# no packaged layout and no WriteTexels (it calls nvnTextureFlushTexels only, which on unified memory is a no-op), so every uncompressed 2D texture stayed a GPU image
+# of zeros: the panels, the 3D background and the baked-in art drew, not one glyph did. The Vulkan backend uploads uncompressed 2D textures at their first use only with
+# DM_NVN_CPU_TEX2D_FIRST_USE=1 (gfx_vk_tex.c cpu_content_tex; off by default so the alias walk and a wrong upload over render-target content stay out of other games).
+# With it the log shows 44 256x256 R8 atlases uploaded before the first screen and the text is there (README.md, "On Android").
+# Not verified yet: anything past hero creation (naming the hero, the main menu, play), long sessions, and the frame rate in play.
+status	boots
+tested	v1441792 OnePlus PKX110 (Snapdragon 8 Elite, Adreno 830v1, Android 17); Turnip (libvulkan_freedreno.so)
+package	org.nx2a.t01001b300b9be000
+orientation	landscape
+graphics	nvn
+env	DM_NVN_CPU_TEX2D_FIRST_USE=1

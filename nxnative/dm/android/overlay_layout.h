@@ -87,7 +87,7 @@ static inline int ov_off(const ov_ctl *c) { int l, i = ov_index(c, &l); return d
 // the controls' size factor: 1, or more on a small screen so a face button stays at least OV_MIN_MM wide (sizes follow the window's height, which on a
 // 6.7" phone made them 7 mm against 12 on an 8.8" tablet). A side's controls grow out from its bottom corner with their size (ov_box), so they keep their
 // spacing; the factor stops where they would leave the window (ov_fit_scale). Grown around their own centres, the Odin 3's x1.45 made eleven pairs overlap
-#define OV_MIN_MM 10.0f
+#define OV_MIN_MM 8.5f
 float dm_overlay_scale(void);
 // the top strip of layout L at scale 1: down to the menu button's bottom edge (the middle's controls), where the frame rate counter's FPS row also sits
 // (gfx_vk_present.c ov_fps: to about 0.06 of the height). A side control whose top edge is above it sits beside the menu button (the phone's - and +), the

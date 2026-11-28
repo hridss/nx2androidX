@@ -374,6 +374,26 @@ class DataPack(unittest.TestCase):
              mock.patch.object(port, 'lists', return_value={}):
             port.data()
 
+    def test_a_merged_dump_mounts_with_its_update_in_place(self):
+        # a rebuilt cartridge dump (base + update in one file): --serve is given the same file as both sides, so
+        # LibHac reads the Patch content meta the console runs. With only the base side the shader split read the
+        # base game alone and its tables differed from the profile's (an Android in-place port of Ori 2 stopped there)
+        t = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_'))
+        try:
+            port = self._container_app_port(t)
+            xci = t / 'game.xci'; xci.write_bytes(b'XCI')
+            port.container_push = [('romfs.xci', str(xci), 3)]
+            port.versions = ['v196608']; port.pkg_ver = 'v196608'; port.env = {}
+            seen = []
+            fake = lambda *a: (seen.append((Path(a[0]), Path(a[1]) if a[1] else None)), object())[1]
+            with mock.patch.object(pipeline.romfs, 'Container', side_effect=fake), \
+                 mock.patch.object(pipeline.romfs, 'mount'):
+                port.mount_romfs(t / 'extract', {'v196608': (xci, xci)}, t / 'nx')
+            self.assertEqual(seen, [(xci, xci)])   # the base again: its own update is inside it
+            self.assertEqual(port.mounts[0]['update'], str(xci))   # and the mount table the subprocesses rebuild from says so
+        finally:
+            shutil.rmtree(t, ignore_errors=True)
+
     def test_a_container_app_pack_reads_a_named_dlc_where_it_is(self):   # an <index>.nsp beside the dump: DM_AOC_DIR points at that folder, no copy
         t = Path(tempfile.mkdtemp(prefix='nx2a_test_pack_'))
         try:

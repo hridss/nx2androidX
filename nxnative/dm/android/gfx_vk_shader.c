@@ -121,33 +121,88 @@ static uint32_t *bundle_spv(const bent *e, uint32_t *nw) {
 typedef struct { uint64_t key, data; uint32_t nctl, ncode; uint8_t *ctl; } pend_t;
 enum { NPEND = 4096 };
 static pend_t g_pend[NPEND]; static unsigned g_npend; static pthread_mutex_t g_pend_mu = PTHREAD_MUTEX_INITIALIZER;
+static uint32_t ctl_len_of(const void *control) { uint32_t own; memcpy(&own, (const uint8_t *)control + 0x20, 4); return own >= 0x760 && own < 0x880 ? own : 0x880; }   // as hle_nvn.c keys_hash
 static void shader_set(const uint8_t k[8], const void *control, uint64_t data, uint32_t ncode) {
     uint64_t key = 0; for (int i = 0; i < 8; i++) key = key << 8 | k[i];
     if (!key || !control || !data || !ncode || ncode >= (1u << 24) || vk_shader_stage(key) >= 0) return;
-    uint32_t nctl = 0x880, own; memcpy(&own, (const uint8_t *)control + 0x20, 4); if (own >= 0x760 && own < 0x880) nctl = own;   // as hle_nvn.c keys_hash
+    uint32_t nctl = ctl_len_of(control);
     uint8_t *c = malloc(nctl); if (!c) return; memcpy(c, control, nctl);
     pthread_mutex_lock(&g_pend_mu);
     pend_t *p = &g_pend[g_npend++ % NPEND]; free(p->ctl); *p = (pend_t){key, data, nctl, ncode, c};   // the oldest goes: a draw needs a program soon after it is set
     pthread_mutex_unlock(&g_pend_mu);
 }
-__attribute__((constructor)) static void shader_set_on(void) { extern void (*g_nvn_on_shader)(const uint8_t *, const void *, uint64_t, uint32_t); g_nvn_on_shader = shader_set; }
+// A program the game copied (Unity's graphics jobs) and binds without setting again: the copy's control section is garbage, but its code area is the one SetShaders hashed, so the
+// key is kept by the code area's address. 65,536 slots: a game's programs at their code areas, 24 bytes each.
+typedef struct { uint64_t data; uint32_t ncode; uint8_t key[8]; } kat_t;
+enum { NKAT = 65536 };
+static kat_t g_kat[NKAT]; static pthread_mutex_t g_kat_mu = PTHREAD_MUTEX_INITIALIZER;
+static unsigned kat_home(uint64_t data) { return (unsigned)((data * 0x9E3779B97F4A7C15ull) >> 40) & (NKAT - 1); }
+static void shader_key_at(uint64_t data, uint32_t ncode, const uint8_t key[8]) {
+    unsigned j = kat_home(data);
+    pthread_mutex_lock(&g_kat_mu);
+    for (int k = 0; k < 8; k++, j = (j + 1) & (NKAT - 1)) {
+        kat_t *e = &g_kat[j];
+        if (!e->data || e->data == data) { e->data = data; e->ncode = ncode; memcpy(e->key, key, 8); break; }
+    }
+    pthread_mutex_unlock(&g_kat_mu);
+}
+static const uint8_t *shader_key_at_get(uint64_t data, uint32_t ncode) {
+    unsigned j = kat_home(data);
+    pthread_mutex_lock(&g_kat_mu);
+    const uint8_t *r = NULL;
+    for (int k = 0; k < 8; k++, j = (j + 1) & (NKAT - 1)) {
+        kat_t *e = &g_kat[j];
+        if (!e->data) break;
+        if (e->data == data) { r = e->key; break; }
+    }
+    pthread_mutex_unlock(&g_kat_mu);
+    return r;
+}
+// A program bound with a key the bundle lacks: the control section and the code area are read here (prog_key hashed them a moment ago), so the shader can be saved for the next
+// port even when SetShaders could not (its code area was not in a pool then) or the program was Finalized and its key dropped. One attempt per key: a draw binds its programs
+// every frame, and a save is a hash and four file calls.
+enum { NBIND = 1024 };
+static uint64_t g_bind_done[NBIND]; static pthread_mutex_t g_bind_mu = PTHREAD_MUTEX_INITIALIZER;
+static void shader_save(uint64_t key, const uint8_t *ctl, uint32_t nctl, uint64_t data, uint32_t ncode);
+static void shader_bind(uint64_t key, const void *control, uint64_t data, uint32_t ncode) {
+    if (!key || !control || !data || !ncode || ncode >= (1u << 24)) return;
+    unsigned j = (unsigned)((key * 0x9E3779B97F4A7C15ull) >> 54) & (NBIND - 1);
+    pthread_mutex_lock(&g_bind_mu);
+    int seen = g_bind_done[j] == key; if (!seen) g_bind_done[j] = key;
+    pthread_mutex_unlock(&g_bind_mu);
+    if (seen || vk_shader_stage(key) >= 0) return;
+    uint32_t magic = 0; memcpy(&magic, control, 4);
+    if (magic != 0x98761234u) { VKLOG("[RED] shader %016llx is not in the bundle; its control section is gone, not saved", (unsigned long long)key); return; }   // freed memory: nothing to translate
+    shader_save(key, control, ctl_len_of(control), data, ncode);
+}
+static void shader_save(uint64_t key, const uint8_t *ctl, uint32_t nctl, uint64_t data, uint32_t ncode) {
+    uint8_t md[CC_SHA256_DIGEST_LENGTH]; CC_SHA256_CTX hc; CC_SHA256_Init(&hc); CC_SHA256_Update(&hc, ctl, nctl); CC_SHA256_Update(&hc, (const void *)(uintptr_t)data, ncode); CC_SHA256_Final(md, &hc);
+    uint64_t now = 0; for (int i = 0; i < 8; i++) now = now << 8 | md[i];
+    if (now != key) { VKLOG("[RED] shader %016llx is not in the bundle; its code area changed since SetShaders, not saved", (unsigned long long)key); return; }
+    const char *r = getenv("DM_ROOT"); char dir[1024], path[1100], tmp[1110]; snprintf(dir, sizeof dir, "%s/captured_shaders", r ? r : "."); mkdir(dir, 0755);
+    snprintf(path, sizeof path, "%s/%016llx.bin", dir, (unsigned long long)key); snprintf(tmp, sizeof tmp, "%s.part", path);
+    struct stat st; if (!stat(path, &st)) { VKLOG("[RED] shader %016llx is not in the bundle: captured in %s by an earlier run, the next port translates it", (unsigned long long)key, path); return; }
+    FILE *f = fopen(tmp, "wb"); uint32_t hdr[3] = {0x43534d44, nctl, ncode};   // "DMSC"
+    int ok = f && fwrite(hdr, 1, 12, f) == 12 && fwrite(ctl, 1, nctl, f) == nctl && fwrite((const void *)(uintptr_t)data, 1, ncode, f) == ncode;
+    if (f && fclose(f)) ok = 0;
+    if (!ok || rename(tmp, path)) { VKLOG("[RED] shader %016llx is not in the bundle, and %s could not be written", (unsigned long long)key, path); unlink(tmp); }
+    else VKLOG("[RED] shader %016llx is not in the bundle: saved to %s, the next port translates it", (unsigned long long)key, path);
+}
+__attribute__((constructor)) static void shader_set_on(void) {
+    extern void (*g_nvn_on_shader)(const uint8_t *, const void *, uint64_t, uint32_t);
+    extern void (*g_nvn_on_shader_bind)(uint64_t, const void *, uint64_t, uint32_t);
+    extern void (*g_nvn_on_shader_key_at)(uint64_t, uint32_t, const uint8_t *);
+    extern const uint8_t *(*g_nvn_shader_key_at)(uint64_t, uint32_t);
+    g_nvn_on_shader = shader_set; g_nvn_on_shader_bind = shader_bind;
+    g_nvn_on_shader_key_at = shader_key_at; g_nvn_shader_key_at = shader_key_at_get;
+}
 void vk_shader_missing(uint64_t key) {
     pend_t p = {0};
     pthread_mutex_lock(&g_pend_mu);
     for (unsigned i = 0; i < NPEND && i < g_npend; i++) if (g_pend[i].key == key && g_pend[i].ctl) { p = g_pend[i]; p.ctl = malloc(p.nctl); if (p.ctl) memcpy(p.ctl, g_pend[i].ctl, p.nctl); break; }
     pthread_mutex_unlock(&g_pend_mu);
     if (!p.ctl) { VKLOG("[RED] shader %016llx is not in the bundle (and was not set while the capture could see it)", (unsigned long long)key); return; }
-    uint8_t md[CC_SHA256_DIGEST_LENGTH]; CC_SHA256_CTX hc; CC_SHA256_Init(&hc); CC_SHA256_Update(&hc, p.ctl, p.nctl); CC_SHA256_Update(&hc, (const void *)(uintptr_t)p.data, p.ncode); CC_SHA256_Final(md, &hc);
-    uint64_t now = 0; for (int i = 0; i < 8; i++) now = now << 8 | md[i];
-    if (now != key) { VKLOG("[RED] shader %016llx is not in the bundle; its code area changed since SetShaders, not saved", (unsigned long long)key); free(p.ctl); return; }
-    const char *r = getenv("DM_ROOT"); char dir[1024], path[1100], tmp[1110]; snprintf(dir, sizeof dir, "%s/captured_shaders", r ? r : "."); mkdir(dir, 0755);
-    snprintf(path, sizeof path, "%s/%016llx.bin", dir, (unsigned long long)key); snprintf(tmp, sizeof tmp, "%s.part", path);
-    struct stat st; if (!stat(path, &st)) { VKLOG("[RED] shader %016llx is not in the bundle: captured in %s by an earlier run, the next port translates it", (unsigned long long)key, path); free(p.ctl); return; }
-    FILE *f = fopen(tmp, "wb"); uint32_t hdr[3] = {0x43534d44, p.nctl, p.ncode};   // "DMSC"
-    int ok = f && fwrite(hdr, 1, 12, f) == 12 && fwrite(p.ctl, 1, p.nctl, f) == p.nctl && fwrite((const void *)(uintptr_t)p.data, 1, p.ncode, f) == p.ncode;
-    if (f && fclose(f)) ok = 0;
-    if (!ok || rename(tmp, path)) { VKLOG("[RED] shader %016llx is not in the bundle, and %s could not be written", (unsigned long long)key, path); unlink(tmp); }
-    else VKLOG("[RED] shader %016llx is not in the bundle: saved to %s, the next port translates it", (unsigned long long)key, path);
+    shader_save(key, p.ctl, p.nctl, p.data, p.ncode);
     free(p.ctl);
 }
 static VkShaderStageFlags stage_flag(int st) {

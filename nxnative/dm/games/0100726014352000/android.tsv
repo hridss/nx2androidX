@@ -1,0 +1,26 @@
+# Diablo II: Resurrected on Android (keys in docs/ARCHITECTURE.md "Game profiles on Android")
+# Blizzard's D2R engine on SDK 11.4.3, NVN. Bring-up 2026-11-28 on update 1.0.33.0 (v2162688), OnePlus PKX110
+# (Snapdragon 8 Elite, Adreno 830v1, Android 17), Turnip. The player's dump is 1.0.33 (1.0.34 not available), so the
+# port runs from the derived profile (this profile's build row registers 1.0.34.0); patches.py carries the offline cut
+# for both builds. The dump's DLC partition fails the NCA hash check (ResultFsNonRealDataVerificationFailed): nx_extract
+# --allow-damaged skips it with red lines (a licence-only DLC, nothing lost).
+# Tested 2026-11-28, 1.0.33.0, same device, after four builds: the title (its "press A to start" with Chinese glyphs), the colour-blind
+# calibration screen with its 3D scene, the Act I opening cinematic skipped (Plus, A held), the Online/Offline choice (Offline taken, no
+# Battle.net error — the cut), the class selection, the game modes, naming the hero through the software keyboard (DM_KBD), and the
+# Rogue Encampment with the full HUD (health 55/55, mana 10/10, the skill bar): the camp's ground, rocks, carts and campfire draw, the
+# Barbarian's model and the camp's NPCs render, no shader misses and no slot-136 warnings left, at the game's 30 fps (the host's
+# adaptive rate steps it to 60, frame work p50 ~12 ms) with sound.
+# Why the first build's frames were black (the bring-up's findings, each fixed): the bundle missed the shaders the game asks for that
+# 1.0.33's data does not hold — 95 of them, captured at run time over the first three builds, each build translating the last one's
+# captures in, converged to none; 20 of the translated shaders read texture slot 136 as a 1D fetch while a texture buffer is bound
+# there — answered in shader_facts_manual.tsv, without which their draws came out black (the hero and the camp's ground); and the
+# glyph atlases are CPU-filled (DM_NVN_CPU_TEX2D_FIRST_USE=1 below, Diablo III's finding on the same Blizzard stack, confirmed here:
+# without it not one label drew).
+# Not verified yet: walking and fighting (the virtual gamepad did not draw during the bring-up session — a drawer state, not the
+# port's), longer sessions, and 1.0.34.0 itself.
+status	boots
+tested	v2162688 OnePlus PKX110 (Snapdragon 8 Elite, Adreno 830v1, Android 17); Turnip (libvulkan_freedreno.so)
+package	org.nx2a.t0100726014352000
+orientation	landscape
+graphics	nvn
+env	DM_NVN_CPU_TEX2D_FIRST_USE=1

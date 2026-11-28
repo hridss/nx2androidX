@@ -664,8 +664,10 @@ NVN(nvnSamplerFinalize, void, NVNsampler *s) { ((samp_t *)s)->magic = 0; }
 NVN(nvnProgramInitialize, NVNboolean, NVNprogram *p, NVNdevice *d) {
     (void)d; memset(p, 0, sizeof(prog_t)); ((prog_t *)p)->magic = MAGIC('P', 'R', 'O', 'G'); return 1;
 }
-static void pk_drop(const void *p);
-NVN(nvnProgramFinalize, void, NVNprogram *p) { mtl_prog_release((prog_t *)p); ((prog_t *)p)->magic = 0; pk_drop(p); }
+// The keys stay: a submission replayed after Finalize (or one submitted later) binds the program again, and its key was only hashed while the control section was the game's to
+// read — hashed after Finalize it is the hash of freed memory, which no bundle has, so the draw is skipped for good (Ori and the Will of the Wisps: 140 shaders, a black screen with
+// sound). A program set again at the same address resets them in SetShaders (k->ok = 0).
+NVN(nvnProgramFinalize, void, NVNprogram *p) { mtl_prog_release((prog_t *)p); ((prog_t *)p)->magic = 0; }
 // a program's per-stage keys (side table: guest NVNprogram address → host object; bit i of ok = stage i computed)
 typedef struct { uint8_t key[6][8]; uint8_t ok; } prog_keys_t;
 static pthread_mutex_t g_pk_mu = PTHREAD_MUTEX_INITIALIZER; static CFMutableDictionaryRef g_pk;   // a dedicated table (keys not shared with other side tables)
@@ -677,15 +679,17 @@ static prog_keys_t *pk_get(const void *p, int make) {
     pthread_mutex_unlock(&g_pk_mu);
     return k;
 }
-static void pk_drop(const void *p) {
-    pthread_mutex_lock(&g_pk_mu);
-    prog_keys_t *k = g_pk ? (prog_keys_t *)CFDictionaryGetValue(g_pk, p) : NULL;
-    if (k) { CFDictionaryRemoveValue(g_pk, p); free(k); }
-    pthread_mutex_unlock(&g_pk_mu);
-}
 // Set by a backend whose shaders are translated before the game runs (Android's Vulkan bundle, gfx_vk_shader.c): called at SetShaders for each stage whose key is known then, while the
 // control section is still the game's to read, so a shader whose code no game file holds can be saved and translated by the next port (Xenoblade Chronicles 3 sets hundreds)
 void (*g_nvn_on_shader)(const uint8_t key[8], const void *control, uint64_t data, uint32_t ncode);
+// A program bound with a key the bundle lacks: the control section and the code area are still the game's to read here (prog_key hashes both), so the backend can save them and
+// the next port translates them. Without this a program the game Finalizes keeps its key out of reach: its draw misses the key, and nothing was captured at SetShaders to match
+// it (Ori and the Will of the Wisps: 140 shaders of the opening drew black with sound)
+void (*g_nvn_on_shader_bind)(uint64_t key, const void *control, uint64_t data, uint32_t ncode);
+// A program the game copied and binds without setting again (Unity's graphics jobs make such copies): its control section in the copy is garbage, so the bind would hash freed
+// memory and miss every bundle. The code area is shared and its key was hashed by SetShaders, so a bind can find that key by the code area's address.
+void (*g_nvn_on_shader_key_at)(uint64_t data, uint32_t ncode, const uint8_t key[8]);
+const uint8_t *(*g_nvn_shader_key_at)(uint64_t data, uint32_t ncode);
 // mapped = 1: computed only when the code area is in a registered memory pool (at SetShaders: Mario sets some programs with an unmapped address first and fills it in before the first draw)
 static int keys_hash(const NVNshaderData *sd, int mapped, uint8_t out[8]) {
     uint32_t ncode = 0; void *mb; uint64_t mo;
@@ -704,10 +708,19 @@ static int keys_hash(const NVNshaderData *sd, int mapped, uint8_t out[8]) {
 }
 int prog_key(const prog_t *p, unsigned st, uint8_t key[8]) {
     if (st >= p->nstage) return 0;
-    // a program already Finalized (replayed after its Finalize under asynchronous replay, or submitted after it) gets no entry: pk_drop has run, nothing would drop one made now
-    // (its keys are hashed again at each of its binds in that one submission: control section and code, once per stage; cheaper than an entry kept for good)
+    // a program already Finalized (replayed after its Finalize under asynchronous replay, or submitted after it) keeps its entry: the keys were hashed while the control section
+    // was still the game's, and hashing them again here would read freed memory
     prog_keys_t tmp = {0}, *k = pk_get(p, p->magic == MAGIC('P', 'R', 'O', 'G')); if (!k) k = &tmp;
-    if (!(k->ok >> st & 1)) { keys_hash(&p->sd[st], 0, k->key[st]); k->ok |= (uint8_t)(1u << st); }
+    if (!(k->ok >> st & 1)) {
+        NVNshaderData sd = p->sd[st];
+        const uint8_t *ak = (g_nvn_shader_key_at && sd.data) ? g_nvn_shader_key_at(sd.data, 0) : NULL;   // a copied program: the key SetShaders hashed for this code area
+        if (ak) memcpy(k->key[st], ak, 8);
+        else keys_hash(&sd, 0, k->key[st]);
+        k->ok |= (uint8_t)(1u << st);
+        if (!ak && g_nvn_on_shader_bind && sd.control && sd.data) {   // the bind is where a Finalized program's key is hashed again: the backend saves it if the bundle lacks it
+            uint64_t key = 0; for (int i = 0; i < 8; i++) key = key << 8 | k->key[st][i];
+            uint32_t ncode; memcpy(&ncode, (const uint8_t *)sd.control + 0x704, 4);
+            g_nvn_on_shader_bind(key, sd.control, sd.data, ncode); } }
     memcpy(key, k->key[st], 8);
     return 1;
 }
@@ -721,7 +734,9 @@ NVN(nvnProgramSetShaders, NVNboolean, NVNprogram *p, int n, const NVNshaderData 
     k->ok = 0;
     for (int i = 0; i < n; i++) {
         if (keys_hash(&sd[i], 1, k->key[i])) k->ok |= (uint8_t)(1u << i);
-        if (g_nvn_on_shader && (k->ok >> i & 1)) { uint32_t ncode; memcpy(&ncode, (const uint8_t *)sd[i].control + 0x704, 4); g_nvn_on_shader(k->key[i], sd[i].control, sd[i].data, ncode); }
+        if (k->ok >> i & 1) { uint32_t ncode; memcpy(&ncode, (const uint8_t *)sd[i].control + 0x704, 4);
+            if (g_nvn_on_shader) g_nvn_on_shader(k->key[i], sd[i].control, sd[i].data, ncode);
+            if (g_nvn_on_shader_key_at && sd[i].data) g_nvn_on_shader_key_at(sd[i].data, ncode, k->key[i]); }
         // DM_NVN_SHDUMP (debugging): keep a copy of the control section so the replay layer can save shaders missing from the map (never freed)
         if (dump && sd[i].control) {
             void *c = malloc(0x880); memcpy(c, sd[i].control, 0x880); o->sd[i].control = c;

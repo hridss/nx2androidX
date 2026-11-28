@@ -50,6 +50,7 @@ internal fun HeroDetails(
     onRun: () -> Unit,
     onViewBuild: () -> Unit,
     onConfigure: () -> Unit,
+    showActions: Boolean = true,
 ) {
     val ported = entry.pack
     // Title ID：游戏的身份（还没构建过的还没有）
@@ -74,38 +75,41 @@ internal fun HeroDetails(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            // 主按钮：未移植 ▶ 构建（携带游戏与配置跳到构建页），移植中变「查看构建」，
-            // 有包 ▶ 运行（App 内直接进游戏；运行库过期时游戏页的 Loading 自己补齐）
-            Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(NxPalette.Cream)
-                        .clickable {
-                            when (action) {
-                                MainAction.VIEW_BUILD -> onViewBuild()
-                                MainAction.RUN -> onRun()
-                                MainAction.BUILD -> onBuild()
+        // 配置抽屉开着的时候它盖住整块页面：这里的按钮不再画，玩家不会看到两个「运行」
+        if (showActions) {
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                // 主按钮：未移植 ▶ 构建（携带游戏与配置跳到构建页），移植中变「查看构建」，
+                // 有包 ▶ 运行（App 内直接进游戏；运行库过期时游戏页的 Loading 自己补齐）
+                Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(NxPalette.Cream)
+                            .clickable {
+                                when (action) {
+                                    MainAction.VIEW_BUILD -> onViewBuild()
+                                    MainAction.RUN -> onRun()
+                                    MainAction.BUILD -> onBuild()
+                                }
                             }
-                        }
-                        .padding(horizontal = 30.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                            .padding(horizontal = 30.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, null, Modifier.size(20.dp), tint = Color.Black)
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            actionLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.Black,
+                        )
+                }
+                // 配置圆钮
+                Box(
+                    Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))
+                        .clickable { onConfigure() }.padding(11.dp),
                 ) {
-                    Icon(Icons.Filled.PlayArrow, null, Modifier.size(20.dp), tint = Color.Black)
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        actionLabel,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.Black,
-                    )
-            }
-            // 配置圆钮
-            Box(
-                Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))
-                    .clickable { onConfigure() }.padding(11.dp),
-            ) {
-                Icon(Icons.Filled.Tune, if (running) stringResource(R.string.lib_run_config) else stringResource(R.string.lib_port_config), Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onBackground)
+                    Icon(Icons.Filled.Tune, if (running) stringResource(R.string.lib_run_config) else stringResource(R.string.lib_port_config), Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onBackground)
+                }
             }
         }
     }

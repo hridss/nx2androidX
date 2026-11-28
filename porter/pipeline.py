@@ -804,7 +804,13 @@ class Port:
         mounts = []
         for ver in self.versions:
             base, upd = picks[ver]
-            if ver == self.pkg_ver and kept_base: base, upd = Path(kept_base), Path(kept_upd) if kept_upd else None
+            # an integrated image (a rebuilt cartridge dump holding its own update): the same file is both sides, so
+            # nx_extract reads its Patch content meta -- containers() leaves the pack's update unset for it, and without
+            # this the shader split read the base game alone and its tables differed from the profile's
+            merged = upd is not None and Path(upd) == Path(base)
+            if ver == self.pkg_ver and kept_base:
+                base, upd = Path(kept_base), Path(kept_upd) if kept_upd else None
+                if merged: upd = base
             if ver == 'v0': upd = None   # a merged dump's base-alone view: its Patch content meta is not laid over the base game
             root = ex / ver / 'RomFS'
             romfs.mount(root, romfs.Container(base, upd, self.o.keys, str(nx)))

@@ -973,7 +973,11 @@ def extract_aoc(nx, keys, repo, work, app, fam, logs):
         PROG.set(step='extracting', done=i, total=len(best), unit='DLC')
         say(f'DLC index {idx}: {p.name}' + (' (the merged dump holds it)' if p == fam['base'] else ''))
         # the DLC's title ID picks its data NCA by header (a DLC's NCAs carry their own title IDs): always passed, a file may hold several titles — a merged dump, or a DLC bundle (several DLC titles in one file, no base game), where Pick would take the lowest title ID's data NCA for every index. A single-DLC NSP's data NCA carries its own title ID, so the pick works there too
-        run([nx, keys, '--aoc', p, tmp / str(idx), f'{tid:x}'], logs / f'aoc_{idx}.log')   # the title ID, hex: Aoc parses it with fromBase 16
+        # the title ID, hex: Aoc parses it with fromBase 16. A DLC is auxiliary (a licence, cosmetics): a damaged one is written as read and named here instead of stopping the port
+        aoc_log = logs / f'aoc_{idx}.log'
+        run([nx, keys, '--aoc', p, tmp / str(idx), f'{tid:x}', '--allow-damaged'], aoc_log)
+        if reds := [l.rstrip('\n') for l in aoc_log.read_text(errors='replace').splitlines() if l.startswith('[RED] ')]:
+            PROG.say(f'---- red lines of {aoc_log} ----\n' + '\n'.join(reds))   # the damaged DLC the pack takes as read: the player reads why in the build log
     swap_in(tmp, dst)
     kf.write_text(f'{key}\n{len(best)} DLC\n')
     PROG.end(f'{len(best)} DLC')

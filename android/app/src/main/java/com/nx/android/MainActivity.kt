@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
@@ -170,6 +171,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // 全屏沉浸：内容铺满整块屏幕，系统栏隐藏（下滑临时呼出）
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 挖孔在横屏的左短边上：让窗口铺进那块，否则左侧一直是一条黑带
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
         WindowCompat.getInsetsController(window, window.decorView).apply {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             hide(WindowInsetsCompat.Type.systemBars())

@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -147,6 +148,8 @@ fun AgentDrawerHost(
     /** 修好了之后「去跑一下」：按 title ID 把那一局交到游戏页 */
     onRunGame: (String) -> Unit = {},
 ) {
+    // 面板开着时，系统返回键收起它——不再一路退出到桌面
+    BackHandler(enabled = open) { onCollapse() }
     // 0 = 抽屉在原位，1 = 抽屉整个滑到屏幕右边之外
     val slide = remember { Animatable(1f) }
     var scrimUp by remember { mutableStateOf(false) }

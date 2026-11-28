@@ -10,6 +10,14 @@ CUTS = {
     (0x1979bc, 'e8a79f1a', '28008052', 'offline allowed (last online within 30 days): cset w8,lt → mov w8,#1'),
     (0x1979c4, 'e8031f2a', '28008052', 'offline allowed (no "User Last Online" setting): mov w8,wzr → mov w8,#1'),
   ],
+  # 1.0.33.0 (v2162688) main: the same check, its tail at main+0x1973dc reads "User Last Online" (the key at main+0x1d4ad9f, through main+0xdeecd0) and the clock (main+0x1b62b30) and
+  # compares now − it against the same 30-day constant (mov x9,#0x7420000; movk #0x3569,lsl#32; movk #9,lsl#48); the flag [x20+0x2c] is a byte here (strb). The originals are those of
+  # 1.0.34.0, 0x5a0 earlier (2026-11-28, from a player's 1.0.33 dump). This fork's rewriter reads CUTS only (docs/UPSTREAM_PROFILES.md: MATCH_CUTS is upstream's), so an update
+  # without a registered row runs its check uncut
+  '194361731c7b9f30b38425b244429e25': [
+    (0x19741c, 'e8a79f1a', '28008052', 'offline allowed (last online within 30 days): cset w8,lt → mov w8,#1'),
+    (0x197424, 'e8031f2a', '28008052', 'offline allowed (no "User Last Online" setting): mov w8,wzr → mov w8,#1'),
+  ],
 }
 # The same cut for builds without registered CUTS (dm/tools/nso_match.py): the reader of "User Last Online" (main+0x1978ac in 1.0.34.0, 316 bytes, the cuts at +272 and +280), found by
 # its fingerprint and its direct callees' (main+0x1422c4, the setting read main+0xdf5fe0, the clock main+0x1b6bb60). Both cuts set the flag the function itself stores, so they mean the same wherever it matches.

@@ -30,6 +30,12 @@ No `patches.py`: the rewriter needs no cut.
 - Hero creation starts on a random class. A names the hero through the software keyboard: set `DM_KBD=<name>`, or the Mac host waits in its input box. Then A on Start, A on Normal, and Plus then A 2 s later end the Act I cinematic (which of the two did was not checked); the hero stands on the road below New Tristram. The road goes right from the start and then up past a fence; the rock ledge straight up from the start is a dead end.
 - Console controls: the left stick moves, A is the first skill (the Wizard's Magic Missile, aimed at the nearest enemy), R a potion.
 
+## On Android
+
+Update 2.7.7 (`v1441792`) on the OnePlus PKX110 (Snapdragon 8 Elite, Adreno 830v1, Android 17) with a Turnip driver, through the app, on 2026-11-27: the title screen and, a key pressed, hero creation with every label, the class list, the class preview movies and the class descriptions, at 60 fps (frame p50 16.6 ms, GPU p50 9.6 ms) with sound; the UI is Chinese (`zh-Hans`). Anything past hero creation is not verified.
+
+Every label was blank at first, with the panels, the 3D background and the baked-in art drawing: the game fills its glyph atlases and UI textures from the CPU into CPU-visible pools with no packaged layout and no `WriteTexels` (it calls `nvnTextureFlushTexels` only, which on unified memory is a no-op), so on the Vulkan backend every uncompressed 2D texture stayed an image of zeros. [`android.tsv`](android.tsv) sets `DM_NVN_CPU_TEX2D_FIRST_USE=1`, the first-use upload of uncompressed 2D textures: 44 of the 256x256 R8 glyph pages upload before the first screen and the text is there.
+
 ## Found on this game
 
 General tool changes first needed here; each applies to every game:

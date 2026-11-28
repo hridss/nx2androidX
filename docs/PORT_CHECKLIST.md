@@ -13,7 +13,7 @@ with — the game is not missing on Android.
 
 These have an official Android release too, and are ported here anyway: Unpacking.
 
-**91 / 202 ported**
+**92 / 202 ported**
 
 This file is generated: `python3 docs/gen_tables.py` reads the profiles and writes it. The facts
 in a row are the profile's own — the name and the version from `game.tsv`, the status, the note
@@ -59,7 +59,7 @@ the author of the commit that introduced them.
 - [ ] DAVE THE DIVER · `010097F018538000` · v1.0.6.1267
 - [ ] Dead Cells · `0100646009FBE000` · 1.25.0
 - [ ] Diablo II: Resurrected · `0100726014352000` · 1.0.34.0
-- [ ] Diablo III: Eternal Collection · `01001B300B9BE000` · 2.7.7.92380
+- [x] Diablo III: Eternal Collection · `01001B300B9BE000` · boots · v1441792 OnePlus PKX110 (Snapdragon 8 Elite, Adreno 830v1, Android 17); Turnip (libvulkan_freedreno.so)
 - [ ] Digimon Story Cyber Sleuth: Complete Edition · `010014E00DB56000` · 1.0.3
 - [x] Digimon Story: Time Stranger · `010062E01FE0C000` · wip · v262144 Poco F5 (Snapdragon 7+ Gen 2, Adreno 725, Turnip 26.99.99)
 - [x] Disco Elysium - The Final Cut · `01006C5015E84000` · playable · base game 1.0.7 · 30 fps (as on Switch) · tested on the Sony XQ-DQ72 and the OnePlus 15 · ported by @C1oudust

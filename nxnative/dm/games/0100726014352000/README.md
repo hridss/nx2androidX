@@ -8,7 +8,7 @@ On the Mac (2026-11-12, from a fresh save): the Blizzard logo movie, the title, 
 
 | Setting | Where | Why |
 |---|---|---|
-| Offline play without a recent online login | [`patches.py`](patches.py) | the game allows offline play only within 30 days of a Battle.net login; see [Found on this game](#found-on-this-game). Bound to the game: `CUTS` for 1.0.34.0 and the same cut as a function-matched rule (`MATCH_CUTS`) for other builds |
+| Offline play without a recent online login | [`patches.py`](patches.py) | the game allows offline play only within 30 days of a Battle.net login; see [Found on this game](#found-on-this-game). Bound to the game: `CUTS` for 1.0.34.0 and 1.0.33.0 (this fork's rewriter reads `CUTS` only; its `MATCH_CUTS` table is upstream's and is not applied here) |
 | `present_interval display` | [`game.tsv`](game.tsv) | the game asks for interval 2 (30 fps, as on the Switch); its logic runs on its own clock, so at 60 fps the same 3 s walk from the Rogue Encampment's start ends at the same place as at 30 |
 | 4 GB layout: `mem_reserve 0x100000000`, `app_pool 0xCD500000`, `mem_used 0x4c00000` | `game.tsv` | the survey's guesses held: no system resource, `main` sets a heap of the pool less its modules (3.14 GB on the Mac); the rewritten modules are 72 MB, over the default 64 MB |
 | `shader_groups /data/=data` | `game.tsv` | the CASC storage; see [Shaders](#shaders) |
@@ -27,6 +27,14 @@ On the Mac (2026-11-12, from a fresh save): the Blizzard logo movie, the title, 
 - With a character: after the logo movie and the cinematic (`Plus`, `A~3`) the main menu shows Play.
 - The camp's gate is on the side of the river, from the start to the right and down (the automap is on Minus). The left stick moves, A attacks.
 
+## On Android
+
+Update 1.0.33.0 (`v2162688`, the player's files; 1.0.34.0 not available) on the OnePlus PKX110 (Snapdragon 8 Elite, Adreno 830v1, Android 17) with a Turnip driver, through the app, on 2026-11-28: the title (its "press A to start" with Chinese glyphs), the colour-blind calibration screen with its 3D scene, the Act I opening cinematic skipped (Plus, A held), the Online/Offline choice (Offline, no Battle.net error — the cut is registered for this build too), the class selection, the game modes, naming the hero through the software keyboard (`DM_KBD`), and the Rogue Encampment with the full HUD (health 55/55, mana 10/10, the skill bar) at the game's 30 fps with sound. Anything past reaching the camp is not verified.
+
+The player's merged XCI's DLC partition fails the NCA's hash check (`ResultFsNonRealDataVerificationFailed`); its DLC carry a licence and no content, so `nx_extract --allow-damaged` (which the DLC extraction now passes) skips it with red lines and the port goes on. The rewriter applies the offline cut through the build row this profile now registers for 1.0.33.0 (this fork's rewriter reads `CUTS` only). The shader split reads this build's CASC with the readers this fork grafted from upstream ([Found on this game](#found-on-this-game)): 6,063 shaders (2,344 vertex, 3,690 pixel, 27 compute, 1 hull, 1 domain; sources data 6,054, main 9).
+
+Three things stood between the first build and a visible frame: the game asks for 95 shaders the split did not find in 1.0.33's data (captured at run time over the first three builds; each build translates the last one's captures in, and the captures have since converged to none), 20 of the translated shaders read texture slot 136 as a 1D fetch while a texture buffer is bound there — answered in [`shader_facts_manual.tsv`](shader_facts_manual.tsv), without which their draws came out black (the hero and the camp's ground) — and the glyph atlases are CPU-filled as Diablo III's are, so [`android.tsv`](android.tsv) sets `DM_NVN_CPU_TEX2D_FIRST_USE=1`; without it not one label drew. The virtual gamepad did not draw during the bring-up session (its state in the app's drawer, not the port's), so walking is not verified; the menus answered every injected key.
+
 ## Found on this game
 
 General tool changes first needed here; each applies to every game:
@@ -36,7 +44,7 @@ General tool changes first needed here; each applies to every game:
 Game behaviour:
 
 - **"Failed to authenticate" at the title** (current, fixed by the cut): ["Failed to authenticate" at the title](../../../docs/reference/game-state.md#failed-to-authenticate-at-the-title-offline-play-only-after-a-recent-online-login). The title's login (`main+0x2d0710`) asks the account request state machine (`main+0xe114b0`), which fails offline; whether the game then allows offline play is the flag `main+0x1978ac` sets from the saved "User Last Online" time. The cut sets it. d2r-mobile's notes on a community offline fix (`LFS Mod Offline Fix`) first described the check, with two more comparisons (`main+0x5b14dc`, `main+0x5f3184`) whose meaning they did not find and a cut that skips the logo and title; none of those is needed here, and none of its bytes is used.
-- **The cut on other builds** (2026-11-12): the function that reads "User Last Online" (`main+0x1978ac`, 316 bytes) is a `MATCH_CUTS` rule. A copy of 1.0.34.0's `main` with another build ID rewrites byte for byte as the registered build, both cuts `[function match]`. The base game (v0, `main` 4de22400…) has no such check: it only writes "User Last Online" after a Battle.net login (`main+0x206bf4`), and no 30-day constant is in its code, so the rule finds nothing there and it needs no cut (its rewrite logs the rule as skipped).
+- **The cut on other builds** (2026-11-12): the function that reads "User Last Online" (`main+0x1978ac`, 316 bytes) is a `MATCH_CUTS` rule upstream, where a copy of 1.0.34.0's `main` with another build ID rewrites byte for byte as the registered build and both cuts land `[function match]`. This fork reads `CUTS` only, so another build carries its own row: 1.0.33.0 (`19436173…`) got one on 2026-11-28, its cut sites at `main+0x19741c` / `+0x197424` with byte-identical originals (the function's tail at `main+0x1973dc`, the key at `main+0x1d4ad9f` through `main+0xdeecd0`, the clock `main+0x1b62b30`, the flag a byte at `[x20+0x2c]`; found from a player's 1.0.33 dump). The base game (v0, `main` 4de22400…) has no such check: it only writes "User Last Online" after a Battle.net login (`main+0x206bf4`), and no 30-day constant is in its code, so it needs no cut (its rewrite logs the rule as skipped)
 
 ## Open
 

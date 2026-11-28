@@ -468,13 +468,14 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
 
     Box(
         Modifier.fillMaxSize()
-            // 遮罩：左边留出游戏自己的画面，往右渐渐暗下去接到面板（不是一块死黑）
+            // 遮罩：左边留出游戏自己的画面，往右渐渐暗下去接到面板（不是一块死黑）。
+            // 左端也要压暗——页面左下角的主按钮就在那儿，它不再是能点的了
             .background(
                 Brush.horizontalGradient(
-                    0f to Color.Transparent,
-                    0.28f to Color(0x8C0E0E0F),
-                    0.44f to Color(0xD90E0E0F),
-                    1f to Color(0xF20E0E0F),
+                    0f to Color(0x59141416),
+                    0.30f to Color(0xA6141416),
+                    0.50f to Color(0xE6141416),
+                    1f to Color(0xF2141416),
                 )
             )
             .clickable { onClose() },
@@ -484,6 +485,7 @@ private fun GameDetailScreen(lib: LibraryState, port: PortState,
             Modifier
                 .width(460.dp)
                 .fillMaxHeight()
+                .clip(RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp))
                 .background(NxPalette.Surface),
         ) {
         Column(
