@@ -101,6 +101,7 @@ DM_NVN_CBDUMP_KEY	str		debug,ios	?	nvn_mtl.m
 DM_NVN_CBLOG	str		debug	?	hle_nvn.c	
 DM_NVN_CLEARLOG	str		debug,ios	?	nvn_mtl.m	
 DM_NVN_CMDSTAT	str		debug	?	hle_nvn.c	
+DM_NVN_CPU_NO_ACCESS_IMAGE_FIRST_USE	bool	0	profile	start	gfx_vk_tex.c	1 = upload initial data for uncompressed 2D colour IMAGE textures in CPU_NO_ACCESS storage once, unless a GPU-written image overlaps them
 DM_NVN_CPU_TEX2D_FIRST_USE	bool	0	profile	start	gfx_vk_tex.c	1 = 2D textures the CPU writes are uploaded at their first use, not at creation
 DM_NVN_CUT	int		debug,ios	?	nvn_mtl.m	
 DM_NVN_DEFER	str		debug,ios	?	nvn_mtl.m	
