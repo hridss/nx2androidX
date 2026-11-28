@@ -13,7 +13,7 @@ with — the game is not missing on Android.
 
 These have an official Android release too, and are ported here anyway: Unpacking.
 
-**92 / 202 ported**
+**96 / 203 ported**
 
 This file is generated: `python3 docs/gen_tables.py` reads the profiles and writes it. The facts
 in a row are the profile's own — the name and the version from `game.tsv`, the status, the note
@@ -58,7 +58,7 @@ the author of the commit that introduced them.
 - [x] Dark Souls: Remastered · `01004AB00A260000` · playable · update 1.0.3 · 30 fps · ported by @shirai91
 - [ ] DAVE THE DIVER · `010097F018538000` · v1.0.6.1267
 - [ ] Dead Cells · `0100646009FBE000` · 1.25.0
-- [ ] Diablo II: Resurrected · `0100726014352000` · 1.0.34.0
+- [x] Diablo II: Resurrected · `0100726014352000` · boots · v2162688 OnePlus PKX110 (Snapdragon 8 Elite, Adreno 830v1, Android 17); Turnip (libvulkan_freedreno.so)
 - [x] Diablo III: Eternal Collection · `01001B300B9BE000` · boots · v1441792 OnePlus PKX110 (Snapdragon 8 Elite, Adreno 830v1, Android 17); Turnip (libvulkan_freedreno.so)
 - [ ] Digimon Story Cyber Sleuth: Complete Edition · `010014E00DB56000` · 1.0.3
 - [x] Digimon Story: Time Stranger · `010062E01FE0C000` · wip · v262144 Poco F5 (Snapdragon 7+ Gen 2, Adreno 725, Turnip 26.99.99)
@@ -100,7 +100,7 @@ the author of the commit that introduced them.
 - [x] Kirby's Return to Dream Land Deluxe · `01006B601380E000` · playable · 60 fps · tested on the AYN Thor (Adreno 740) with a Turnip Vulkan driver · needs your console's firmware for its fonts (`--firmware`) · ported by @DPR
 - [x] Layton's Mystery Journey: Katrielle and the Millionaires' Conspiracy DX+ · `0100FDB00AA80000` · playable · v65536 iQOO 9 V2171A (Snapdragon 8 Gen 1, Adreno 730, Android 15) · ported by @Bokyer
 - [x] Lonely Mountains: Downhill · `0100A0C00E0DE000` · playable · base game 1.0.5 · 60 fps on Retroid Pocket 6 with PurpleVK · **work in progress**: brief transition glitch and occasional black/white flashes · ported by @alexsg91
-- [ ] Luigi's Mansion 3 · `0100DCA0064A6000` · 1.4.0 · 60 fps
+- [x] Luigi's Mansion 3 · `0100DCA0064A6000` · experimental · v327680 Xiaomi 17 (Adreno 840, Android 17)
 - [ ] Mario & Luigi: Brothership · `01006D0017F7A000` · 1.0.0 · 60 fps
 - [ ] Mario + Rabbids Kingdom Battle · `010067300059A000` · 1.9.589692
 - [ ] Mario + Rabbids® Sparks of Hope · `0100317013770000` · 1.6.2225577
@@ -165,6 +165,7 @@ the author of the commit that introduced them.
 - [x] Silver Pines · `0100D5B026844000` · playable · v65536 Xiaomi 23117RK66C (Redmi K70 Pro, Snapdragon 8 Gen 3, Adreno 750, Android 16) · ported by @zfitness
 - [ ] Sonic Superstars · `01008F701C074000` · 1.1.8
 - [x] South Park: The Stick of Truth · `010043600B6A6000` · playable · base game 1.0.0 · 30 fps · a Vulkan 1.3 driver is needed (Turnip packed on the Adreno 640) · ported by @Absenti
+- [x] STAR OCEAN First Departure R · `0100EBF00E702000` · experimental · v0 AYN Odin 2 (Snapdragon 8 Gen 2 QCS8550, Adreno 740, Android 13; Mesa Turnip KIMCHI v26.0.0_R8)
 - [ ] SteamWorld Dig · `01009320084A4000` · 1.12.0
 - [ ] SteamWorld Dig 2 · `0100CA9002322000` · 4.1.1
 - [ ] SteamWorld Heist II · `010089C01E9CA000` · 1.5.1
@@ -224,4 +225,4 @@ the author of the commit that introduced them.
 - [ ] Xenoblade Chronicles X: Definitive Edition · `0100453019AA8000` · 1.0.2 · 60 fps
 - [x] Xenoblade Chronicles: Definitive Edition · `0100FF500E34A000` · playable · update 2.0.0 · 30 fps · tested on the AYN Odin 2 with a Turnip driver · **tested to Colony 9**, the pause menu and saving: later maps not checked yet · the scene drops to 896x504 in heavy fights · rarely crashes at boot (restart) · ported by @rospec14
 - [ ] Yoshi's Crafted World · `01006000040C2000` · 1.0.1
-- [ ] ŌKAMI HD · `0100276009872000` · 1.0.0
+- [x] ŌKAMI HD · `0100276009872000` · experimental · 1.0.0 AYN Odin 2 (Adreno 740, Android 13, Turnip)
