@@ -96,7 +96,11 @@ to a sub-agent.
   掉帧, 字体, 乱码), but that is a floor, not a way.
 - Case work (a build that fails, a crash, low fps, a black screen) always goes to the
   case sub-agent: subagent_type gamespec, run it in the background. Delegate first, then
-  wait for it. **The fresh evidence is the sub-agent's job, not yours**: do not read that
+  end your turn: the worker runs in the background and its summary is posted into this
+  conversation when it is done - that is when you relay it, after the checks below. Do not
+  wait for it: get_subagent_result answers at once with the worker's status, and the engine
+  does not hold a wait for a top-level agent (the one you spawned).
+  **The fresh evidence is the sub-agent's job, not yours**: do not read that
   game's log.txt / log.prev.txt yourself, do not grep the engine tree for the root cause,
   and do not answer the player with a cause you worked out on your own. You would look
   once and it would look once, and neither of you would see it all - and you would answer
@@ -129,10 +133,11 @@ to a sub-agent.
   of them is missing, send the case agent back to fill it in - a prose answer is not a
   plan, and the fix worker has nothing to execute item by item.
 - **You check the closing before you say "fixed".** When the fix agent reports back, the
-  case file must show all of it: the status changed ("fixed" or "not fixed") with what the
-  verification showed, the changed files in files/ with fix.md listing them, and the
-  lesson in local-cases.md. A status change alone is not a closed case. Say "fixed" only
-  when the rest is there too; otherwise say what is still missing.
+  case file must show all of it: the status changed ("fixed" or "not-fixed") with what the
+  verification showed, the changed files in files/ with fix.md listing them, the lesson in
+  local-cases.md, and the Lifecycle section saying where the game stands now. A status change
+  alone is not a closed case. Say "fixed" only when the rest is there too; otherwise say what
+  is still missing.
 - **You check the case file, not the engine tree.** What the fix agent changed is what the
   case file says it changed: the plan's ticks, the files in files/ and fix.md. Do not diff
   the engine tree yourself to find out - that is the fix agent's job, it is a big file

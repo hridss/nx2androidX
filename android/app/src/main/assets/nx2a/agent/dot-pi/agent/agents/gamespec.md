@@ -34,10 +34,13 @@ for the player.
   - the task names the pack's folder; if it does not, read it from `$NX2A_HOME/library.json`
 - the engine tree: `$NX2A_REPO/nxnative` (the host's Android side is `$NX2A_REPO/nxnative/dm/android`)
 - the tools: `$NX2A_REPO/tools/` (run them with python3)
+- **/tmp is read-only** (that is the porting environment): write to `$TMPDIR` instead. A build
+  log, a probe's output, a scratch script - all of it goes there. (`/tmp` fails with
+  "Permission denied" and the work that was meant to be logged is lost.)
 - **rebuilding the host after your fix** (the phone is the porter, it compiles with the
   player's own NDK):
   ```sh
-  python3 -m porter host --package <the pack's "package" from nx2a-data.json> --jobs 8
+  python3 -m porter host --package <the pack's "package" from nx2a-data.json> --jobs 8 > $TMPDIR/hostbuild.log 2>&1
   ```
   the game's own runtime instead: `python3 -m porter rebuild-runtime <the pack folder> --jobs 8`.
   The build lands in `files/runtimes/<title ID>/` and the next run of the game uses it.
@@ -109,10 +112,9 @@ so it works when GitHub does not answer.
    case is open; fill the findings in as they land. Read events.jsonl as well: what is already
    known is not investigated again.
 2. Triage: decide which track this is, then use the matching tools (builds.py, log_triage.py,
-   port_status.py). When the root cause lives in the engine tree, send a read-only Explore agent to
-   look in parallel (it only reads; it cannot break anything). Two questions that do not depend on
-   each other ("what does the upstream have" and "what does the game's own binary do") go to two
-   Explore agents at the same time: the phone runs them at the same time, so the wait is one wait.
+   port_status.py). When the root cause lives in the engine tree, read it yourself: the engine
+   gives the case worker no sub-agent of its own, so a "second pair of eyes" is one bash call with
+   both commands in it (`grep -n ... f1; grep -n ... f2`), not another agent.
 3. Search the upstream: once you have a root-cause hypothesis, search the upstream's pull requests
    and issues (tools/upstream_pr.py), after the knowledge base. The phone's network is often unable to
    reach GitHub - if the search does not work, note that and carry on with your own diagnosis. Never
@@ -166,7 +168,7 @@ up; an answer that never comes cannot.
    and nobody can see what you actually changed.
 4. Change the files under nxnative/ in $NX2A_REPO, then re-run the port to verify.
 5. Close the case. Four things, and all four are needed before the case is closed:
-   a. the status becomes "(status: fixed)" or "(status: not fixed)", and the entry says
+   a. the status becomes "(status: fixed)" or "(status: not-fixed)", and the entry says
       what the verification showed;
    b. the files you changed are in files/ under their path in the tool tree, and fix.md
       lists them, one relative path per line. fix.md starts with a comment line saying
@@ -199,7 +201,7 @@ up; an answer that never comes cannot.
    knowledge base's corpus, and the next game with the same symptom finds it there.
 
 The statuses are four: "(status: pending approval)" (a plan waiting for the player),
-"(status: fixed)" (fixed and verified), "(status: not fixed)" (tried, it did not work) and
+"(status: fixed)" (fixed and verified), "(status: not-fixed)" (tried, it did not work) and
 "(status: open)" (found, but there is nothing to execute yet - the player decides what to do about
 it). Only "pending approval" is a plan the player can confirm.
 
