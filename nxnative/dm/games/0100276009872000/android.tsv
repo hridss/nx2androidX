@@ -7,8 +7,7 @@ orientation	landscape
 vulkan_driver	turnip
 # The Celestial Brush drawn by touch vanished while the finger was still down: the game's touch reader (main 0x747c) keeps a held finger only while more than 8 of
 # the newest GetTouchScreenStates entries hold it, and the host handed back 1 entry. 16 entries repeat the newest state (hle_hid.c touch_states_read)
-# [mod] this core does not read DM_TOUCH_STATES yet: uncomment when it does (touch brush strokes vanish while the finger is down until then)
-# env	DM_TOUCH_STATES=16
+env	DM_TOUCH_STATES=16
 # Brush strokes were never recognized (the Tachigami Power Slash at the first statue, by touch or with the stick): on entering brush mode the game copies its
 # 256x256 scene into a LINEAR texture (nvn format 0x9a, stride 1024) and reads the stroke from that storage on the CPU. Without the copy-back
 # (gfx_vk_exec_copies.inc t2t_lin_back) the CPU read an empty picture and refused every stroke
