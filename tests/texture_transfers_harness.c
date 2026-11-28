@@ -83,6 +83,11 @@ static void vkCmdClearDepthStencilImage(VkCommandBuffer cb,VkImage im,VkImageLay
 // t2t_lin_back's copy-back is off by default (DM_VK_LIN_COPY_BACK unset), so these are never reached
 #define VKLOG(...) abort()
 static int vk_buf_at(uint64_t a,uint64_t n,VkBuffer *b,VkDeviceSize *o) {(void)a;(void)n;(void)b;(void)o;abort();}
+// DM_VK_DEFER_CLEAR's deferred-clear forwarding is off by default (g_defer_clear == 0), so these are never reached
+static int g_defer_clear, P_cleared;
+static struct { int pass_open; uint32_t pass_w, pass_h; } S;
+static struct { vkimg_t *im; } P_att[9];
+static VkRenderingAttachmentInfo P_da, P_sa;
 static void vk_readback_unknown(void) {abort();}
 void vk_gpu_wrote(uint64_t a,uint64_t n) {(void)a;(void)n;abort();}
 static void vkCmdCopyImageToBuffer(VkCommandBuffer cb,VkImage im,VkImageLayout l,VkBuffer b,uint32_t n,const VkBufferImageCopy *r) {(void)cb;(void)im;(void)l;(void)b;(void)n;(void)r;abort();}
